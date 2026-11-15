@@ -831,21 +831,81 @@ with a reason and the administrator's audit identity.
 ```http
 POST /api/admin/v1/catalog/releases/merge/preview
 POST /api/admin/v1/catalog/releases/merge
+POST /api/admin/v1/catalog/releases/merge/batch
 POST /api/admin/v1/catalog/releases/{id}/split
 ```
 
-Preview body: `{"sourceReleaseId": "…", "targetReleaseId": "…"}`. It returns both Release
-summaries, the moved Track/observation/contribution counts, the target's Track count after the
-merge, the number of shared recordings, metadata conflicts (`title`, `displayArtist`,
-`releaseDate`, `releaseDateText`), and warnings. Preview never mutates data.
+Preview body: `{"sourceReleaseIds": ["…"], "targetReleaseId": "…"}` (the original single
+`{"sourceReleaseId": "…"}` shape is still accepted). Sources may belong to different Artists.
+The response carries:
 
-Merge accepts the same two public ids plus a required `reason`. It moves the source Tracks and
-observations to the target, records an auditable merge event, and leaves the source as a
-`merged` redirect tombstone. Canonical media files are never moved or deleted.
+- `sources` — one summary per selected source (`target` is the surviving Release), plus `source`
+  as the first source for the original single-source contract;
+- `impact` — `movedTracks`, `movedObservations`, `movedContributions`,
+  `targetTrackCountAfter`, `sharedAudioIdentities`;
+- `artwork` — `detachedReleaseArtistObservations`, `operatorImagesAdopted`,
+  `operatorImagesPreserved`, `providerImagesAdopted`, `providerImageConflicts`;
+- `metadataConflicts` (`title`, `displayArtist`, `releaseDate`, `releaseDateText`,
+  `releaseArtist`) and `warnings`.
+
+Preview never mutates data.
+
+Merge (`/merge`, one source) and batch merge (`/merge/batch`,
+`{"sourceReleaseIds": ["…"], "targetReleaseId": "…", "reason": "…"}`) accept 1–100 distinct
+active sources, require a non-blank `reason`, and reject a target that is also a source
+(`400 self_merge`), duplicated ids (`400 duplicate_source`), and already-merged participants
+(`409 release_not_mergeable`; split first). The whole selection executes in one PostgreSQL
+transaction: every source's merge event commits or nothing changes. The batch response is
+`{"mergeEvents": [{"sourceReleaseId", "mergeEventId"}], "targetReleaseId", "mergeCount"}` —
+split each source with its own event id.
+
+The surviving Release keeps its metadata, Release-level billing (Release artist), and artwork.
+Each source contributes its Tracks — with their observations, contributions, and media — its
+per-user state for users with no survivor state, its operator cover when the target has none,
+and provider artwork for providers the target has no image for. Source billing rows stay on the
+tombstone as evidence; billing links pointing at observations that moved are detached before the
+move and restored by split. Classification and novelty evidence is immutable history and keeps
+the Release whose evaluation recorded it; a merge does not re-evaluate the survivor. Canonical
+media files are never moved or deleted.
 
 Split body: `{"mergeEventId": "…", "reason": "…"}` on the source Release path. `mergeEventId`
 comes from the source Release's `mergeEvents` detail section. Split restores exactly that merge's
-Tracks and observations using its immutable ordinal map and records a split event.
+Tracks, observations, contributions, billing links, and adopted artwork using its immutable
+ordinal map, and records a split event. A cover uploaded by an operator after the merge stays on
+the surviving Release, because newer curation wins.
+
+### Catalog deletion
+
+```http
+POST /api/admin/v1/catalog/artists/delete/preview
+POST /api/admin/v1/catalog/artists/delete
+POST /api/admin/v1/catalog/releases/delete/preview
+POST /api/admin/v1/catalog/releases/delete
+```
+
+Preview body: `{"artistIds": ["…"]}` or `{"releaseIds": ["…"]}` (1–100 distinct entries). It
+returns the affected entries, `impact` (`releases`, `tracks`, `mediaFiles`, `mediaBytes`,
+`releaseCredits`, `trackCredits`, `contributions`, `userStates`; Artist previews also report
+`retainedSharedReleases`), `storageReadyReleases`, `storageConfigured`, and `warnings`. Preview
+never mutates data.
+
+Delete body: `{"artistIds"|"releaseIds": ["…"], "mode": "catalogOnly" | "releasesAndFiles",
+"reason": "…"}`. The reason is mandatory and recorded with the acting administrator.
+
+- `catalogOnly` retires the catalog records and keeps every media file.
+- `releasesAndFiles` additionally removes the affected Releases' canonical and staged storage,
+  resolved only from durable publication and staging-handoff evidence, then retires the records.
+  An Artist selection affects only Releases the Artist bills as primary with no other primary
+  Artist; a Release also billed to another primary Artist is kept and reported. The call fails
+  closed with `503 delete_storage_unavailable` when canonical storage is not configured and with
+  `409 storage_evidence_missing` when an affected Release has no storage evidence — in both cases
+  nothing is changed.
+
+Deletion never row-deletes evidence: the Artist/Release becomes a tombstone that keeps its public
+ids, Tracks, credits, observations, provider evidence, per-user state, and audit history.
+`merged` or already-deleted entries are rejected with `409 not_deletable` (split a merged Release
+first). The Artist list bulk action and the Release list bulk action in the Admin UI expose both
+scopes beside merge.
 
 ### Catalog artwork overrides
 

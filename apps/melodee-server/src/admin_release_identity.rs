@@ -1,20 +1,27 @@
-//! Release identity correction API (ADR-0196, PRD-API-ADMIN-002).
+//! Release identity correction API (ADR-0196, ADR-0198, PRD-API-ADMIN-002).
 //!
-//! Wraps the existing durable, audited, reversible Release merge/split store
-//! operations in the Admin API so operators and AI harnesses can act on the
-//! Release duplicate evidence returned by
-//! [`crate::admin_duplicates`]:
+//! Wraps the durable, audited, reversible Release merge/split store operations
+//! in the Admin API so operators and AI harnesses can act on the Release
+//! duplicate evidence returned by [`crate::admin_duplicates`], and so the Admin
+//! UI can fold several Releases — from any Artist — into one:
 //!
 //! * `POST /api/admin/v1/catalog/releases/merge/preview` — bounded impact
 //!   preview before any mutation;
-//! * `POST /api/admin/v1/catalog/releases/merge` — audited merge with a
-//!   mandatory reason, preserving the source as a redirect tombstone;
+//! * `POST /api/admin/v1/catalog/releases/merge` — single-source audited merge
+//!   with a mandatory reason, preserving the source as a redirect tombstone;
+//! * `POST /api/admin/v1/catalog/releases/merge/batch` — one-transaction merge
+//!   of every selected source Release into one target;
 //! * `POST /api/admin/v1/catalog/releases/{id}/split` — reverses exactly one
 //!   recorded merge event using its immutable Track-ordinal map.
 //!
 //! Nothing here writes identity rows directly: execution goes through
-//! `CatalogStore::merge_release` / `split_release_merge`, which retain every
-//! observation, media asset, and Track, and record audit evidence.
+//! `CatalogStore::merge_releases` / `split_release_merge`, which retain every
+//! observation, media asset, Track, and piece of artwork evidence, and record
+//! audit evidence. The surviving Release keeps its own metadata, Release-level
+//! billing (Release artist), and artwork; sources contribute their Tracks and
+//! only the artwork the target lacks.
+
+use std::collections::BTreeSet;
 
 use axum::{
     Json, Router,
@@ -23,7 +30,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use melodee_persistence::{CatalogStore, CatalogStoreError};
+use melodee_persistence::{
+    CatalogStore, CatalogStoreError, MAX_RELEASE_MERGE_SOURCES, ReleaseMerge, ReleaseMergeEvent,
+    ReleaseMergePreviewRelease,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use time::OffsetDateTime;
@@ -39,6 +49,10 @@ pub fn router() -> Router<AdminAccessState> {
             post(preview_release_merge),
         )
         .route("/api/admin/v1/catalog/releases/merge", post(merge_release))
+        .route(
+            "/api/admin/v1/catalog/releases/merge/batch",
+            post(batch_merge_releases),
+        )
         .route(
             "/api/admin/v1/catalog/releases/{id}/split",
             post(split_release_merge),
@@ -83,11 +97,61 @@ fn catalog_error(error: CatalogStoreError) -> Response {
     }
 }
 
+/// Preview/apply selection.
+///
+/// `sourceReleaseIds` is the canonical multi-source shape used by the Admin UI.
+/// The single `sourceReleaseId` field is still accepted so clients built against
+/// the original ADR-0196 contract keep working.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MergeSelection {
-    source_release_id: Uuid,
+    #[serde(default)]
+    source_release_id: Option<Uuid>,
+    #[serde(default)]
+    source_release_ids: Vec<Uuid>,
     target_release_id: Uuid,
+}
+
+impl MergeSelection {
+    fn single(source_release_id: Uuid, target_release_id: Uuid) -> Self {
+        Self {
+            source_release_id: Some(source_release_id),
+            source_release_ids: Vec::new(),
+            target_release_id,
+        }
+    }
+
+    /// Distinct, bounded source ids; the target can never be its own source.
+    #[allow(clippy::result_large_err)] // Err is an axum Response (route error carrier)
+    fn validated(&self) -> Result<Vec<Uuid>, Box<Response>> {
+        let mut requested = self.source_release_ids.clone();
+        if let Some(single) = self.source_release_id {
+            requested.push(single);
+        }
+        if requested.is_empty() || requested.len() > MAX_RELEASE_MERGE_SOURCES {
+            return Err(Box::new(release_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_sources",
+                format!("select between 1 and {MAX_RELEASE_MERGE_SOURCES} source Releases"),
+            )));
+        }
+        let distinct = requested.iter().copied().collect::<BTreeSet<_>>();
+        if distinct.len() != requested.len() {
+            return Err(Box::new(release_error(
+                StatusCode::BAD_REQUEST,
+                "duplicate_source",
+                "source Release ids must be distinct",
+            )));
+        }
+        if distinct.contains(&self.target_release_id) {
+            return Err(Box::new(release_error(
+                StatusCode::BAD_REQUEST,
+                "self_merge",
+                "the target Release cannot also be a source",
+            )));
+        }
+        Ok(distinct.into_iter().collect())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,12 +164,30 @@ struct MergeReleaseRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct BatchMergeReleaseRequest {
+    source_release_ids: Vec<Uuid>,
+    target_release_id: Uuid,
+    reason: String,
+}
+
+impl BatchMergeReleaseRequest {
+    fn selection(&self) -> MergeSelection {
+        MergeSelection {
+            source_release_id: None,
+            source_release_ids: self.source_release_ids.clone(),
+            target_release_id: self.target_release_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SplitReleaseRequest {
     merge_event_id: Uuid,
     reason: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ReleaseSideDto {
     id: Uuid,
@@ -114,6 +196,9 @@ struct ReleaseSideDto {
     release_date: Option<String>,
     status: String,
     track_count: i64,
+    release_artist_count: i64,
+    has_operator_image: bool,
+    provider_image_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,16 +209,37 @@ struct ReleaseMergeImpactDto {
     moved_contributions: i64,
     target_track_count_after: i64,
     shared_audio_identities: i64,
+    /// Per-user Release state (star/rating/pin/play count) rows moved because
+    /// the user had no state on the surviving Release.
+    moved_user_states: i64,
+    /// Source user-state rows kept on the tombstone because that user already
+    /// has state on the surviving Release.
+    retained_user_states: i64,
+}
+
+/// Artwork and Release-billing evidence the merge folds in.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReleaseMergeArtworkImpactDto {
+    detached_release_artist_observations: i64,
+    operator_images_adopted: i64,
+    operator_images_preserved: i64,
+    provider_images_adopted: i64,
+    provider_image_conflicts: i64,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ReleaseMergePreviewDto {
+    /// First source Release. Kept for the original single-source contract;
+    /// `sources` carries the complete selection.
     source: ReleaseSideDto,
+    sources: Vec<ReleaseSideDto>,
     target: ReleaseSideDto,
     impact: ReleaseMergeImpactDto,
-    metadata_conflicts: Vec<&'static str>,
-    warnings: Vec<&'static str>,
+    artwork: ReleaseMergeArtworkImpactDto,
+    metadata_conflicts: Vec<String>,
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -142,6 +248,22 @@ struct ReleaseMergeResultDto {
     merge_event_id: Uuid,
     source_release_id: Uuid,
     target_release_id: Uuid,
+}
+
+/// One committed source merge, so an operator can split exactly that source.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReleaseMergeEventDto {
+    source_release_id: Uuid,
+    merge_event_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchMergeReleaseResultDto {
+    merge_events: Vec<ReleaseMergeEventDto>,
+    target_release_id: Uuid,
+    merge_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -159,7 +281,6 @@ struct ReleaseSide {
     title: String,
     display_artist: Option<String>,
     release_date: Option<String>,
-    release_date_text: Option<String>,
     status: String,
     track_count: i64,
 }
@@ -176,13 +297,12 @@ async fn load_release_side(
             String,
             Option<String>,
             Option<String>,
-            Option<String>,
             String,
             i64,
         ),
     >(
         "SELECT r.id, r.public_api_id, r.title, r.display_artist,
-                r.release_date::text AS release_date, r.release_date_text,
+                r.release_date::text AS release_date,
                 r.status, COALESCE(aggregate.track_count, 0) AS track_count
            FROM releases r
            LEFT JOIN release_catalog_aggregates aggregate
@@ -200,7 +320,6 @@ async fn load_release_side(
                 title,
                 display_artist,
                 release_date,
-                release_date_text,
                 status,
                 track_count,
             )| ReleaseSide {
@@ -209,7 +328,6 @@ async fn load_release_side(
                 title,
                 display_artist,
                 release_date,
-                release_date_text,
                 status,
                 track_count,
             },
@@ -217,41 +335,41 @@ async fn load_release_side(
     })
 }
 
+/// Validated merge selection resolved to durable Release rows.
+struct ResolvedSelection {
+    sources: Vec<ReleaseSide>,
+    target: ReleaseSide,
+}
+
 #[allow(clippy::result_large_err)] // Err is an axum Response (route error carrier)
-async fn resolve_pair(
+async fn resolve_selection(
     pool: &PgPool,
     selection: &MergeSelection,
-) -> Result<(ReleaseSide, ReleaseSide), Box<Response>> {
-    if selection.source_release_id == selection.target_release_id {
-        return Err(Box::new(release_error(
-            StatusCode::BAD_REQUEST,
-            "self_merge",
-            "source and target Releases must differ",
-        )));
+) -> Result<ResolvedSelection, Box<Response>> {
+    let source_ids = selection.validated()?;
+    let lookup_failure = |error: sqlx::Error| {
+        Box::new(store_failure(
+            "Release lookup failed",
+            &CatalogStoreError::Database(error),
+        ))
+    };
+    let mut sources = Vec::with_capacity(source_ids.len());
+    for source_id in source_ids {
+        let source = load_release_side(pool, source_id)
+            .await
+            .map_err(lookup_failure)?
+            .ok_or_else(|| {
+                Box::new(release_error(
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    format!("source Release not found: {source_id}"),
+                ))
+            })?;
+        sources.push(source);
     }
-    let source = load_release_side(pool, selection.source_release_id)
-        .await
-        .map_err(|error| {
-            Box::new(store_failure(
-                "Release lookup failed",
-                &CatalogStoreError::Database(error),
-            ))
-        })?
-        .ok_or_else(|| {
-            Box::new(release_error(
-                StatusCode::NOT_FOUND,
-                "not_found",
-                format!("source Release not found: {}", selection.source_release_id),
-            ))
-        })?;
     let target = load_release_side(pool, selection.target_release_id)
         .await
-        .map_err(|error| {
-            Box::new(store_failure(
-                "Release lookup failed",
-                &CatalogStoreError::Database(error),
-            ))
-        })?
+        .map_err(lookup_failure)?
         .ok_or_else(|| {
             Box::new(release_error(
                 StatusCode::NOT_FOUND,
@@ -259,14 +377,49 @@ async fn resolve_pair(
                 format!("target Release not found: {}", selection.target_release_id),
             ))
         })?;
-    if source.status != "active" || target.status != "active" {
+    if let Some(inactive) = sources
+        .iter()
+        .chain(std::iter::once(&target))
+        .find(|release| release.status != "active")
+    {
         return Err(Box::new(release_error(
             StatusCode::CONFLICT,
             "release_not_mergeable",
-            "only two active Releases can be merged; a merged Release must be split first",
+            format!(
+                "Release {} is {}; only active Releases can be merged, so split a merged Release first",
+                inactive.public_api_id, inactive.status
+            ),
         )));
     }
-    Ok((source, target))
+    Ok(ResolvedSelection { sources, target })
+}
+
+fn side_dto(side: &ReleaseSide) -> ReleaseSideDto {
+    ReleaseSideDto {
+        id: side.public_api_id,
+        title: side.title.clone(),
+        display_artist: side.display_artist.clone(),
+        release_date: side.release_date.clone(),
+        status: side.status.clone(),
+        track_count: side.track_count,
+        release_artist_count: 0,
+        has_operator_image: false,
+        provider_image_count: 0,
+    }
+}
+
+fn preview_side_dto(side: &ReleaseMergePreviewRelease) -> ReleaseSideDto {
+    ReleaseSideDto {
+        id: side.public_api_id,
+        title: side.title.clone(),
+        display_artist: side.display_artist.clone(),
+        release_date: side.release_date.clone(),
+        status: side.status.clone(),
+        track_count: side.track_count,
+        release_artist_count: side.release_artist_count,
+        has_operator_image: side.has_operator_image,
+        provider_image_count: side.provider_image_count,
+    }
 }
 
 async fn preview_release_merge(
@@ -274,86 +427,131 @@ async fn preview_release_merge(
     _admin: AdminPrincipal,
     Json(selection): Json<MergeSelection>,
 ) -> Response {
-    let (source, target) = match resolve_pair(&state.pool, &selection).await {
-        Ok(pair) => pair,
+    let resolved = match resolve_selection(&state.pool, &selection).await {
+        Ok(resolved) => resolved,
         Err(response) => return *response,
     };
-    let counts = sqlx::query_as::<_, (i64, i64, i64, i64)>(
-        "SELECT
-             (SELECT count(*) FROM observed_artists WHERE release_id = $1),
-             (SELECT count(*) FROM contributions WHERE release_id = $1),
-             (SELECT count(*) FROM tracks WHERE release_id = $1),
-             (SELECT count(DISTINCT source.audio_identity_id)
-                FROM tracks source
-                JOIN tracks target
-                  ON target.audio_identity_id = source.audio_identity_id
-                 AND target.release_id = $2
-               WHERE source.release_id = $1)",
-    )
-    .bind(source.internal_id)
-    .bind(target.internal_id)
-    .fetch_one(&state.pool)
-    .await;
-    let (moved_observations, moved_contributions, moved_tracks, shared_audio_identities) =
-        match counts {
-            Ok(counts) => counts,
-            Err(error) => {
-                return store_failure(
-                    "Release merge preview counts failed",
-                    &CatalogStoreError::Database(error),
-                );
-            }
-        };
+    let source_ids = resolved
+        .sources
+        .iter()
+        .map(|source| source.internal_id)
+        .collect::<Vec<_>>();
+    match CatalogStore
+        .preview_release_merge(&state.pool, &source_ids, resolved.target.internal_id)
+        .await
+    {
+        Ok(preview) => {
+            let sources = preview
+                .sources
+                .iter()
+                .map(preview_side_dto)
+                .collect::<Vec<_>>();
+            let source = sources
+                .first()
+                .cloned()
+                .unwrap_or_else(|| side_dto(&resolved.sources[0]));
+            Json(ReleaseMergePreviewDto {
+                source,
+                sources,
+                target: preview_side_dto(&preview.target),
+                impact: ReleaseMergeImpactDto {
+                    moved_tracks: preview.impact.moved_tracks,
+                    moved_observations: preview.impact.moved_observations,
+                    moved_contributions: preview.impact.moved_contributions,
+                    target_track_count_after: preview.target_track_count_after,
+                    shared_audio_identities: preview.impact.shared_audio_identities,
+                    moved_user_states: preview.impact.moved_user_states,
+                    retained_user_states: preview.impact.retained_user_states,
+                },
+                artwork: ReleaseMergeArtworkImpactDto {
+                    detached_release_artist_observations: preview
+                        .impact
+                        .detached_release_artist_observations,
+                    operator_images_adopted: preview.impact.operator_images_adopted,
+                    operator_images_preserved: preview.impact.operator_images_preserved,
+                    provider_images_adopted: preview.impact.provider_images_adopted,
+                    provider_image_conflicts: preview.impact.provider_image_conflicts,
+                },
+                metadata_conflicts: preview.metadata_conflicts,
+                warnings: preview.warnings,
+            })
+            .into_response()
+        }
+        Err(error) => catalog_error(error),
+    }
+}
 
-    let mut metadata_conflicts = Vec::new();
-    if source.title != target.title {
-        metadata_conflicts.push("title");
-    }
-    if source.display_artist != target.display_artist {
-        metadata_conflicts.push("displayArtist");
-    }
-    if source.release_date != target.release_date {
-        metadata_conflicts.push("releaseDate");
-    }
-    if source.release_date_text != target.release_date_text {
-        metadata_conflicts.push("releaseDateText");
-    }
-    let mut warnings = Vec::new();
-    if moved_tracks == 0 {
-        warnings.push("source has no tracks");
-    }
-    if shared_audio_identities > 0 {
-        warnings.push("source and target share recordings; review duplicate Tracks after merge");
-    }
+/// Committed merge events mapped back to the public source ids the caller sent.
+struct CommittedMerge {
+    events: Vec<(Uuid, Uuid)>,
+    target_public_id: Uuid,
+}
 
-    Json(ReleaseMergePreviewDto {
-        source: ReleaseSideDto {
-            id: source.public_api_id,
-            title: source.title,
-            display_artist: source.display_artist,
-            release_date: source.release_date,
-            status: source.status,
-            track_count: source.track_count,
-        },
-        target: ReleaseSideDto {
-            id: target.public_api_id,
-            title: target.title,
-            display_artist: target.display_artist,
-            release_date: target.release_date,
-            status: target.status,
-            track_count: target.track_count,
-        },
-        impact: ReleaseMergeImpactDto {
-            moved_tracks,
-            moved_observations,
-            moved_contributions,
-            target_track_count_after: target.track_count.saturating_add(moved_tracks),
-            shared_audio_identities,
-        },
-        metadata_conflicts,
-        warnings,
-    })
-    .into_response()
+/// Shared merge execution: resolve, audit, and apply within one transaction.
+#[allow(clippy::result_large_err)] // Err is an axum Response (route error carrier)
+async fn execute_merge(
+    state: &AdminAccessState,
+    admin: AdminPrincipal,
+    headers: &HeaderMap,
+    selection: &MergeSelection,
+    reason: &str,
+) -> Result<CommittedMerge, Response> {
+    let reason = reason.trim().to_string();
+    if reason.is_empty() {
+        return Err(release_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_reason",
+            "a non-blank reason is required",
+        ));
+    }
+    let resolved = resolve_selection(&state.pool, selection)
+        .await
+        .map_err(|response| *response)?;
+    let now = OffsetDateTime::now_utc();
+    let merges = resolved
+        .sources
+        .iter()
+        .map(|source| ReleaseMerge {
+            source_release_id: source.internal_id,
+            target_release_id: resolved.target.internal_id,
+            actor: admin.public_api_id.to_string(),
+            reason: reason.clone(),
+            occurred_at: now,
+        })
+        .collect::<Vec<_>>();
+    match CatalogStore.merge_releases(&state.pool, &merges).await {
+        Ok(committed) => {
+            tracing::info!(
+                actor = %admin.public_api_id,
+                agent = agent_label(headers).as_deref().unwrap_or("none"),
+                source_count = merges.len(),
+                target = %resolved.target.public_api_id,
+                "admin merged Releases"
+            );
+            Ok(CommittedMerge {
+                events: merge_events_to_public(&committed, &resolved),
+                target_public_id: resolved.target.public_api_id,
+            })
+        }
+        Err(error) => Err(catalog_error(error)),
+    }
+}
+
+/// Maps durable (internal id) merge events to the caller's public source ids.
+fn merge_events_to_public(
+    committed: &[ReleaseMergeEvent],
+    resolved: &ResolvedSelection,
+) -> Vec<(Uuid, Uuid)> {
+    committed
+        .iter()
+        .filter_map(|event| {
+            resolved
+                .sources
+                .iter()
+                .find(|source| source.internal_id == event.source_release_id)
+                .map(|source| (source.public_api_id, event.merge_event_id))
+        })
+        .collect()
 }
 
 async fn merge_release(
@@ -362,49 +560,52 @@ async fn merge_release(
     headers: HeaderMap,
     Json(request): Json<MergeReleaseRequest>,
 ) -> Response {
-    let reason = request.reason.trim().to_string();
-    if reason.is_empty() {
-        return release_error(
-            StatusCode::BAD_REQUEST,
-            "invalid_reason",
-            "a non-blank reason is required",
-        );
-    }
-    let selection = MergeSelection {
-        source_release_id: request.source_release_id,
-        target_release_id: request.target_release_id,
-    };
-    let (source, target) = match resolve_pair(&state.pool, &selection).await {
-        Ok(pair) => pair,
-        Err(response) => return *response,
-    };
-    match CatalogStore
-        .merge_release(
-            &state.pool,
-            source.internal_id,
-            target.internal_id,
-            &admin.public_api_id.to_string(),
-            &reason,
-            OffsetDateTime::now_utc(),
-        )
-        .await
-    {
-        Ok(merge_event_id) => {
-            tracing::info!(
-                actor = %admin.public_api_id,
-                agent = agent_label(&headers).as_deref().unwrap_or("none"),
-                source = %source.public_api_id,
-                target = %target.public_api_id,
-                "admin merged Release"
-            );
+    let selection = MergeSelection::single(request.source_release_id, request.target_release_id);
+    match execute_merge(&state, admin, &headers, &selection, &request.reason).await {
+        Ok(committed) => {
+            let Some((source_release_id, merge_event_id)) = committed.events.first().copied()
+            else {
+                return store_failure(
+                    "Release merge returned no event",
+                    &CatalogStoreError::InvalidRequest,
+                );
+            };
             Json(ReleaseMergeResultDto {
                 merge_event_id,
-                source_release_id: source.public_api_id,
-                target_release_id: target.public_api_id,
+                source_release_id,
+                target_release_id: committed.target_public_id,
             })
             .into_response()
         }
-        Err(error) => catalog_error(error),
+        Err(response) => response,
+    }
+}
+
+async fn batch_merge_releases(
+    State(state): State<AdminAccessState>,
+    admin: AdminPrincipal,
+    headers: HeaderMap,
+    Json(request): Json<BatchMergeReleaseRequest>,
+) -> Response {
+    let selection = request.selection();
+    match execute_merge(&state, admin, &headers, &selection, &request.reason).await {
+        Ok(committed) => {
+            let merge_count = committed.events.len();
+            Json(BatchMergeReleaseResultDto {
+                merge_events: committed
+                    .events
+                    .into_iter()
+                    .map(|(source_release_id, merge_event_id)| ReleaseMergeEventDto {
+                        source_release_id,
+                        merge_event_id,
+                    })
+                    .collect(),
+                target_release_id: committed.target_public_id,
+                merge_count,
+            })
+            .into_response()
+        }
+        Err(response) => response,
     }
 }
 

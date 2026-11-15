@@ -11,6 +11,12 @@ import type {
   CatalogReleaseListItem,
   CatalogTrackListItem,
   BatchMergeArtistsResult,
+  BatchMergeReleasesResult,
+  ArtistDeletePreview,
+  ArtistDeleteResult,
+  CatalogDeleteMode,
+  ReleaseDeletePreview,
+  ReleaseDeleteResult,
   ConfigExport,
   ConfigImportResult,
   Dashboard,
@@ -38,6 +44,7 @@ import type {
   PolicyTestRequest,
   PolicyTestRun,
   RadioStation,
+  ReleaseMergePreview,
   ReleaseMetadataPatch,
   ReleaseDetail,
   ResolveObservationResult,
@@ -101,6 +108,7 @@ export type {
   PolicyTestRequest,
   PolicyTestRun,
   RadioStation,
+  ReleaseMergePreview,
   ReleaseMetadataPatch,
   ReleaseDetail,
   ResolveObservationResult,
@@ -408,6 +416,44 @@ export function batchMergeArtists(request: {
   });
 }
 
+/** Artist deletion impact preview (ADR-0199); read-only. */
+export function previewArtistDelete(artistIds: string[]): Promise<ArtistDeletePreview> {
+  return apiFetch<ArtistDeletePreview>(`${ADMIN}/catalog/artists/delete/preview`, {
+    method: 'POST',
+    body: { artistIds },
+  });
+}
+
+export function deleteArtists(request: {
+  artistIds: string[];
+  mode: CatalogDeleteMode;
+  reason: string;
+}): Promise<ArtistDeleteResult> {
+  return apiFetch<ArtistDeleteResult>(`${ADMIN}/catalog/artists/delete`, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/** Release deletion impact preview (ADR-0199); read-only. */
+export function previewReleaseDelete(releaseIds: string[]): Promise<ReleaseDeletePreview> {
+  return apiFetch<ReleaseDeletePreview>(`${ADMIN}/catalog/releases/delete/preview`, {
+    method: 'POST',
+    body: { releaseIds },
+  });
+}
+
+export function deleteReleases(request: {
+  releaseIds: string[];
+  mode: CatalogDeleteMode;
+  reason: string;
+}): Promise<ReleaseDeleteResult> {
+  return apiFetch<ReleaseDeleteResult>(`${ADMIN}/catalog/releases/delete`, {
+    method: 'POST',
+    body: request,
+  });
+}
+
 export function splitArtist(
   artistId: string,
   request: {
@@ -453,6 +499,32 @@ export function listCatalogReleases(
     `${ADMIN}/catalog/releases${buildQuery({ ...params })}`,
     { signal },
   );
+}
+
+/** Multi-source Release merge preview (ADR-0198): bounded, read-only impact. */
+export function previewReleaseMerge(request: {
+  sourceReleaseIds: string[];
+  targetReleaseId: string;
+}): Promise<ReleaseMergePreview> {
+  return apiFetch<ReleaseMergePreview>(`${ADMIN}/catalog/releases/merge/preview`, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/**
+ * One-transaction multi-source Release merge: every selected source folds into
+ * the target, or nothing changes. Requires a non-blank audit reason.
+ */
+export function batchMergeReleases(request: {
+  sourceReleaseIds: string[];
+  targetReleaseId: string;
+  reason: string;
+}): Promise<BatchMergeReleasesResult> {
+  return apiFetch<BatchMergeReleasesResult>(`${ADMIN}/catalog/releases/merge/batch`, {
+    method: 'POST',
+    body: request,
+  });
 }
 
 /** Server-side Track browsing (sort whitelist title/durationMs/createdAt). */

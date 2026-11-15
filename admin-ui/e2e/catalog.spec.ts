@@ -12,6 +12,7 @@ import { expect, test, type Page } from '@playwright/test';
 const ARTIST_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const DUPLICATE_ARTIST_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const RELEASE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const DUPLICATE_RELEASE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const TRACK_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const ARTIST_ROW = {
@@ -49,6 +50,14 @@ const RELEASE_ROW = {
   imageId: `album_${RELEASE_ID}`,
   createdAt: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-14T10:00:00Z',
+};
+
+const DUPLICATE_RELEASE_ROW = {
+  ...RELEASE_ROW,
+  id: DUPLICATE_RELEASE_ID,
+  title: 'Into the Night (Remaster)',
+  displayArtist: 'Nomads',
+  trackCount: 12,
 };
 
 const TRACK_ROW = {
@@ -241,17 +250,23 @@ async function mockAdminApi(
     artworkUploadFails?: boolean;
     metadataApplyFails?: boolean;
     mergeArtists?: boolean;
+    mergeReleases?: boolean;
   } = {},
 ) {
   const listRequests: string[] = [];
   const artworkRequests: { method: string; body: string }[] = [];
   const metadataRequests: { pathname: string; body: unknown }[] = [];
   const mergeRequests: { pathname: string; body: Record<string, unknown> }[] = [];
+
   let metadataAudits: Record<string, unknown>[] = [];
   let releaseDetail = structuredClone(RELEASE_DETAIL);
   let artistRows = options.mergeArtists
     ? [ARTIST_ROW, DUPLICATE_ARTIST_ROW]
     : [ARTIST_ROW];
+  const deleteRequests: { pathname: string; body: Record<string, unknown> }[] = [];
+  let releaseRows = options.mergeReleases
+    ? [RELEASE_ROW, DUPLICATE_RELEASE_ROW]
+    : [RELEASE_ROW];
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const { pathname } = url;
@@ -346,13 +361,155 @@ async function mockAdminApi(
         return;
       }
     }
+    if (pathname === '/api/admin/v1/catalog/artists/delete/preview') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as { artistIds: string[] };
+      await json({
+        artists: [{ id: body.artistIds[0], canonicalName: ARTIST_ROW.name, status: 'active', ownedReleases: 1 }],
+        impact: {
+          releases: 1,
+          tracks: 1,
+          mediaFiles: 1,
+          mediaBytes: 1024,
+          releaseCredits: 1,
+          trackCredits: 1,
+          contributions: 0,
+          userStates: 0,
+          retainedSharedReleases: 0,
+        },
+        storageReadyReleases: 1,
+        storageConfigured: true,
+        warnings: [],
+      });
+      return;
+    }
+    if (pathname === '/api/admin/v1/catalog/artists/delete') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as {
+        artistIds: string[];
+        mode: string;
+      };
+      deleteRequests.push({ pathname, body: { ...body } });
+      const removed = new Set(body.artistIds);
+      artistRows = artistRows.filter((row) => !removed.has(row.id));
+      await json({
+        deletedArtistIds: body.artistIds,
+        deletedReleaseIds: body.mode === 'releasesAndFiles' ? [RELEASE_ID] : [],
+        retainedSharedReleases: 0,
+        mode: body.mode,
+      });
+      return;
+    }
+    if (pathname === '/api/admin/v1/catalog/releases/delete/preview') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as { releaseIds: string[] };
+      await json({
+        releases: [
+          {
+            id: body.releaseIds[0],
+            title: RELEASE_ROW.title,
+            displayArtist: RELEASE_ROW.displayArtist,
+            status: 'active',
+            trackCount: 1,
+          },
+        ],
+        impact: {
+          releases: body.releaseIds.length,
+          tracks: body.releaseIds.length,
+          mediaFiles: body.releaseIds.length,
+          mediaBytes: 2048,
+          releaseCredits: body.releaseIds.length,
+          trackCredits: body.releaseIds.length,
+          contributions: 0,
+          userStates: 0,
+          retainedSharedReleases: 0,
+        },
+        storageReadyReleases: body.releaseIds.length,
+        storageConfigured: true,
+        warnings: [],
+      });
+      return;
+    }
+    if (pathname === '/api/admin/v1/catalog/releases/delete') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as {
+        releaseIds: string[];
+        mode: string;
+      };
+      deleteRequests.push({ pathname, body: { ...body } });
+      const removed = new Set(body.releaseIds);
+      releaseRows = releaseRows.filter((row) => !removed.has(row.id));
+      await json({ deletedReleaseIds: body.releaseIds, mode: body.mode });
+      return;
+    }
+    if (pathname === '/api/admin/v1/catalog/releases/merge/preview') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as Record<string, unknown>;
+      mergeRequests.push({ pathname, body });
+      const source = {
+        id: DUPLICATE_RELEASE_ID,
+        title: DUPLICATE_RELEASE_ROW.title,
+        displayArtist: DUPLICATE_RELEASE_ROW.displayArtist,
+        releaseDate: DUPLICATE_RELEASE_ROW.releaseDate,
+        status: 'active',
+        trackCount: 12,
+        releaseArtistCount: 1,
+        hasOperatorImage: false,
+        providerImageCount: 0,
+      };
+      await json({
+        source,
+        sources: [source],
+        target: {
+          id: RELEASE_ID,
+          title: RELEASE_ROW.title,
+          displayArtist: RELEASE_ROW.displayArtist,
+          releaseDate: RELEASE_ROW.releaseDate,
+          status: 'active',
+          trackCount: 1,
+          releaseArtistCount: 1,
+          hasOperatorImage: true,
+          providerImageCount: 2,
+        },
+        impact: {
+          movedTracks: 12,
+          movedObservations: 20,
+          movedContributions: 4,
+          targetTrackCountAfter: 13,
+          sharedAudioIdentities: 2,
+          movedUserStates: 2,
+          retainedUserStates: 1,
+        },
+        artwork: {
+          detachedReleaseArtistObservations: 1,
+          operatorImagesAdopted: 0,
+          operatorImagesPreserved: 1,
+          providerImagesAdopted: 1,
+          providerImageConflicts: 0,
+        },
+        metadataConflicts: ['title', 'displayArtist', 'releaseArtist'],
+        warnings: ['source and target share recordings; review duplicate Tracks after merge'],
+      });
+      return;
+    }
+    if (pathname === '/api/admin/v1/catalog/releases/merge/batch') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as Record<string, unknown>;
+      mergeRequests.push({ pathname, body });
+      releaseRows = [RELEASE_ROW];
+      await json({
+        mergeEvents: [
+          {
+            sourceReleaseId: DUPLICATE_RELEASE_ID,
+            mergeEventId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+          },
+        ],
+        targetReleaseId: RELEASE_ID,
+        mergeCount: 1,
+      });
+      return;
+    }
     if (pathname === '/api/admin/v1/catalog/artists') {
       listRequests.push(url.search);
       await json({ items: artistRows, total: artistRows.length, limit: 50, offset: 0 });
       return;
     }
     if (pathname === '/api/admin/v1/catalog/releases') {
-      await json({ items: [RELEASE_ROW], total: 1, limit: 50, offset: 0 });
+      await json({ items: releaseRows, total: releaseRows.length, limit: 50, offset: 0 });
       return;
     }
     if (pathname === '/api/admin/v1/catalog/tracks') {
@@ -453,7 +610,7 @@ async function mockAdminApi(
   await page.route('**/images/**', async (route) => {
     await route.fulfill({ status: 200, body: '' });
   });
-  return { listRequests, artworkRequests, mergeRequests, metadataRequests };
+  return { listRequests, artworkRequests, mergeRequests, metadataRequests, deleteRequests };
 }
 
 test.beforeEach(async ({ page }) => {
@@ -508,6 +665,85 @@ test('artists list previews and applies an atomic multi-Artist merge', async ({ 
     sourceArtistIds: [DUPLICATE_ARTIST_ID],
     targetArtistId: ARTIST_ID,
     reason: 'Duplicate import identities',
+  });
+});
+
+test('artists list deletes selected Artists through the destructive dialog', async ({ page }) => {
+  const api = await mockAdminApi(page, { mergeArtists: true });
+  await page.goto('catalog/artists');
+
+  const rowSelections = page.getByRole('checkbox', { name: 'Select row' });
+  await expect(rowSelections).toHaveCount(2);
+  await rowSelections.nth(1).check({ force: true });
+  await page.getByRole('button', { name: 'Delete 1 selected Artist' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Delete Artists' });
+  await expect(dialog.getByText('Delete catalog records only (keep media files)')).toBeVisible();
+  await dialog.getByLabel('Reason').fill('Duplicate identity');
+  await dialog.getByLabel('Type DELETE to confirm.').fill('DELETE');
+  await dialog.getByRole('button', { name: 'Delete Artists' }).click();
+
+  await expect(page.getByText('1 Artist deleted.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'The Nomads' })).toHaveCount(1);
+  await expect(page.getByRole('checkbox', { name: 'Select row' })).toHaveCount(1);
+  expect(api.deleteRequests.some((request) => request.pathname.endsWith('/artists/delete'))).toBe(
+    true,
+  );
+});
+
+test('releases list deletes selected Releases with or without media files', async ({ page }) => {
+  const api = await mockAdminApi(page, { mergeReleases: true });
+  await page.goto('catalog/releases');
+
+  const rowSelections = page.getByRole('checkbox', { name: 'Select row' });
+  await expect(rowSelections).toHaveCount(2);
+  await rowSelections.nth(0).check({ force: true });
+  await rowSelections.nth(1).check({ force: true });
+  await page.getByRole('button', { name: 'Delete 2 selected Releases' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Delete Releases' });
+  await dialog.getByLabel('Delete catalog records and media files').check({ force: true });
+  await expect(dialog.getByText(/Also removes 2 canonical and staged media file/)).toBeVisible();
+  await dialog.getByLabel('Reason').fill('Duplicate imports');
+  await dialog.getByLabel('Type DELETE to confirm.').fill('DELETE');
+  await dialog.getByRole('button', { name: 'Delete Releases' }).click();
+
+  await expect(page.getByText('2 Releases deleted.')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Select row' })).toHaveCount(0);
+  const request = api.deleteRequests.find((entry) =>
+    entry.pathname.endsWith('/releases/delete'),
+  );
+  expect(request?.body).toMatchObject({ mode: 'releasesAndFiles' });
+});
+
+test('releases list merges several Releases from any Artist into one', async ({ page }) => {
+  const api = await mockAdminApi(page, { mergeReleases: true });
+  await page.goto('catalog/releases');
+
+  const rowSelections = page.getByRole('checkbox', { name: 'Select row' });
+  await expect(rowSelections).toHaveCount(2);
+  await rowSelections.nth(0).check({ force: true });
+  await rowSelections.nth(1).check({ force: true });
+  await page.getByRole('button', { name: 'Merge 2 selected Releases' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Merge Releases' });
+  await expect(dialog.getByText('Merge impact')).toBeVisible();
+  await expect(dialog.getByText('Tracks moved')).toBeVisible();
+  await dialog.getByLabel('Reason').fill('Same Release imported twice');
+  await dialog.getByLabel('Type MERGE to confirm.').fill('MERGE');
+  await dialog.getByRole('button', { name: 'Merge Releases' }).click();
+
+  await expect(page.getByText('The selected Releases were merged successfully.')).toBeVisible();
+  const preview = api.mergeRequests.find((request) => request.pathname.endsWith('/preview'));
+  expect(preview?.body).toEqual({
+    sourceReleaseIds: [DUPLICATE_RELEASE_ID],
+    targetReleaseId: RELEASE_ID,
+  });
+  const batch = api.mergeRequests.find((request) => request.pathname.endsWith('/batch'));
+  expect(batch?.body).toEqual({
+    sourceReleaseIds: [DUPLICATE_RELEASE_ID],
+    targetReleaseId: RELEASE_ID,
+    reason: 'Same Release imported twice',
   });
 });
 

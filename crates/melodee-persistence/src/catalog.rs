@@ -51,6 +51,9 @@ pub const MAX_CATALOG_SPLIT_ASSIGNMENTS: usize = 10_000;
 /// Maximum source-owned identity rows one merge may retarget atomically.
 pub const MAX_CATALOG_CORRECTION_IDENTITY_ROWS: usize = 50_000;
 
+/// Maximum source Releases accepted by one administrative Release merge.
+pub const MAX_RELEASE_MERGE_SOURCES: usize = 100;
+
 /// Maximum normalized reference rows loaded to rebuild bounded overlay snapshots.
 pub const MAX_CATALOG_CORRECTION_OVERLAY_REFERENCES: usize = 100_000;
 
@@ -1749,184 +1752,268 @@ impl CatalogStore {
         reason: &str,
         now: OffsetDateTime,
     ) -> Result<Uuid, CatalogStoreError> {
-        if source_release_id == target_release_id
-            || actor.trim().is_empty()
-            || reason.trim().is_empty()
-        {
-            return Err(CatalogStoreError::InvalidRequest);
-        }
+        let merge = ReleaseMerge {
+            source_release_id,
+            target_release_id,
+            actor: actor.to_owned(),
+            reason: reason.to_owned(),
+            occurred_at: now,
+        };
+        self.merge_releases(pool, std::slice::from_ref(&merge))
+            .await?
+            .first()
+            .map(|event| event.merge_event_id)
+            .ok_or(CatalogStoreError::InvalidRequest)
+    }
+
+    /// Atomically folds one or more source Releases into one administrator
+    /// selected target. Every source event commits together or the whole batch
+    /// rolls back.
+    ///
+    /// The target keeps its own metadata, Release-level billing, and artwork.
+    /// Source Tracks (with their observations, contributions, and media), and
+    /// any artwork the target lacks, move to the target; the sources become
+    /// redirect tombstones. See ADR-0198 for the exact merge scope and why the
+    /// surviving Release keeps the target's Release artist.
+    pub async fn merge_releases(
+        &self,
+        pool: &PgPool,
+        merges: &[ReleaseMerge],
+    ) -> Result<Vec<ReleaseMergeEvent>, CatalogStoreError> {
+        validate_release_merge_batch(merges)?;
+        let mut ordered = merges.iter().collect::<Vec<_>>();
+        ordered.sort_by_key(|merge| merge.source_release_id);
         let mut tx = pool.begin().await?;
-        let statuses = sqlx::query_as::<_, (Uuid, String)>(
-            "SELECT id, status FROM releases
-             WHERE id=ANY($1) ORDER BY id FOR UPDATE",
-        )
-        .bind([source_release_id, target_release_id])
-        .fetch_all(&mut *tx)
-        .await?;
-        if statuses.len() != 2 || statuses.iter().any(|(_, status)| status != "active") {
-            return Err(CatalogStoreError::MutationConflict);
-        }
-        let source_tracks = sqlx::query_as::<_, (Uuid, i32)>(
-            "SELECT id, ordinal FROM tracks WHERE release_id=$1 ORDER BY ordinal, id",
-        )
-        .bind(source_release_id)
-        .fetch_all(&mut *tx)
-        .await?;
-        ensure_correction_scope(
-            source_tracks.len(),
-            CatalogCorrectionDimension::Tracks,
-            MAX_CATALOG_CORRECTION_TRACKS,
-        )?;
-        let source_track_ids = source_tracks
-            .iter()
-            .map(|(track_id, _)| *track_id)
-            .collect::<Vec<_>>();
-        let source_observations = sqlx::query_as::<_, (Uuid, Uuid, i32)>(
-            "SELECT id, track_id, source_ordinal FROM observed_artists
-             WHERE release_id=$1 AND track_id=ANY($2)
-             ORDER BY track_id, id",
-        )
-        .bind(source_release_id)
-        .bind(&source_track_ids)
-        .fetch_all(&mut *tx)
-        .await?;
-        ensure_correction_scope(
-            source_observations.len(),
-            CatalogCorrectionDimension::IdentityRows,
-            MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
-        )?;
-        let target_max = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT max(ordinal) FROM tracks WHERE release_id=$1",
-        )
-        .bind(target_release_id)
-        .fetch_one(&mut *tx)
-        .await?
-        .unwrap_or(0);
-        let target_observation_max = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT max(source_ordinal) FROM observed_artists WHERE release_id=$1",
-        )
-        .bind(target_release_id)
-        .fetch_one(&mut *tx)
-        .await?
-        .unwrap_or(0);
-        let mut moved = Vec::with_capacity(source_tracks.len());
-        let mut next_observation_ordinal = target_observation_max;
-        for (index, (track_id, original_ordinal)) in source_tracks.iter().enumerate() {
-            let merged_ordinal = target_max
-                .checked_add(
-                    i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?,
-                )
-                .ok_or(CatalogStoreError::NumericOverflow)?;
-            sqlx::query(
-                "UPDATE tracks SET release_id=$2, ordinal=$3,
-                    revision=revision+1, updated_at=$4 WHERE id=$1 AND release_id=$5",
-            )
-            .bind(track_id)
-            .bind(target_release_id)
-            .bind(merged_ordinal)
-            .bind(now)
-            .bind(source_release_id)
-            .execute(&mut *tx)
-            .await?;
-            let mut observations = Vec::new();
-            for (observation_id, _observation_track_id, original_observation_ordinal) in
-                source_observations
-                    .iter()
-                    .filter(|(_, observation_track_id, _)| observation_track_id == track_id)
-            {
-                next_observation_ordinal = next_observation_ordinal
-                    .checked_add(1)
-                    .ok_or(CatalogStoreError::NumericOverflow)?;
-                sqlx::query(
-                    "UPDATE observed_artists SET release_id=$2, source_ordinal=$3
-                     WHERE id=$1 AND release_id=$4",
-                )
-                .bind(observation_id)
-                .bind(target_release_id)
-                .bind(next_observation_ordinal)
-                .bind(source_release_id)
-                .execute(&mut *tx)
-                .await?;
-                observations.push(ReleaseMovedObservation {
-                    observation_id: *observation_id,
-                    original_ordinal: *original_observation_ordinal,
-                    merged_ordinal: next_observation_ordinal,
-                });
-            }
-            moved.push(ReleaseMovedTrack {
-                track_id: *track_id,
-                original_ordinal: *original_ordinal,
-                merged_ordinal,
-                observations,
+        let mut events = Vec::with_capacity(ordered.len());
+        // Only the first source that owns one contributes its operator image;
+        // later sources keep theirs on their recoverable tombstones so the
+        // adoption stays deterministic and reversible.
+        let mut operator_image_adopted = false;
+        for merge in ordered {
+            let (event_id, _assets) =
+                merge_release_in_transaction(&mut tx, merge, &mut operator_image_adopted).await?;
+            events.push(ReleaseMergeEvent {
+                source_release_id: merge.source_release_id,
+                target_release_id: merge.target_release_id,
+                merge_event_id: event_id,
             });
         }
-        let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
-        if !track_ids.is_empty() {
-            sqlx::query("UPDATE contributions SET release_id=$2 WHERE track_id=ANY($1)")
-                .bind(&track_ids)
-                .bind(target_release_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        sqlx::query(
-            "UPDATE releases SET status='merged', merged_into_release_id=$2,
-                revision=revision+1, updated_at=$3 WHERE id=$1",
-        )
-        .bind(source_release_id)
-        .bind(target_release_id)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query("UPDATE releases SET revision=revision+1, updated_at=$2 WHERE id=$1")
-            .bind(target_release_id)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-        refresh_release_catalog_aggregate(&mut tx, source_release_id, now).await?;
-        refresh_release_catalog_aggregate(&mut tx, target_release_id, now).await?;
-        refresh_artist_catalog_aggregates(&mut tx, &track_ids, now).await?;
-        let event_id = Uuid::now_v7();
-        let moved_payload = serde_json::to_value(&moved)?;
-        sqlx::query(
-            "INSERT INTO release_merge_events (
-                id, source_release_id, target_release_id, actor, reason,
-                moved_tracks, created_at
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-        )
-        .bind(event_id)
-        .bind(source_release_id)
-        .bind(target_release_id)
-        .bind(actor)
-        .bind(reason)
-        .bind(&moved_payload)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
-        enqueue_release_revision(&mut tx, source_release_id, now).await?;
-        enqueue_release_revision(&mut tx, target_release_id, now).await?;
-        enqueue_track_revisions(&mut tx, &track_ids, now).await?;
-        audit_release_event(
-            &mut tx,
-            source_release_id,
-            "release_merged",
-            actor,
-            reason,
-            event_id,
-            now,
-        )
-        .await?;
-        audit_release_event(
-            &mut tx,
-            target_release_id,
-            "release_merged_into",
-            actor,
-            reason,
-            Uuid::now_v7(),
-            now,
-        )
-        .await?;
         tx.commit().await?;
-        Ok(event_id)
+        Ok(events)
+    }
+
+    /// Returns the exact bounded impact of folding the selected source
+    /// Releases into the target without mutating catalog state.
+    pub async fn preview_release_merge(
+        &self,
+        pool: &PgPool,
+        source_release_ids: &[Uuid],
+        target_release_id: Uuid,
+    ) -> Result<ReleaseMergePreview, CatalogStoreError> {
+        let sources = validate_release_merge_selection(source_release_ids, target_release_id)?;
+        let mut requested = sources.clone();
+        requested.push(target_release_id);
+        let rows = sqlx::query_as::<_, ReleaseMergePreviewRow>(
+            "SELECT r.id, r.public_api_id, r.title, r.display_artist,
+                    r.release_date::text, r.release_date_text, r.status,
+                    COALESCE(agg.track_count, 0),
+                    (SELECT count(*) FROM release_artists billing
+                      WHERE billing.release_id = r.id),
+                    EXISTS (SELECT 1 FROM catalog_entity_images image
+                             WHERE image.entity_type='release' AND image.release_id = r.id),
+                    (SELECT count(*) FROM catalog_provider_images image
+                      WHERE image.entity_type='release' AND image.entity_id = r.id)
+               FROM releases r
+               LEFT JOIN release_catalog_aggregates agg ON agg.release_id = r.id
+              WHERE r.id = ANY($1)
+              ORDER BY r.public_api_id",
+        )
+        .bind(&requested)
+        .fetch_all(pool)
+        .await?;
+        if rows.len() != requested.len() || rows.iter().any(|row| row.6 != "active") {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let to_preview = |row: &ReleaseMergePreviewRow| ReleaseMergePreviewRelease {
+            public_api_id: row.1,
+            title: row.2.clone(),
+            display_artist: row.3.clone(),
+            release_date: row.4.clone(),
+            release_date_text: row.5.clone(),
+            status: row.6.clone(),
+            track_count: row.7,
+            release_artist_count: row.8,
+            has_operator_image: row.9,
+            provider_image_count: row.10,
+        };
+        let target = rows
+            .iter()
+            .find(|row| row.0 == target_release_id)
+            .map(to_preview)
+            .ok_or(CatalogStoreError::MutationConflict)?;
+        let source_rows = rows
+            .iter()
+            .filter(|row| row.0 != target_release_id)
+            .collect::<Vec<_>>();
+        let preview_sources = source_rows
+            .iter()
+            .map(|row| to_preview(row))
+            .collect::<Vec<_>>();
+
+        let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
+            "SELECT
+                 (SELECT count(*) FROM tracks WHERE release_id = ANY($1)),
+                 (SELECT count(*) FROM observed_artists WHERE release_id = ANY($1)),
+                 (SELECT count(*) FROM contributions WHERE release_id = ANY($1)),
+                 (SELECT count(DISTINCT source.audio_identity_id)
+                    FROM tracks source
+                    JOIN tracks target
+                      ON target.audio_identity_id = source.audio_identity_id
+                     AND target.release_id = $2
+                   WHERE source.release_id = ANY($1)),
+                 (SELECT count(*) FROM release_artists
+                   WHERE release_id = ANY($1) AND observed_artist_id IS NOT NULL),
+                 (SELECT count(*) FROM native_release_user_states
+                   WHERE release_id = ANY($1)),
+                 (SELECT count(*) FROM native_release_user_states source
+                   WHERE source.release_id = ANY($1)
+                     AND EXISTS (SELECT 1 FROM native_release_user_states target
+                                  WHERE target.release_id = $2
+                                    AND target.user_id = source.user_id))",
+        )
+        .bind(&sources)
+        .bind(target_release_id)
+        .fetch_one(pool)
+        .await?;
+        let (
+            moved_tracks,
+            moved_observations,
+            moved_contributions,
+            shared_audio_identities,
+            detach,
+            source_user_states,
+            retained_user_states,
+        ) = counts;
+
+        // Artwork adoption mirrors the merge: one operator image, only when
+        // the target has none, taken from the lowest public id source; one
+        // provider image per provider the target has no image for.
+        let source_operator_images = source_rows.iter().filter(|row| row.9).count();
+        let operator_images_adopted =
+            i64::from(!target.has_operator_image && source_operator_images > 0);
+        let operator_images_preserved = i64::try_from(source_operator_images)
+            .map_err(|_| CatalogStoreError::NumericOverflow)?
+            - operator_images_adopted;
+        let provider_rows = sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT entity_id, provider FROM catalog_provider_images
+              WHERE entity_type='release' AND entity_id = ANY($1)
+              ORDER BY provider, entity_id",
+        )
+        .bind(&sources)
+        .fetch_all(pool)
+        .await?;
+        let target_providers = sqlx::query_scalar::<_, String>(
+            "SELECT provider FROM catalog_provider_images
+              WHERE entity_type='release' AND entity_id = $1",
+        )
+        .bind(target_release_id)
+        .fetch_all(pool)
+        .await?;
+        let mut adopted_providers = std::collections::BTreeSet::new();
+        for (_, provider) in &provider_rows {
+            if !target_providers.contains(provider) {
+                adopted_providers.insert(provider.clone());
+            }
+        }
+        let provider_images_adopted = i64::try_from(adopted_providers.len())
+            .map_err(|_| CatalogStoreError::NumericOverflow)?;
+        let provider_image_conflicts = i64::try_from(provider_rows.len())
+            .map_err(|_| CatalogStoreError::NumericOverflow)?
+            - provider_images_adopted;
+
+        let billing_rows = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT release_id, artist_id FROM release_artists
+              WHERE release_id = ANY($1) ORDER BY release_id, artist_id",
+        )
+        .bind(&requested)
+        .fetch_all(pool)
+        .await?;
+        let billing = |release_id: Uuid| {
+            billing_rows
+                .iter()
+                .filter(|(row_release, _)| *row_release == release_id)
+                .map(|(_, artist_id)| *artist_id)
+                .collect::<Vec<_>>()
+        };
+        let target_billing = billing(target_release_id);
+
+        let mut metadata_conflicts = Vec::new();
+        if preview_sources
+            .iter()
+            .any(|source| source.title != target.title)
+        {
+            metadata_conflicts.push("title".to_owned());
+        }
+        if preview_sources
+            .iter()
+            .any(|source| source.display_artist != target.display_artist)
+        {
+            metadata_conflicts.push("displayArtist".to_owned());
+        }
+        if preview_sources
+            .iter()
+            .any(|source| source.release_date != target.release_date)
+        {
+            metadata_conflicts.push("releaseDate".to_owned());
+        }
+        if preview_sources
+            .iter()
+            .any(|source| source.release_date_text != target.release_date_text)
+        {
+            metadata_conflicts.push("releaseDateText".to_owned());
+        }
+        if preview_sources
+            .iter()
+            .any(|source| billing(source.public_api_id) != target_billing)
+        {
+            metadata_conflicts.push("releaseArtist".to_owned());
+        }
+        let mut warnings = Vec::new();
+        if moved_tracks == 0 {
+            warnings.push("source has no tracks".to_owned());
+        }
+        if shared_audio_identities > 0 {
+            warnings.push(
+                "source and target share recordings; review duplicate Tracks after merge"
+                    .to_owned(),
+            );
+        }
+        if operator_images_preserved > 0 {
+            warnings.push(
+                "source artwork is kept on the merge tombstones because the target already has artwork"
+                    .to_owned(),
+            );
+        }
+        Ok(ReleaseMergePreview {
+            target_track_count_after: target.track_count + moved_tracks,
+            impact: ReleaseMergeImpact {
+                moved_tracks,
+                moved_observations,
+                moved_contributions,
+                shared_audio_identities,
+                detached_release_artist_observations: detach,
+                operator_images_adopted,
+                operator_images_preserved,
+                provider_images_adopted,
+                provider_image_conflicts,
+                moved_user_states: source_user_states - retained_user_states,
+                retained_user_states,
+            },
+            target,
+            sources: preview_sources,
+            metadata_conflicts,
+            warnings,
+        })
     }
 
     /// Reverses one Release merge using its immutable Track ordinal map.
@@ -1942,9 +2029,9 @@ impl CatalogStore {
             return Err(CatalogStoreError::InvalidRequest);
         }
         let mut tx = pool.begin().await?;
-        let (source_release_id, target_release_id, moved_payload) =
-            sqlx::query_as::<_, (Uuid, Uuid, serde_json::Value)>(
-                "SELECT source_release_id, target_release_id, moved_tracks
+        let (source_release_id, target_release_id, moved_payload, assets_payload) =
+            sqlx::query_as::<_, (Uuid, Uuid, serde_json::Value, serde_json::Value)>(
+                "SELECT source_release_id, target_release_id, moved_tracks, moved_assets
              FROM release_merge_events WHERE id=$1 FOR UPDATE",
             )
             .bind(merge_event_id)
@@ -1952,6 +2039,7 @@ impl CatalogStore {
             .await?
             .ok_or(CatalogStoreError::MutationConflict)?;
         let moved: Vec<ReleaseMovedTrack> = serde_json::from_value(moved_payload.clone())?;
+        let assets: ReleaseMovedAssets = serde_json::from_value(assets_payload)?;
         let statuses = sqlx::query_as::<_, (Uuid, String)>(
             "SELECT id, status FROM releases
              WHERE id=ANY($1) ORDER BY id FOR UPDATE",
@@ -2007,6 +2095,8 @@ impl CatalogStore {
                 .execute(&mut *tx)
                 .await?;
         }
+        restore_release_merge_assets(&mut tx, source_release_id, target_release_id, &assets, now)
+            .await?;
         let split_event_id = Uuid::now_v7();
         sqlx::query(
             "UPDATE releases SET status='active', merged_into_release_id=NULL,
@@ -2056,6 +2146,525 @@ impl CatalogStore {
         tx.commit().await?;
         Ok(())
     }
+}
+
+/// One administrative Release merge: fold `source` into `target`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseMerge {
+    pub source_release_id: Uuid,
+    pub target_release_id: Uuid,
+    pub actor: String,
+    pub reason: String,
+    pub occurred_at: OffsetDateTime,
+}
+
+/// One committed Release merge event: which source folded into which target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReleaseMergeEvent {
+    pub source_release_id: Uuid,
+    pub target_release_id: Uuid,
+    pub merge_event_id: Uuid,
+}
+
+/// One Release rendered in an administrative merge impact preview.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseMergePreviewRelease {
+    pub public_api_id: Uuid,
+    pub title: String,
+    pub display_artist: Option<String>,
+    pub release_date: Option<String>,
+    pub release_date_text: Option<String>,
+    pub status: String,
+    pub track_count: i64,
+    pub release_artist_count: i64,
+    pub has_operator_image: bool,
+    pub provider_image_count: i64,
+}
+
+/// Exact bounded impact of folding the selected source Releases into the target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseMergeImpact {
+    pub moved_tracks: i64,
+    pub moved_observations: i64,
+    pub moved_contributions: i64,
+    pub shared_audio_identities: i64,
+    /// Source Release-level billing rows detached from observations that move
+    /// with their Tracks; the split restores these links.
+    pub detached_release_artist_observations: i64,
+    pub operator_images_adopted: i64,
+    /// Source artwork that stays on a merge tombstone because the target (or a
+    /// lower-id source) already supplies it.
+    pub operator_images_preserved: i64,
+    pub provider_images_adopted: i64,
+    pub provider_image_conflicts: i64,
+    /// Per-user Release state rows (star/rating/pin/play count) moved to the
+    /// target; a user who already has target state keeps the target's row.
+    pub moved_user_states: i64,
+    pub retained_user_states: i64,
+}
+
+/// Impact preview shared by the Admin API and the Admin UI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseMergePreview {
+    pub target: ReleaseMergePreviewRelease,
+    pub sources: Vec<ReleaseMergePreviewRelease>,
+    pub impact: ReleaseMergeImpact,
+    /// Track count the target holds after every source Track has moved.
+    pub target_track_count_after: i64,
+    /// Target-wins metadata conflicts: `title`, `displayArtist`,
+    /// `releaseDate`, `releaseDateText`, `releaseArtist`.
+    pub metadata_conflicts: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+type ReleaseMergePreviewRow = (
+    Uuid,
+    Uuid,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+    i64,
+    i64,
+    bool,
+    i64,
+);
+
+/// Non-Track data folded by one Release merge, recorded for the reversible split.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ReleaseMovedAssets {
+    #[serde(default)]
+    detached_release_artist_observations: Vec<DetachedReleaseArtistObservation>,
+    /// Users whose per-Release state row moved to the target.
+    #[serde(default)]
+    moved_release_user_states: Vec<Uuid>,
+    #[serde(default)]
+    adopted_operator_image: Option<AdoptedOperatorImage>,
+    #[serde(default)]
+    adopted_provider_images: Vec<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DetachedReleaseArtistObservation {
+    release_artist_id: Uuid,
+    observed_artist_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AdoptedOperatorImage {
+    source_release_id: Uuid,
+    /// Adoption timestamp; the split only takes the image back when the target
+    /// override is still the adopted one (an operator upload after the merge
+    /// wins and stays).
+    updated_at: OffsetDateTime,
+}
+
+fn validate_release_merge_selection(
+    source_release_ids: &[Uuid],
+    target_release_id: Uuid,
+) -> Result<Vec<Uuid>, CatalogStoreError> {
+    if source_release_ids.is_empty() || source_release_ids.len() > MAX_RELEASE_MERGE_SOURCES {
+        return Err(CatalogStoreError::InvalidRequest);
+    }
+    let sources = source_release_ids
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    if sources.len() != source_release_ids.len() || sources.contains(&target_release_id) {
+        return Err(CatalogStoreError::InvalidRequest);
+    }
+    Ok(sources.into_iter().collect())
+}
+
+fn validate_release_merge_batch(merges: &[ReleaseMerge]) -> Result<(), CatalogStoreError> {
+    if merges.is_empty() || merges.len() > MAX_RELEASE_MERGE_SOURCES {
+        return Err(CatalogStoreError::InvalidRequest);
+    }
+    let target_release_id = merges[0].target_release_id;
+    let mut sources = std::collections::BTreeSet::new();
+    for merge in merges {
+        if merge.target_release_id != target_release_id
+            || merge.source_release_id == target_release_id
+            || merge.actor.trim().is_empty()
+            || merge.reason.trim().is_empty()
+            || !sources.insert(merge.source_release_id)
+        {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+    }
+    Ok(())
+}
+
+/// One source merge inside the caller's transaction.
+async fn merge_release_in_transaction(
+    tx: &mut Transaction<'_, Postgres>,
+    merge: &ReleaseMerge,
+    operator_image_adopted: &mut bool,
+) -> Result<(Uuid, ReleaseMovedAssets), CatalogStoreError> {
+    let source_release_id = merge.source_release_id;
+    let target_release_id = merge.target_release_id;
+    let actor = merge.actor.as_str();
+    let reason = merge.reason.as_str();
+    let now = merge.occurred_at;
+    let mut assets = ReleaseMovedAssets::default();
+    let statuses = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, status FROM releases
+             WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+    )
+    .bind([source_release_id, target_release_id])
+    .fetch_all(&mut **tx)
+    .await?;
+    if statuses.len() != 2 || statuses.iter().any(|(_, status)| status != "active") {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    let source_tracks = sqlx::query_as::<_, (Uuid, i32)>(
+        "SELECT id, ordinal FROM tracks WHERE release_id=$1 ORDER BY ordinal, id",
+    )
+    .bind(source_release_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    ensure_correction_scope(
+        source_tracks.len(),
+        CatalogCorrectionDimension::Tracks,
+        MAX_CATALOG_CORRECTION_TRACKS,
+    )?;
+    let source_track_ids = source_tracks
+        .iter()
+        .map(|(track_id, _)| *track_id)
+        .collect::<Vec<_>>();
+    let source_observations = sqlx::query_as::<_, (Uuid, Uuid, i32)>(
+        "SELECT id, track_id, source_ordinal FROM observed_artists
+             WHERE release_id=$1 AND track_id=ANY($2)
+             ORDER BY track_id, id",
+    )
+    .bind(source_release_id)
+    .bind(&source_track_ids)
+    .fetch_all(&mut **tx)
+    .await?;
+    ensure_correction_scope(
+        source_observations.len(),
+        CatalogCorrectionDimension::IdentityRows,
+        MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
+    )?;
+    // The surviving Release keeps the target's Release-level billing. Source
+    // billing rows stay on the tombstone as evidence, but a link to an
+    // observation that moves with its Track must be detached first: the
+    // composite `release_artists_observation_fk` is not deferrable. The
+    // split restores the exact links from the merge event.
+    let moved_observation_ids = source_observations
+        .iter()
+        .map(|(observation_id, _, _)| *observation_id)
+        .collect::<Vec<_>>();
+    let detached = sqlx::query_as::<_, (Uuid, Uuid)>(
+        "SELECT id, observed_artist_id FROM release_artists
+              WHERE release_id=$1 AND observed_artist_id = ANY($2)
+              ORDER BY id FOR UPDATE",
+    )
+    .bind(source_release_id)
+    .bind(&moved_observation_ids)
+    .fetch_all(&mut **tx)
+    .await?;
+    ensure_correction_scope(
+        detached.len(),
+        CatalogCorrectionDimension::IdentityRows,
+        MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
+    )?;
+    if !detached.is_empty() {
+        sqlx::query(
+            "UPDATE release_artists SET observed_artist_id=NULL
+                  WHERE release_id=$1 AND observed_artist_id = ANY($2)",
+        )
+        .bind(source_release_id)
+        .bind(&moved_observation_ids)
+        .execute(&mut **tx)
+        .await?;
+        assets.detached_release_artist_observations = detached
+            .into_iter()
+            .map(
+                |(release_artist_id, observed_artist_id)| DetachedReleaseArtistObservation {
+                    release_artist_id,
+                    observed_artist_id,
+                },
+            )
+            .collect();
+    }
+    let target_max =
+        sqlx::query_scalar::<_, Option<i32>>("SELECT max(ordinal) FROM tracks WHERE release_id=$1")
+            .bind(target_release_id)
+            .fetch_one(&mut **tx)
+            .await?
+            .unwrap_or(0);
+    let target_observation_max = sqlx::query_scalar::<_, Option<i32>>(
+        "SELECT max(source_ordinal) FROM observed_artists WHERE release_id=$1",
+    )
+    .bind(target_release_id)
+    .fetch_one(&mut **tx)
+    .await?
+    .unwrap_or(0);
+    let mut moved = Vec::with_capacity(source_tracks.len());
+    let mut next_observation_ordinal = target_observation_max;
+    for (index, (track_id, original_ordinal)) in source_tracks.iter().enumerate() {
+        let merged_ordinal = target_max
+            .checked_add(i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?)
+            .ok_or(CatalogStoreError::NumericOverflow)?;
+        sqlx::query(
+            "UPDATE tracks SET release_id=$2, ordinal=$3,
+                    revision=revision+1, updated_at=$4 WHERE id=$1 AND release_id=$5",
+        )
+        .bind(track_id)
+        .bind(target_release_id)
+        .bind(merged_ordinal)
+        .bind(now)
+        .bind(source_release_id)
+        .execute(&mut **tx)
+        .await?;
+        let mut observations = Vec::new();
+        for (observation_id, _observation_track_id, original_observation_ordinal) in
+            source_observations
+                .iter()
+                .filter(|(_, observation_track_id, _)| observation_track_id == track_id)
+        {
+            next_observation_ordinal = next_observation_ordinal
+                .checked_add(1)
+                .ok_or(CatalogStoreError::NumericOverflow)?;
+            sqlx::query(
+                "UPDATE observed_artists SET release_id=$2, source_ordinal=$3
+                     WHERE id=$1 AND release_id=$4",
+            )
+            .bind(observation_id)
+            .bind(target_release_id)
+            .bind(next_observation_ordinal)
+            .bind(source_release_id)
+            .execute(&mut **tx)
+            .await?;
+            observations.push(ReleaseMovedObservation {
+                observation_id: *observation_id,
+                original_ordinal: *original_observation_ordinal,
+                merged_ordinal: next_observation_ordinal,
+            });
+        }
+        moved.push(ReleaseMovedTrack {
+            track_id: *track_id,
+            original_ordinal: *original_ordinal,
+            merged_ordinal,
+            observations,
+        });
+    }
+    let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
+    if !track_ids.is_empty() {
+        sqlx::query("UPDATE contributions SET release_id=$2 WHERE track_id=ANY($1)")
+            .bind(&track_ids)
+            .bind(target_release_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    // Policy novelty evidence (`track_novelty`, `release_novelty_evaluations`)
+    // is immutable history: it keeps the Release whose evaluation recorded it
+    // and is never rewritten or deleted by a merge.
+    // Per-user Release state (star, hate, rating, pin, play count): a user who
+    // already has state on the surviving Release keeps the target's row; every
+    // other user's row moves, so nothing is lost and the split can move it back.
+    assets.moved_release_user_states = sqlx::query_scalar::<_, Uuid>(
+        "UPDATE native_release_user_states source SET release_id=$2
+          WHERE source.release_id=$1
+            AND NOT EXISTS (
+                SELECT 1 FROM native_release_user_states target
+                 WHERE target.release_id=$2 AND target.user_id=source.user_id)
+         RETURNING source.user_id",
+    )
+    .bind(source_release_id)
+    .bind(target_release_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    // Artwork: the target's own cover always wins. A source operator
+    // override is adopted only when the target has none, and only from the
+    // first (lowest id) source, so the choice is deterministic. Provider
+    // artwork is adopted per provider the target has no image for.
+    if !*operator_image_adopted {
+        let target_has_image = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM catalog_entity_images
+                                 WHERE entity_type='release' AND release_id=$1)",
+        )
+        .bind(target_release_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !target_has_image {
+            let adopted = sqlx::query(
+                "UPDATE catalog_entity_images SET release_id=$2, updated_at=$3
+                      WHERE entity_type='release' AND release_id=$1",
+            )
+            .bind(source_release_id)
+            .bind(target_release_id)
+            .bind(now)
+            .execute(&mut **tx)
+            .await?
+            .rows_affected();
+            if adopted == 1 {
+                *operator_image_adopted = true;
+                assets.adopted_operator_image = Some(AdoptedOperatorImage {
+                    source_release_id,
+                    updated_at: now,
+                });
+            }
+        }
+    }
+    let source_providers = sqlx::query_scalar::<_, String>(
+        "SELECT provider FROM catalog_provider_images
+              WHERE entity_type='release' AND entity_id=$1 ORDER BY provider",
+    )
+    .bind(source_release_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    for provider in source_providers {
+        let target_has_provider = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM catalog_provider_images
+                                 WHERE entity_type='release' AND entity_id=$1 AND provider=$2)",
+        )
+        .bind(target_release_id)
+        .bind(&provider)
+        .fetch_one(&mut **tx)
+        .await?;
+        if target_has_provider {
+            continue;
+        }
+        if let Some(image_id) = sqlx::query_scalar::<_, Uuid>(
+            "UPDATE catalog_provider_images SET entity_id=$2
+                  WHERE entity_type='release' AND entity_id=$1 AND provider=$3
+                 RETURNING id",
+        )
+        .bind(source_release_id)
+        .bind(target_release_id)
+        .bind(&provider)
+        .fetch_optional(&mut **tx)
+        .await?
+        {
+            assets.adopted_provider_images.push(image_id);
+        }
+    }
+    sqlx::query(
+        "UPDATE releases SET status='merged', merged_into_release_id=$2,
+                revision=revision+1, updated_at=$3 WHERE id=$1",
+    )
+    .bind(source_release_id)
+    .bind(target_release_id)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query("UPDATE releases SET revision=revision+1, updated_at=$2 WHERE id=$1")
+        .bind(target_release_id)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    refresh_release_catalog_aggregate(tx, source_release_id, now).await?;
+    refresh_release_catalog_aggregate(tx, target_release_id, now).await?;
+    refresh_artist_catalog_aggregates(tx, &track_ids, now).await?;
+    let event_id = Uuid::now_v7();
+    let moved_payload = serde_json::to_value(&moved)?;
+    let assets_payload = serde_json::to_value(&assets)?;
+    sqlx::query(
+        "INSERT INTO release_merge_events (
+                id, source_release_id, target_release_id, actor, reason,
+                moved_tracks, moved_assets, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+    )
+    .bind(event_id)
+    .bind(source_release_id)
+    .bind(target_release_id)
+    .bind(actor)
+    .bind(reason)
+    .bind(&moved_payload)
+    .bind(&assets_payload)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    enqueue_release_revision(tx, source_release_id, now).await?;
+    enqueue_release_revision(tx, target_release_id, now).await?;
+    enqueue_track_revisions(tx, &track_ids, now).await?;
+    audit_release_event(
+        tx,
+        source_release_id,
+        "release_merged",
+        actor,
+        reason,
+        event_id,
+        now,
+    )
+    .await?;
+    audit_release_event(
+        tx,
+        target_release_id,
+        "release_merged_into",
+        actor,
+        reason,
+        Uuid::now_v7(),
+        now,
+    )
+    .await?;
+    Ok((event_id, assets))
+}
+
+/// Restores the non-Track data recorded by one Release merge.
+async fn restore_release_merge_assets(
+    tx: &mut Transaction<'_, Postgres>,
+    source_release_id: Uuid,
+    target_release_id: Uuid,
+    assets: &ReleaseMovedAssets,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    for link in &assets.detached_release_artist_observations {
+        sqlx::query(
+            "UPDATE release_artists SET observed_artist_id=$2
+              WHERE id=$1 AND release_id=$3",
+        )
+        .bind(link.release_artist_id)
+        .bind(link.observed_artist_id)
+        .bind(source_release_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    if !assets.moved_release_user_states.is_empty() {
+        sqlx::query(
+            "UPDATE native_release_user_states SET release_id=$2
+              WHERE release_id=$1 AND user_id = ANY($3)",
+        )
+        .bind(target_release_id)
+        .bind(source_release_id)
+        .bind(&assets.moved_release_user_states)
+        .execute(&mut **tx)
+        .await?;
+    }
+    if let Some(image) = &assets.adopted_operator_image {
+        // Only take the override back while it is still the row adopted by the
+        // merge; an operator upload after the merge wins and stays on target.
+        sqlx::query(
+            "UPDATE catalog_entity_images SET release_id=$2, updated_at=$3
+              WHERE entity_type='release' AND release_id=$1 AND updated_at=$4",
+        )
+        .bind(target_release_id)
+        .bind(image.source_release_id)
+        .bind(now)
+        .bind(image.updated_at)
+        .execute(&mut **tx)
+        .await?;
+    }
+    if !assets.adopted_provider_images.is_empty() {
+        sqlx::query(
+            "UPDATE catalog_provider_images target SET entity_id=$2
+              WHERE target.entity_type='release' AND target.entity_id=$1
+                AND target.id = ANY($3)
+                AND NOT EXISTS (
+                    SELECT 1 FROM catalog_provider_images existing
+                     WHERE existing.entity_type='release' AND existing.entity_id=$2
+                       AND existing.provider = target.provider)",
+        )
+        .bind(target_release_id)
+        .bind(source_release_id)
+        .bind(&assets.adopted_provider_images)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 async fn enqueue_release_revision(

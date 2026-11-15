@@ -762,6 +762,122 @@ export interface BatchMergeArtistsResult {
   targetArtistId: string;
 }
 
+/** One Release as rendered in a Release merge impact preview (ReleaseSideDto). */
+export interface ReleaseMergePreviewRelease {
+  id: string;
+  title: string;
+  displayArtist: string | null;
+  releaseDate: string | null;
+  status: CatalogReleaseStatus;
+  trackCount: number;
+  releaseArtistCount: number;
+  hasOperatorImage: boolean;
+  providerImageCount: number;
+}
+
+export interface ReleaseMergeImpact {
+  movedTracks: number;
+  movedObservations: number;
+  movedContributions: number;
+  targetTrackCountAfter: number;
+  sharedAudioIdentities: number;
+  /** Per-user Release state rows moved to the surviving Release. */
+  movedUserStates: number;
+  /** Source user-state rows kept on the tombstone (user already had target state). */
+  retainedUserStates: number;
+}
+
+/** Artwork and Release-billing evidence the merge folds into the target. */
+export interface ReleaseMergeArtworkImpact {
+  detachedReleaseArtistObservations: number;
+  operatorImagesAdopted: number;
+  operatorImagesPreserved: number;
+  providerImagesAdopted: number;
+  providerImageConflicts: number;
+}
+
+export interface ReleaseMergePreview {
+  /** First source Release (single-source compatibility field). */
+  source: ReleaseMergePreviewRelease;
+  sources: ReleaseMergePreviewRelease[];
+  target: ReleaseMergePreviewRelease;
+  impact: ReleaseMergeImpact;
+  artwork: ReleaseMergeArtworkImpact;
+  metadataConflicts: string[];
+  warnings: string[];
+}
+
+/** One committed source merge, so the caller can split exactly that source. */
+export interface ReleaseMergeEvent {
+  sourceReleaseId: string;
+  mergeEventId: string;
+}
+
+export interface BatchMergeReleasesResult {
+  mergeEvents: ReleaseMergeEvent[];
+  targetReleaseId: string;
+  mergeCount: number;
+}
+
+/** Deletion scope shared by the Artist and Release bulk delete actions (ADR-0199). */
+export type CatalogDeleteMode = 'catalogOnly' | 'releasesAndFiles';
+
+export interface CatalogDeleteImpact {
+  releases: number;
+  tracks: number;
+  mediaFiles: number;
+  mediaBytes: number;
+  releaseCredits: number;
+  trackCredits: number;
+  contributions: number;
+  userStates: number;
+  /** Releases also billed by another primary Artist: kept, never deleted. */
+  retainedSharedReleases: number;
+}
+
+export interface ArtistDeletePreviewArtist {
+  id: string;
+  canonicalName: string;
+  status: CatalogArtistStatus | 'deleted';
+  ownedReleases: number;
+}
+
+export interface ArtistDeletePreview {
+  artists: ArtistDeletePreviewArtist[];
+  impact: CatalogDeleteImpact;
+  storageReadyReleases: number;
+  storageConfigured: boolean;
+  warnings: string[];
+}
+
+export interface ArtistDeleteResult {
+  deletedArtistIds: string[];
+  deletedReleaseIds: string[];
+  retainedSharedReleases: number;
+  mode: CatalogDeleteMode;
+}
+
+export interface ReleaseDeletePreviewRelease {
+  id: string;
+  title: string;
+  displayArtist: string | null;
+  status: CatalogReleaseStatus;
+  trackCount: number;
+}
+
+export interface ReleaseDeletePreview {
+  releases: ReleaseDeletePreviewRelease[];
+  impact: CatalogDeleteImpact;
+  storageReadyReleases: number;
+  storageConfigured: boolean;
+  warnings: string[];
+}
+
+export interface ReleaseDeleteResult {
+  deletedReleaseIds: string[];
+  mode: CatalogDeleteMode;
+}
+
 /** Split assignment kinds accepted by the backend (SplitAssignment). */
 export type SplitAssignmentKind =
   | 'releaseArtist'

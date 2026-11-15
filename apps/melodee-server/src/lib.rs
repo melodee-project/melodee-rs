@@ -6,6 +6,7 @@ pub mod admin;
 pub mod admin_access;
 pub mod admin_agent;
 pub mod admin_catalog;
+pub mod admin_catalog_delete;
 pub mod admin_charts;
 pub mod admin_config;
 pub mod admin_device_profiles;

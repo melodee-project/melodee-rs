@@ -1,4 +1,5 @@
 import { InlineNotification, Modal, TextArea, TextInput } from '@carbon/react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -27,6 +28,9 @@ export interface DestructiveActionDialogProps {
   /** Hide the quarantine/ignore alternative note when the action is not a
    *  processing-queue disposition (e.g. artwork override removal). */
   hideAlternativeNote?: boolean;
+  /** Extra operator choices rendered above the reason field, for example the
+   *  catalog-only vs releases-and-files deletion scope. */
+  children?: ReactNode;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }
@@ -43,6 +47,7 @@ export function DestructiveActionDialog({
   storageImpactBytes,
   matchedRule,
   hideAlternativeNote = false,
+  children,
   onClose,
   onConfirm,
 }: DestructiveActionDialogProps) {
@@ -114,6 +119,7 @@ export function DestructiveActionDialog({
           style={{ marginBlockStart: '1rem', marginBlockEnd: '1rem' }}
         />
       )}
+      {children}
       <TextArea
         id="destructive-reason"
         labelText={t('destructive.reasonLabel')}

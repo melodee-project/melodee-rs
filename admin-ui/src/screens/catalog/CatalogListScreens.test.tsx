@@ -1,13 +1,16 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  ArtistDeletePreview,
   ArtistMergePreview,
   CatalogArtistListItem,
   CatalogReleaseListItem,
   CatalogTrackListItem,
   Page,
+  ReleaseDeletePreview,
+  ReleaseMergePreview,
 } from '../../api/types';
 import { ArtistsScreen } from './ArtistsScreen';
 import { ReleasesScreen } from './ReleasesScreen';
@@ -22,21 +25,39 @@ vi.mock('../../api/admin', async (importOriginal) => {
     listCatalogTracks: vi.fn(),
     previewArtistMerge: vi.fn(),
     batchMergeArtists: vi.fn(),
+    previewReleaseMerge: vi.fn(),
+    batchMergeReleases: vi.fn(),
+    previewArtistDelete: vi.fn(),
+    deleteArtists: vi.fn(),
+    previewReleaseDelete: vi.fn(),
+    deleteReleases: vi.fn(),
   };
 });
 
 const {
   batchMergeArtists,
+  batchMergeReleases,
+  deleteArtists,
+  deleteReleases,
   listCatalogArtists,
   listCatalogReleases,
   listCatalogTracks,
+  previewArtistDelete,
   previewArtistMerge,
+  previewReleaseDelete,
+  previewReleaseMerge,
 } = await import('../../api/admin');
 const mockBatchMergeArtists = vi.mocked(batchMergeArtists);
 const mockListArtists = vi.mocked(listCatalogArtists);
 const mockListReleases = vi.mocked(listCatalogReleases);
 const mockListTracks = vi.mocked(listCatalogTracks);
 const mockPreviewArtistMerge = vi.mocked(previewArtistMerge);
+const mockPreviewReleaseMerge = vi.mocked(previewReleaseMerge);
+const mockBatchMergeReleases = vi.mocked(batchMergeReleases);
+const mockPreviewArtistDelete = vi.mocked(previewArtistDelete);
+const mockDeleteArtists = vi.mocked(deleteArtists);
+const mockPreviewReleaseDelete = vi.mocked(previewReleaseDelete);
+const mockDeleteReleases = vi.mocked(deleteReleases);
 
 const ARTIST: CatalogArtistListItem = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -135,6 +156,121 @@ const RELEASE: CatalogReleaseListItem = {
   updatedAt: '2026-08-14T10:00:00Z',
 };
 
+const DUPLICATE_RELEASE: CatalogReleaseListItem = {
+  ...RELEASE,
+  id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  title: 'Into the Night (Remaster)',
+  displayArtist: 'Nomads',
+  trackCount: 12,
+};
+
+const ARTIST_DELETE_PREVIEW: ArtistDeletePreview = {
+  artists: [
+    {
+      id: DUPLICATE_ARTIST.id,
+      canonicalName: DUPLICATE_ARTIST.name,
+      status: 'active',
+      ownedReleases: 2,
+    },
+  ],
+  impact: {
+    releases: 2,
+    tracks: 18,
+    mediaFiles: 18,
+    mediaBytes: 5_000_000,
+    releaseCredits: 2,
+    trackCredits: 18,
+    contributions: 3,
+    userStates: 1,
+    retainedSharedReleases: 0,
+  },
+  storageReadyReleases: 2,
+  storageConfigured: true,
+  warnings: [],
+};
+
+const RELEASE_DELETE_PREVIEW: ReleaseDeletePreview = {
+  releases: [
+    {
+      id: DUPLICATE_RELEASE.id,
+      title: DUPLICATE_RELEASE.title,
+      displayArtist: DUPLICATE_RELEASE.displayArtist,
+      status: 'active',
+      trackCount: 12,
+    },
+  ],
+  impact: {
+    releases: 1,
+    tracks: 12,
+    mediaFiles: 12,
+    mediaBytes: 4_000_000,
+    releaseCredits: 1,
+    trackCredits: 12,
+    contributions: 2,
+    userStates: 0,
+    retainedSharedReleases: 0,
+  },
+  storageReadyReleases: 1,
+  storageConfigured: true,
+  warnings: [],
+};
+
+const RELEASE_MERGE_PREVIEW: ReleaseMergePreview = {
+  source: {
+    id: DUPLICATE_RELEASE.id,
+    title: DUPLICATE_RELEASE.title,
+    displayArtist: DUPLICATE_RELEASE.displayArtist,
+    releaseDate: DUPLICATE_RELEASE.releaseDate,
+    status: 'active',
+    trackCount: 12,
+    releaseArtistCount: 1,
+    hasOperatorImage: false,
+    providerImageCount: 0,
+  },
+  sources: [
+    {
+      id: DUPLICATE_RELEASE.id,
+      title: DUPLICATE_RELEASE.title,
+      displayArtist: DUPLICATE_RELEASE.displayArtist,
+      releaseDate: DUPLICATE_RELEASE.releaseDate,
+      status: 'active',
+      trackCount: 12,
+      releaseArtistCount: 1,
+      hasOperatorImage: false,
+      providerImageCount: 0,
+    },
+  ],
+  target: {
+    id: RELEASE.id,
+    title: RELEASE.title,
+    displayArtist: RELEASE.displayArtist,
+    releaseDate: RELEASE.releaseDate,
+    status: 'active',
+    trackCount: 10,
+    releaseArtistCount: 1,
+    hasOperatorImage: true,
+    providerImageCount: 2,
+  },
+  impact: {
+    movedTracks: 12,
+    movedObservations: 14,
+    movedContributions: 3,
+    targetTrackCountAfter: 22,
+    sharedAudioIdentities: 1,
+    movedUserStates: 2,
+    retainedUserStates: 1,
+  },
+  artwork: {
+    detachedReleaseArtistObservations: 1,
+    operatorImagesAdopted: 0,
+    operatorImagesPreserved: 1,
+    providerImagesAdopted: 1,
+    providerImageConflicts: 0,
+  },
+  metadataConflicts: ['title', 'displayArtist', 'releaseArtist'],
+  warnings: ['source and target share recordings; review duplicate Tracks after merge'],
+};
+
 const TRACK: CatalogTrackListItem = {
   id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   title: 'Down Under',
@@ -163,6 +299,29 @@ beforeEach(() => {
     mergeIds: ['ffffffff-ffff-4fff-8fff-ffffffffffff'],
     targetArtistId: ARTIST.id,
     sourceArtistIds: [DUPLICATE_ARTIST.id],
+  });
+  mockPreviewReleaseMerge.mockResolvedValue(RELEASE_MERGE_PREVIEW);
+  mockPreviewArtistDelete.mockResolvedValue(ARTIST_DELETE_PREVIEW);
+  mockDeleteArtists.mockResolvedValue({
+    deletedArtistIds: [DUPLICATE_ARTIST.id],
+    deletedReleaseIds: [],
+    retainedSharedReleases: 0,
+    mode: 'catalogOnly',
+  });
+  mockPreviewReleaseDelete.mockResolvedValue(RELEASE_DELETE_PREVIEW);
+  mockDeleteReleases.mockResolvedValue({
+    deletedReleaseIds: [DUPLICATE_RELEASE.id],
+    mode: 'catalogOnly',
+  });
+  mockBatchMergeReleases.mockResolvedValue({
+    mergeEvents: [
+      {
+        sourceReleaseId: DUPLICATE_RELEASE.id,
+        mergeEventId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      },
+    ],
+    targetReleaseId: RELEASE.id,
+    mergeCount: 1,
   });
 });
 
@@ -303,6 +462,47 @@ describe('ArtistsScreen', () => {
     ).toBeInTheDocument();
     expect(mockListArtists).toHaveBeenCalledTimes(2);
   });
+
+  it('deletes selected Artists through the shared destructive dialog', async () => {
+    mockListArtists.mockResolvedValue(page([ARTIST, DUPLICATE_ARTIST], 2));
+    render(
+      <MemoryRouter initialEntries={['/catalog/artists']}>
+        <ArtistsScreen />
+      </MemoryRouter>,
+    );
+    await screen.findAllByRole('link', { name: 'The Nomads' });
+    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+    fireEvent.click(screen.getAllByRole('checkbox')[2]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 2 selected Artists' }));
+
+    await screen.findByLabelText('Reason');
+    expect(
+      within(screen.getByRole('dialog')).getByRole('heading', { name: 'Delete Artists' }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockPreviewArtistDelete).toHaveBeenCalledWith([ARTIST.id, DUPLICATE_ARTIST.id]);
+    });
+    // The default catalog-only scope deletes no Releases, Tracks, or files.
+    expect(screen.getByText('Affected Releases')).toBeInTheDocument();
+    expect(mockDeleteArtists).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Duplicate identity' },
+    });
+    fireEvent.change(screen.getByLabelText('Type DELETE to confirm.'), {
+      target: { value: 'DELETE' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Artists' }));
+
+    await waitFor(() => {
+      expect(mockDeleteArtists).toHaveBeenCalledWith({
+        artistIds: [ARTIST.id, DUPLICATE_ARTIST.id],
+        mode: 'catalogOnly',
+        reason: 'Duplicate identity',
+      });
+    });
+    expect(await screen.findByText('1 Artist deleted.')).toBeInTheDocument();
+  });
 });
 
 describe('ReleasesScreen', () => {
@@ -343,6 +543,56 @@ describe('ReleasesScreen', () => {
     );
   });
 
+  it('previews and confirms a page-scoped multi-Release merge from any Artist', async () => {
+    mockListReleases.mockResolvedValue(page([RELEASE, DUPLICATE_RELEASE], 2));
+    render(
+      <MemoryRouter initialEntries={['/catalog/releases']}>
+        <ReleasesScreen />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('link', { name: 'Into the Night' });
+    const mergeButton = screen.getByRole('button', { name: 'Merge 0 selected Releases' });
+    expect(mergeButton).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+    fireEvent.click(screen.getAllByRole('checkbox')[2]);
+    fireEvent.click(screen.getByRole('button', { name: 'Merge 2 selected Releases' }));
+
+    expect(await screen.findByRole('heading', { name: 'Merge Releases' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockPreviewReleaseMerge).toHaveBeenLastCalledWith({
+        sourceReleaseIds: [DUPLICATE_RELEASE.id],
+        targetReleaseId: RELEASE.id,
+      });
+    });
+    expect(await screen.findByText('Merge impact')).toBeInTheDocument();
+    expect(screen.getByText('Tracks moved')).toBeInTheDocument();
+    expect(screen.getByText('22')).toBeInTheDocument();
+    const confirmButton = screen.getByRole('button', { name: 'Merge Releases' });
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Same Release imported twice' },
+    });
+    fireEvent.change(screen.getByLabelText('Type MERGE to confirm.'), {
+      target: { value: 'MERGE' },
+    });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(mockBatchMergeReleases).toHaveBeenCalledWith({
+        sourceReleaseIds: [DUPLICATE_RELEASE.id],
+        targetReleaseId: RELEASE.id,
+        reason: 'Same Release imported twice',
+      });
+    });
+    expect(
+      await screen.findByText('The selected Releases were merged successfully.'),
+    ).toBeInTheDocument();
+    expect(mockListReleases).toHaveBeenCalledTimes(2);
+  });
+
   it('labels a withheld policy review by its actionable state, not Deprecated', async () => {
     mockListReleases.mockResolvedValue(
       page([
@@ -363,6 +613,44 @@ describe('ReleasesScreen', () => {
     expect(await screen.findByText('Needs review')).toBeInTheDocument();
     expect(screen.queryByText('Deprecated')).not.toBeInTheDocument();
     expect(screen.getByTitle('Release classification is Unknown')).toBeInTheDocument();
+  });
+
+  it('deletes selected Releases through the shared destructive dialog', async () => {
+    mockListReleases.mockResolvedValue(page([RELEASE, DUPLICATE_RELEASE], 2));
+    render(
+      <MemoryRouter initialEntries={['/catalog/releases']}>
+        <ReleasesScreen />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('link', { name: 'Into the Night' });
+    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+    fireEvent.click(screen.getAllByRole('checkbox')[2]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 2 selected Releases' }));
+
+    await screen.findByLabelText('Reason');
+    expect(
+      within(screen.getByRole('dialog')).getByRole('heading', { name: 'Delete Releases' }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockPreviewReleaseDelete).toHaveBeenCalledWith([RELEASE.id, DUPLICATE_RELEASE.id]);
+    });
+    fireEvent.click(screen.getByLabelText('Delete catalog records and media files'));
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Duplicate imports' },
+    });
+    fireEvent.change(screen.getByLabelText('Type DELETE to confirm.'), {
+      target: { value: 'DELETE' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Releases' }));
+
+    await waitFor(() => {
+      expect(mockDeleteReleases).toHaveBeenCalledWith({
+        releaseIds: [RELEASE.id, DUPLICATE_RELEASE.id],
+        mode: 'releasesAndFiles',
+        reason: 'Duplicate imports',
+      });
+    });
+    expect(await screen.findByText('1 Release deleted.')).toBeInTheDocument();
   });
 });
 

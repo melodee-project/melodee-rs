@@ -161,6 +161,31 @@ The single-source UUID form under **Identity Review → Artist operations** rema
 advanced correction work. Splitting an incorrect consolidation is also performed there by moving
 explicitly selected assignments to a new Artist.
 
+## Deleting Artists
+
+From **Catalog → Artists**, select one or more Artists on the current page and choose
+**Delete selected Artists**. The confirmation dialog shows the exact impact, requires an audit
+reason, and asks you to type `DELETE`.
+
+Two scopes are available:
+
+- **Delete catalog records only (keep media files)** — the default. The Artist disappears from the
+  catalog and every Release, Track, credit, and media file stays untouched. Use this for a
+  duplicate identity or an import artifact whose content belongs elsewhere.
+- **Delete catalog records and media files** — also retires every Release this Artist owns alone
+  (no other Artist is billed as its primary Release artist) and removes that Release's canonical
+  and staged media from configured storage. Releases billed as primary together with another
+  Artist are kept, and the dialog says how many.
+
+Nothing is erased from the evidence graph: the deleted Artist and its Releases become tombstones
+that keep their public ids, credits, contributions, provider evidence, per-user state, and audit
+history. Deleted entries no longer appear in any catalog list, search result, or resolver
+candidate. Deletion is terminal — an Artist that was merged into another cannot be deleted, and
+split the Release first if you need to remove a merged one.
+
+The same operations are available over
+[Admin API — Catalog deletion](../api/admin-api/#catalog-deletion) for scripting and automation.
+
 ## Browsing and detail
 
 Open **Catalog → Artists** (`/admin/catalog/artists`) in the admin UI. The list is searched,

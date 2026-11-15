@@ -921,3 +921,273 @@ async fn agent_proposal_is_evidence_backed_and_non_authoritative() {
 
     db.drop().await;
 }
+
+#[tokio::test]
+async fn release_batch_merge_folds_selected_releases_from_any_artist() {
+    let db = TestDb::create("wp16_release_batch_merge").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp16-admin");
+
+    // Three Releases from three different Artists: the administrator may pick
+    // any two as sources and fold them into the third.
+    let first = phase5_common::seed_cataloged_release(
+        &db,
+        301,
+        CatalogFixturePresentation {
+            release_title: "Batch Source One",
+            release_artist: "First Artist",
+            track_title: "First Recording",
+            track_artist: "First Artist",
+            release_date: "2001-01-01",
+        },
+    )
+    .await;
+    let second = phase5_common::seed_cataloged_release(
+        &db,
+        302,
+        CatalogFixturePresentation {
+            release_title: "Batch Source Two",
+            release_artist: "Second Artist",
+            track_title: "Second Recording",
+            track_artist: "Second Artist",
+            release_date: "2002-02-02",
+        },
+    )
+    .await;
+    let target = phase5_common::seed_cataloged_release(
+        &db,
+        303,
+        CatalogFixturePresentation {
+            release_title: "Batch Target",
+            release_artist: "Target Artist",
+            track_title: "Target Recording",
+            track_artist: "Target Artist",
+            release_date: "2003-03-03",
+        },
+    )
+    .await;
+
+    let first_internal = first.release_id().into_uuid();
+    let second_internal = second.release_id().into_uuid();
+    let target_internal = target.release_id().into_uuid();
+    let public_id = |internal: Uuid| {
+        let pool = db.pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Uuid>("SELECT public_api_id FROM releases WHERE id=$1")
+                .bind(internal)
+                .fetch_one(&pool)
+                .await
+                .expect("read Release public id")
+        }
+    };
+    let first_public = public_id(first_internal).await;
+    let second_public = public_id(second_internal).await;
+    let target_public = public_id(target_internal).await;
+
+    // The source owns artwork the target lacks: the merge adopts it.
+    sqlx::query(
+        "INSERT INTO catalog_entity_images (
+             entity_type,release_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at
+         ) VALUES ('release',$1,'image/png',$2,'curator',now(),now())",
+    )
+    .bind(first_internal)
+    .bind(vec![0x89_u8, 0x50, 0x4e, 0x47, 5])
+    .execute(&db.pool)
+    .await
+    .expect("seed source operator image");
+
+    let app = app(db.pool.clone());
+    let (status, preview) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/catalog/releases/merge/preview",
+        Some(serde_json::json!({
+            "sourceReleaseIds": [first_public, second_public],
+            "targetReleaseId": target_public,
+        })),
+        Some(&admin),
+        Some("test-harness"),
+    )
+    .await;
+    assert_eq!(StatusCode::OK, status, "{preview}");
+    assert_eq!(2, preview["sources"].as_array().expect("sources").len());
+    assert_eq!(2, preview["impact"]["movedTracks"]);
+    assert_eq!(3, preview["impact"]["targetTrackCountAfter"]);
+    assert_eq!(1, preview["artwork"]["operatorImagesAdopted"]);
+    assert_eq!(target_public.to_string(), preview["target"]["id"]);
+    let conflicts = preview["metadataConflicts"]
+        .as_array()
+        .expect("conflicts")
+        .iter()
+        .filter_map(|value| value.as_str())
+        .collect::<Vec<_>>();
+    assert!(conflicts.contains(&"title"));
+    assert!(conflicts.contains(&"displayArtist"));
+    assert!(conflicts.contains(&"releaseArtist"));
+
+    let (status, merged) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/catalog/releases/merge/batch",
+        Some(serde_json::json!({
+            "sourceReleaseIds": [first_public, second_public],
+            "targetReleaseId": target_public,
+            "reason": "same Release imported twice under two Artists",
+        })),
+        Some(&admin),
+        Some("test-harness"),
+    )
+    .await;
+    assert_eq!(StatusCode::OK, status, "{merged}");
+    assert_eq!(2, merged["mergeCount"]);
+    let merge_events = merged["mergeEvents"]
+        .as_array()
+        .expect("merge events")
+        .iter()
+        .map(|event| {
+            (
+                Uuid::parse_str(event["sourceReleaseId"].as_str().expect("source id"))
+                    .expect("source uuid"),
+                Uuid::parse_str(event["mergeEventId"].as_str().expect("merge event id"))
+                    .expect("merge event uuid"),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(2, merge_events.len());
+    assert_eq!(target_public.to_string(), merged["targetReleaseId"]);
+    let first_event = merge_events
+        .iter()
+        .find(|(source, _)| *source == first_public)
+        .map(|(_, event)| *event)
+        .expect("merge event for the first source");
+
+    let statuses: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='active'),
+                count(*) FILTER (WHERE status='merged')
+           FROM releases WHERE id=ANY($1)",
+    )
+    .bind([first_internal, second_internal, target_internal])
+    .fetch_one(&db.pool)
+    .await
+    .expect("read Release statuses");
+    assert_eq!(statuses, (1, 2));
+    let target_tracks: Vec<i32> =
+        sqlx::query_scalar("SELECT ordinal FROM tracks WHERE release_id=$1 ORDER BY ordinal")
+            .bind(target_internal)
+            .fetch_all(&db.pool)
+            .await
+            .expect("read surviving Track ordinals");
+    assert_eq!(target_tracks, vec![1, 2, 3]);
+
+    // The surviving Release keeps the target's Artist billing, and the target
+    // adopts the artwork it lacked.
+    let target_artist: String = sqlx::query_scalar(
+        "SELECT artist.canonical_name FROM release_artists billing
+           JOIN artists artist ON artist.id=billing.artist_id
+          WHERE billing.release_id=$1 ORDER BY billing.presentation_order LIMIT 1",
+    )
+    .bind(target_internal)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read surviving Release Artist");
+    assert_eq!(target_artist, "Target Artist");
+    let image_owner: Uuid = sqlx::query_scalar(
+        "SELECT release_id FROM catalog_entity_images WHERE entity_type='release'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read adopted cover owner");
+    assert_eq!(image_owner, target_internal);
+
+    // Bounded validation errors stay explicit.
+    let (status, error) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/catalog/releases/merge/batch",
+        Some(serde_json::json!({
+            "sourceReleaseIds": [first_public, first_public],
+            "targetReleaseId": second_public,
+            "reason": "duplicate ids",
+        })),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(StatusCode::BAD_REQUEST, status);
+    assert_eq!("duplicate_source", error["code"]);
+    let (status, error) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/catalog/releases/merge/batch",
+        Some(serde_json::json!({
+            "sourceReleaseIds": [target_public],
+            "targetReleaseId": target_public,
+            "reason": "self merge",
+        })),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(StatusCode::BAD_REQUEST, status);
+    assert_eq!("self_merge", error["code"]);
+    let (status, error) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/catalog/releases/merge/batch",
+        Some(serde_json::json!({
+            "sourceReleaseIds": [second_public],
+            "targetReleaseId": target_public,
+            "reason": "  ",
+        })),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(StatusCode::BAD_REQUEST, status);
+    assert_eq!("invalid_reason", error["code"]);
+    let (status, error) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/catalog/releases/merge/batch",
+        Some(serde_json::json!({
+            "sourceReleaseIds": [second_public],
+            "targetReleaseId": target_public,
+            "reason": "already merged source",
+        })),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(StatusCode::CONFLICT, status);
+    assert_eq!("release_not_mergeable", error["code"]);
+
+    // Splitting one recorded event restores that source and its Tracks.
+    let (status, split) = call(
+        app,
+        "POST",
+        &format!("/api/admin/v1/catalog/releases/{first_public}/split"),
+        Some(serde_json::json!({
+            "mergeEventId": first_event,
+            "reason": "separate edition after review",
+        })),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(StatusCode::OK, status, "{split}");
+    let restored_status: String = sqlx::query_scalar("SELECT status FROM releases WHERE id=$1")
+        .bind(first_internal)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read restored status");
+    assert_eq!(restored_status, "active");
+    let restored_owner: Uuid = sqlx::query_scalar(
+        "SELECT release_id FROM catalog_entity_images WHERE entity_type='release'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read cover owner after split");
+    assert_eq!(restored_owner, first_internal);
+
+    db.drop().await;
+}

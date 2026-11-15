@@ -12,15 +12,19 @@ import { useTranslation } from 'react-i18next';
 
 import {
   batchMergeArtists,
+  deleteArtists,
   listCatalogArtists,
+  previewArtistDelete,
   previewArtistMerge,
 } from '../../api/admin';
 import type { ArtistMergePreview, CatalogArtistListItem } from '../../api/types';
+import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { ArtistLink } from '../../components/EntityLink';
 import type { EntityColumn } from '../../components/EntityTable';
 import { StatusTag } from '../../components/StatusTag';
 import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 import { catalogStatusKind, toApiError } from './catalog';
+import { artistDeletePreviewView } from './catalogDelete';
 import { CatalogListScreen, CellInteractive } from './CatalogListScreen';
 
 /**
@@ -213,7 +217,9 @@ export function ArtistsScreen() {
   const [items, setItems] = useState<CatalogArtistListItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mergeOpen, setMergeOpen] = useState(false);
-  const [mergeCompleted, setMergeCompleted] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [notice, setNotice] = useState<'merge' | 'delete' | null>(null);
+  const [noticeDeleteCount, setNoticeDeleteCount] = useState(0);
   const [refreshToken, setRefreshToken] = useState(0);
 
   const columns: EntityColumn[] = useMemo(
@@ -288,25 +294,45 @@ export function ArtistsScreen() {
         detailPath={(item) => `/catalog/artists/${encodeURIComponent(item.id)}`}
         selection={{ selectedIds, onChange: setSelectedIds }}
         toolbarActions={
-          <Button
-            kind="secondary"
-            size="sm"
-            disabled={selectedIds.length < 2}
-            onClick={() => {
-              setMergeCompleted(false);
-              setMergeOpen(true);
-            }}
-          >
-            {t('catalog.artists.merge.selectedAction', { count: selectedIds.length })}
-          </Button>
+          <>
+            <Button
+              kind="secondary"
+              size="sm"
+              disabled={selectedIds.length < 2}
+              onClick={() => {
+                setNotice(null);
+                setMergeOpen(true);
+              }}
+            >
+              {t('catalog.artists.merge.selectedAction', { count: selectedIds.length })}
+            </Button>
+            <Button
+              kind="danger--tertiary"
+              size="sm"
+              disabled={selectedIds.length < 1}
+              onClick={() => {
+                setNotice(null);
+                setDeleteOpen(true);
+              }}
+            >
+              {t('catalog.artists.delete.selectedAction', { count: selectedIds.length })}
+            </Button>
+          </>
         }
         notice={
-          mergeCompleted ? (
+          notice === 'merge' ? (
             <InlineNotification
               kind="success"
               lowContrast
               hideCloseButton
               title={t('catalog.artists.merge.success')}
+            />
+          ) : notice === 'delete' ? (
+            <InlineNotification
+              kind="success"
+              lowContrast
+              hideCloseButton
+              title={t('catalog.artists.delete.success', { count: noticeDeleteCount })}
             />
           ) : undefined
         }
@@ -319,10 +345,26 @@ export function ArtistsScreen() {
           onClose={() => setMergeOpen(false)}
           onCompleted={() => {
             setMergeOpen(false);
-            setMergeCompleted(true);
+            setNotice('merge');
             setSelectedIds([]);
             setRefreshToken((current) => current + 1);
           }}
+        />
+      ) : null}
+      {deleteOpen ? (
+        <CatalogDeleteDialog
+          kind="artist"
+          count={selectedIds.length}
+          preview={async () => artistDeletePreviewView(await previewArtistDelete(selectedIds))}
+          onSubmit={async (mode, reason) => {
+            const result = await deleteArtists({ artistIds: selectedIds, mode, reason });
+            setDeleteOpen(false);
+            setNoticeDeleteCount(result.deletedArtistIds.length);
+            setNotice('delete');
+            setSelectedIds([]);
+            setRefreshToken((current) => current + 1);
+          }}
+          onClose={() => setDeleteOpen(false)}
         />
       ) : null}
     </>
