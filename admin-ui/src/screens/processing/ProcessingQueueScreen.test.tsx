@@ -10,15 +10,16 @@ vi.mock('../../api/admin', () => ({
   getWorkItemCounts: vi.fn(),
   getWorkItem: vi.fn(),
   getWorkItemEvents: vi.fn(),
+  purgeWorkItems: vi.fn(),
 }));
 
-const { listWorkItems, getWorkItemCounts, getWorkItem, getWorkItemEvents } = await import(
-  '../../api/admin'
-);
+const { listWorkItems, getWorkItemCounts, getWorkItem, getWorkItemEvents, purgeWorkItems } =
+  await import('../../api/admin');
 const mockListWorkItems = vi.mocked(listWorkItems);
 const mockGetWorkItemCounts = vi.mocked(getWorkItemCounts);
 const mockGetWorkItem = vi.mocked(getWorkItem);
 const mockGetWorkItemEvents = vi.mocked(getWorkItemEvents);
+const mockPurgeWorkItems = vi.mocked(purgeWorkItems);
 
 const ID_ONE = '11111111-1111-4111-8111-111111111111';
 
@@ -176,6 +177,45 @@ describe('ProcessingQueueScreen', () => {
     expect(within(table).getByText('Business as Usual')).toBeInTheDocument();
   });
 
+  it('bulk deletes failed items only after a typed confirmation', async () => {
+    mockListWorkItems.mockResolvedValue({
+      items: [makeWorkItem({ state: 'failed' })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    mockPurgeWorkItems.mockResolvedValue({
+      deleted: [{ id: ID_ONE, paths: { workArea: ID_ONE } }],
+      failed: [],
+    });
+    renderScreen('/processing?phase=failed');
+    await screen.findByText('Business as Usual');
+    const table = screen.getByRole('table', { name: 'Processing queue work items' });
+    fireEvent.click(within(table).getAllByRole('checkbox')[1]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
+    const actions = await screen.findByRole('dialog', { name: 'Bulk actions' });
+    fireEvent.click(within(actions).getByRole('button', { name: 'Delete selected' }));
+
+    const confirm = await screen.findByRole('dialog', {
+      name: /Delete 1 processing items/,
+    });
+    const submit = within(confirm).getByRole('button', { name: 'Delete permanently' });
+    expect(submit).toBeDisabled();
+    fireEvent.change(within(confirm).getByLabelText('Reason'), {
+      target: { value: 'discard corrupted import' },
+    });
+    fireEvent.change(within(confirm).getByLabelText('Type DELETE to confirm'), {
+      target: { value: 'DELETE' },
+    });
+    fireEvent.click(submit);
+
+    await waitFor(() =>
+      expect(mockPurgeWorkItems).toHaveBeenCalledWith([ID_ONE], 'discard corrupted import'),
+    );
+    expect(await screen.findByText('Deleted 1 processing items.')).toBeInTheDocument();
+  });
+
   it('opens the inspector from the keyboard (Enter on a focused row)', async () => {
     renderScreen();
     const row = (await screen.findByText('Business as Usual')).closest('tr');
@@ -196,13 +236,17 @@ describe('ProcessingQueueScreen', () => {
     expect(screen.getByTestId('search-params')).toHaveTextContent('page=2');
   });
 
-  it('shows the bulk-action bar with a disabled action when rows are selected', async () => {
+  it('opens bulk actions but refuses to purge non-failed selections', async () => {
     renderScreen();
     await screen.findByText('Business as Usual');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all rows' }));
-    expect(await screen.findByText('1 selected')).toBeInTheDocument();
-    const bulkButton = screen.getByRole('button', { name: 'Bulk actions' });
-    expect(bulkButton).toBeDisabled();
+    expect((await screen.findAllByText('1 selected')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Bulk actions' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Bulk actions' });
+    expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeDisabled();
+    expect(
+      within(dialog).getByText(/Only failed items can be purged/),
+    ).toBeInTheDocument();
   });
 
   it('renders an error notification with retry when the listing fails', async () => {

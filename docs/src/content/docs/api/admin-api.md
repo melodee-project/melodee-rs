@@ -140,6 +140,43 @@ GET /api/admin/v1/ingest/work-items/{id}/events
 Returns the append-only transition/audit history for a work item — the answer to "what happened to
 this Release and why".
 
+### Purge failed work items
+
+```http
+POST /api/admin/v1/ingest/work-items/purge
+```
+
+Body:
+
+```json
+{
+  "workItemIds": ["…"],
+  "reason": "discard corrupted failed import",
+  "confirm": true
+}
+```
+
+Hard-deletes failed, pre-catalog work items and their processing evidence. The request accepts
+1–100 ids and requires a non-blank reason plus `confirm: true`; the Admin UI also requires the
+operator to type `DELETE`. For each item the server removes the work item, its event log,
+manifests, settling snapshots, staging handoff, publication journal/plan/receipt/authorization,
+and the owned staging, work-area, and canonical directories. The inbound candidate is removed only
+when no staging handoff exists; once a handoff exists its path may have been released for a new
+arrival, so the durable staging tree is the authoritative copy. Only relative paths derived from
+durable work-item evidence below configured roots are touched; symlinks, traversal, or an ambiguous
+inbound root fail closed. An item bound to a catalog Release is refused with
+`cataloged` — use Release Review deletion for that case. The response reports per-item outcomes:
+
+```json
+{
+  "deleted": [{ "id": "…", "paths": { "staging": "releases/…/source", "workArea": "…" } }],
+  "failed": [{ "id": "…", "code": "invalid_state", "message": "…" }]
+}
+```
+
+A single `catalog_audit_events` row (`work_item_purged`) records the actor, reason, and removed
+paths independently of the deleted processing history.
+
 ### Active leases
 
 ```http

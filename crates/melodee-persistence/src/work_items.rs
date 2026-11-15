@@ -2081,6 +2081,92 @@ impl WorkItemStore {
         row.map(StoredPublication::try_from).transpose()
     }
 
+    /// Hard-deletes one failed, pre-catalog work item and its processing
+    /// evidence. The caller has already removed the owned storage trees; this
+    /// transaction refuses a cataloged item so a purge can never orphan or
+    /// rewrite catalog identity. An operator audit row remains in
+    /// `catalog_audit_events`, deliberately independent of the deleted rows.
+    pub async fn purge_pre_catalog_work_item(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        actor: &str,
+        reason: &str,
+        deleted_paths: serde_json::Value,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        if actor.trim().is_empty() || reason.trim().is_empty() {
+            return Err(WorkStoreError::InvalidRequest("purge actor or reason"));
+        }
+        if !deleted_paths.is_object() {
+            return Err(WorkStoreError::InvalidRequest("purge path evidence"));
+        }
+        let mut tx = pool.begin().await?;
+        let row = sqlx::query_as::<_, (String,)>(
+            "SELECT state FROM release_work_items WHERE id = $1 FOR UPDATE",
+        )
+        .bind(work_item_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((state,)) = row else {
+            tx.rollback().await?;
+            return Err(WorkStoreError::NotFound(work_item_id));
+        };
+        let state = IngestionState::parse(&state)
+            .ok_or_else(|| WorkStoreError::CorruptState(state.clone()))?;
+        if state != IngestionState::Failed {
+            tx.rollback().await?;
+            return Err(WorkStoreError::InvalidState(work_item_id, state));
+        }
+        let cataloged = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM catalog_imports WHERE work_item_id = $1)",
+        )
+        .bind(work_item_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if cataloged {
+            tx.rollback().await?;
+            return Err(WorkStoreError::Cataloged(work_item_id));
+        }
+        // Publication evidence has RESTRICT foreign keys and is removed in
+        // dependency order before the work item.
+        for statement in [
+            "DELETE FROM release_publication_journal WHERE work_item_id = $1",
+            "DELETE FROM release_publication_receipts WHERE work_item_id = $1",
+            "DELETE FROM release_publication_plans WHERE work_item_id = $1",
+            "DELETE FROM release_publication_authorizations WHERE work_item_id = $1",
+        ] {
+            sqlx::query(statement)
+                .bind(work_item_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query(
+            "INSERT INTO catalog_audit_events
+                (event_id, entity_type, entity_id, event_type, actor, reason, payload, created_at)
+             VALUES ($1, 'release_work_item', $2, 'work_item_purged', $3, $4, $5, $6)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(work_item_id)
+        .bind(actor)
+        .bind(reason)
+        .bind(&deleted_paths)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        let deleted = sqlx::query("DELETE FROM release_work_items WHERE id = $1")
+            .bind(work_item_id)
+            .execute(&mut *tx)
+            .await?;
+        if deleted.rows_affected() != 1 {
+            tx.rollback().await?;
+            return Err(WorkStoreError::NotFound(work_item_id));
+        }
+        tx.commit().await?;
+        info!(work_item_id = %work_item_id, actor, "pre-catalog work item purged");
+        Ok(())
+    }
+
     /// Lists append-only canonical publication progress, oldest first.
     pub async fn list_publication_journal(
         &self,

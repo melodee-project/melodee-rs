@@ -495,14 +495,16 @@
       "apps/melodee-cli/src/main.rs (ingest status/manifest/publication diagnostics expose durable authorization, plan, receipt, and journal evidence)",
       "crates/melodee-persistence/migrations/0006_canonical_publication.sql (durable decision/publication evidence)",
       "apps/melodee-cli/src/main.rs (catalog status/inspect exposes counts, retries, errors, and immutable import receipt)",
-      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (durable catalog audit, overlay, decision, and outbox evidence)"
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (durable catalog audit, overlay, decision, and outbox evidence)",
+      "apps/melodee-server/src/admin_purge.rs and admin-ui/src/screens/processing/ProcessingQueueScreen.tsx (operator bulk purge for failed pre-catalog items; ADR-0197)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/history.rs",
       "apps/melodee-server/tests/admin_diagnostics_api.rs (13 integration tests against real PostgreSQL)",
       "apps/melodee-server/tests/system_api.rs (bounded positive and fail-closed PostgreSQL readiness)",
       "crates/melodee-persistence/tests/publication.rs (durable publication evidence and operator-safe problem state)",
-      "crates/melodee-persistence/tests/catalog_import.rs and catalog_identity.rs (durable retry/correction evidence)"
+      "crates/melodee-persistence/tests/catalog_import.rs and catalog_identity.rs (durable retry/correction evidence)",
+      "apps/melodee-server/tests/admin_purge_api.rs; admin-ui/e2e/processing-queue.spec.ts (bulk failed-item purge with typed confirmation)"
     ]
   },
   {
@@ -1933,7 +1935,8 @@
       "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs, admin_duplicates.rs, admin_release_identity.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit, duplicate candidate scans, Release merge/split, agent proposals)",
       "catalog_mutations.rs (metadata edit endpoints: release/artist/track metadata update with audit events)",
       "design/adr/ADR-0196-expose-duplicate-candidate-scans-and-release-identity-correction-in-the-admin-api.md (evidence/blocker vocabulary, non-authoritative proposals, advisory agent attribution)",
-      "apps/melodee-server/src/admin_access.rs (admin user profile-field update plus raw-jpeg/png avatar POST/DELETE with acting-administrator audit)"
+      "apps/melodee-server/src/admin_access.rs (admin user profile-field update plus raw-jpeg/png avatar POST/DELETE with acting-administrator audit)",
+      "apps/melodee-server/src/admin_purge.rs (admin-gated bulk purge of failed pre-catalog work items with root-derived storage deletion and per-item outcomes); design/adr/ADR-0197-purge-failed-pre-catalog-work-items-and-owned-storage.md"
     ],
     "tests": [
       "apps/melodee-server/tests/ (all admin suites green; full workspace gate)",
@@ -1942,7 +1945,8 @@
       "crates/melodee-persistence/tests/catalog_metadata.rs (7 store-level tests)",
       "crates/melodee-persistence/tests/migrations.rs (0047 duplicate candidate indexes migrate from empty and forward)",
       "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence merge/split remains reversible)",
-      "apps/melodee-server/tests/admin_access_api.rs (admin profile-field update audit, avatar upload/remove, validation, 404s)"
+      "apps/melodee-server/tests/admin_access_api.rs (admin profile-field update audit, avatar upload/remove, validation, 404s)",
+      "apps/melodee-server/tests/admin_purge_api.rs (gate, confirmation, storage/event-log purge, audit survival, invalid state, cataloged refusal); admin-ui/src/screens/processing/ProcessingQueueScreen.test.tsx and admin-ui/e2e/processing-queue.spec.ts (bulk selection, two-step action, typed confirmation)"
     ]
   },
   {

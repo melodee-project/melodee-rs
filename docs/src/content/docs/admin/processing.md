@@ -33,9 +33,32 @@ PostgreSQL state; nothing is inferred from a running process.
 
 ![The Processing Queue with the state filter pills, Release-level rows, and stage progress](./images/processing-queue-light.png)
 
-Bulk actions are deliberately not offered, and the queue screen itself is read-only: every
-queue mutation in this build is a per-item, audited decision made from the
+The queue is otherwise read-only. The one bulk action is the failed-item **purge** described
+below; every other disposition is a per-item, audited decision made from the
 [Release Review](../library-management/release-review/) workspace or the CLI.
+
+### Bulk purge of failed items
+
+Select one or more rows on the **Failed** phase, choose **Bulk actions → Delete selected**, then
+confirm with a reason and the typed word `DELETE`. The purge removes the selected work items, their
+append-only processing event log, their manifests and staging handoffs, and every owned directory
+for the item: the inbound candidate (when no staging handoff exists), durable staging tree,
+normalization work area, and any published canonical bundle. The item disappears from the queue as
+if it had never been processed.
+
+This action is intentionally restricted:
+
+- only items in the `failed` state are accepted;
+- an item already bound to a catalog Release is refused (`cataloged`) — use
+  [Release Review](../library-management/release-review/) deletion so catalog identity and
+  tombstone rules apply;
+- paths are derived from durable evidence and must remain below the configured roots; a symlink,
+  traversal, or ambiguous inbound root fails closed and leaves the item recoverable;
+- a single independent `catalog_audit_events` row records who purged what and why, so operator
+  accountability outlives the deleted processing history.
+
+Partial batches are reported per item: successful items are deleted, refused items remain in the
+queue with their failure code, and the dialog closes so you can refresh and retry.
 
 ## Phases, states, and what "playable" means
 

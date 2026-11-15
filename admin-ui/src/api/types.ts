@@ -134,6 +134,17 @@ export type IngestionPhase =
   | 'failed';
 
 /** One {state, count} row from GET /ingest/work-items/counts. */
+export interface PurgeWorkItemFailure {
+  id: string;
+  code: string;
+  message: string;
+}
+
+export interface PurgeWorkItemsResult {
+  deleted: { id: string; paths: Record<string, string> }[];
+  failed: PurgeWorkItemFailure[];
+}
+
 export interface WorkItemStateCount {
   state: IngestionState;
   count: number;

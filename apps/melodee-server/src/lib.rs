@@ -16,6 +16,7 @@ pub mod admin_metadata;
 pub mod admin_notifications;
 pub mod admin_onboarding;
 pub mod admin_policies;
+pub mod admin_purge;
 pub mod admin_radio;
 pub mod admin_release_identity;
 pub mod admin_review;

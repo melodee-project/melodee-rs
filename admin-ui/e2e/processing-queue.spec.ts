@@ -182,6 +182,38 @@ test('keyboard: arrows move between rows and Enter opens the inspector', async (
   expect(page.url()).toContain(`item=${ITEM_TWO.id}`);
 });
 
+test('bulk delete purges failed items only after typed confirmation', async ({ page }) => {
+  let purgeBody: unknown;
+  await page.route('**/api/admin/v1/ingest/work-items/purge', async (route) => {
+    purgeBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        deleted: [{ id: ITEM_TWO.id, paths: { workArea: ITEM_TWO.id } }],
+        failed: [],
+      }),
+    });
+  });
+  await page.goto('processing?phase=failed');
+  const table = page.getByRole('table', { name: 'Processing queue work items' });
+  await expect(table.getByText('Road to Freedom')).toBeVisible();
+  await table.getByRole('checkbox', { name: 'Select row' }).first().check({ force: true });
+  await page.getByRole('button', { name: 'Bulk actions' }).click();
+  await page.getByRole('dialog', { name: 'Bulk actions' }).getByRole('button', { name: 'Delete selected' }).click();
+  const confirm = page.getByRole('dialog', { name: /Delete 1 processing items/ });
+  await expect(confirm.getByRole('button', { name: 'Delete permanently' })).toBeDisabled();
+  await confirm.getByLabel('Reason').fill('discard corrupted import');
+  await confirm.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await confirm.getByRole('button', { name: 'Delete permanently' }).click();
+  await expect.poll(() => purgeBody).toEqual({
+    workItemIds: [ITEM_TWO.id],
+    reason: 'discard corrupted import',
+    confirm: true,
+  });
+  await expect(page.getByText('Deleted 1 processing items.')).toBeVisible();
+});
+
 test('rtl smoke: ar-SA renders the queue with dir=rtl', async ({ page }) => {
   await page.goto('processing');
   await expect(page.getByText('Business as Usual')).toBeVisible();

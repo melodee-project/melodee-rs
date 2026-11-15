@@ -1,15 +1,25 @@
 import { Renew } from '@carbon/icons-react';
-import { ActionableNotification, Button, Loading, Search } from '@carbon/react';
+import {
+  ActionableNotification,
+  Button,
+  InlineNotification,
+  Loading,
+  Modal,
+  Search,
+  TextArea,
+  TextInput,
+} from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { getWorkItemCounts, listWorkItems } from '../../api/admin';
+import { getWorkItemCounts, listWorkItems, purgeWorkItems } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type {
   IngestionPhase,
   IngestionState,
   Page,
+  PurgeWorkItemsResult,
   SortParam,
   WorkItem,
   WorkItemStateCount,
@@ -136,6 +146,16 @@ export function ProcessingQueueScreen() {
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<WorkItemStateCount[] | null>(null);
   const [bulkSelected, setBulkSelected] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    kind: 'success' | 'error' | 'warning';
+    text: string;
+  } | null>(null);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -309,7 +329,7 @@ export function ProcessingQueueScreen() {
         <span className="melodee-queue-bulk-bar__count">
           {t('queue.bulk.selected', { count: bulkSelected.length })}
         </span>
-        <Button kind="primary" size="sm" disabled title={t('queue.bulk.unavailable')}>
+        <Button kind="primary" size="sm" onClick={() => setBulkOpen(true)}>
           {t('queue.bulk.actions')}
         </Button>
       </div>
@@ -354,10 +374,69 @@ export function ProcessingQueueScreen() {
       </div>
     );
 
+  const selectedItems = (pageData?.items ?? []).filter((item) =>
+    bulkSelected.includes(item.id),
+  );
+  const allSelectedFailed =
+    selectedItems.length > 0 && selectedItems.every((item) => item.state === 'failed');
+  const canConfirmPurge =
+    deleteReason.trim().length > 0 && deleteConfirmation === 'DELETE' && !deleting;
+
+  const closeDelete = () => {
+    setDeleteOpen(false);
+    setDeleteReason('');
+    setDeleteConfirmation('');
+    setPurgeError(null);
+  };
+
+  const submitPurge = async () => {
+    if (!canConfirmPurge) return;
+    setDeleting(true);
+    setPurgeError(null);
+    try {
+      const result: PurgeWorkItemsResult = await purgeWorkItems(
+        bulkSelected,
+        deleteReason.trim(),
+      );
+      const deleted = result.deleted.length;
+      const failed = result.failed.length;
+      setBulkSelected([]);
+      setBulkOpen(false);
+      closeDelete();
+      setNotice(
+        failed === 0
+          ? { kind: 'success', text: t('queue.bulk.success', { count: deleted }) }
+          : {
+              kind: 'warning',
+              text: t('queue.bulk.partial', { deleted, failed }),
+            },
+      );
+      void fetchPage({ cancelled: false });
+      void getWorkItemCounts()
+        .then(setCounts)
+        .catch(() => undefined);
+    } catch (cause) {
+      setPurgeError(
+        cause instanceof ApiError ? cause.message : t('queue.bulk.deleteError'),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
+    <>
     <div className="melodee-queue-layout">
       <div className="melodee-queue-main">
         <PageHeader title={t('queue.title')} subtitle={t('queue.subtitle')} />
+        {notice ? (
+          <InlineNotification
+            kind={notice.kind}
+            lowContrast
+            title={notice.text}
+            onCloseButtonClick={() => setNotice(null)}
+          />
+        ) : null}
         {listError ? (
           <ActionableNotification
             inline
@@ -406,5 +485,62 @@ export function ProcessingQueueScreen() {
         />
       ) : null}
     </div>
+    <Modal
+      open={bulkOpen}
+      modalHeading={t('queue.bulk.title')}
+      primaryButtonText={t('queue.bulk.deleteSelected')}
+      secondaryButtonText={t('actions.cancel')}
+      danger
+      primaryButtonDisabled={!allSelectedFailed}
+      onRequestClose={() => setBulkOpen(false)}
+      onRequestSubmit={() => {
+        if (!allSelectedFailed) return;
+        setBulkOpen(false);
+        setPurgeError(null);
+        setDeleteOpen(true);
+      }}
+    >
+      <p>{t('queue.bulk.selected', { count: bulkSelected.length })}</p>
+      <p>
+        {allSelectedFailed
+          ? t('queue.bulk.deleteHelp')
+          : t('queue.bulk.onlyFailed')}
+      </p>
+    </Modal>
+    <Modal
+      open={deleteOpen}
+      danger
+      modalHeading={t('queue.bulk.confirmTitle', { count: bulkSelected.length })}
+      primaryButtonText={
+        deleting ? t('common.deleting') : t('queue.bulk.deletePermanently')
+      }
+      secondaryButtonText={t('actions.cancel')}
+      primaryButtonDisabled={!canConfirmPurge}
+      onRequestClose={closeDelete}
+      onRequestSubmit={() => void submitPurge()}
+    >
+      <p>{t('queue.bulk.confirmBody')}</p>
+      {purgeError ? (
+        <InlineNotification
+          kind="error"
+          lowContrast
+          title={purgeError}
+          hideCloseButton
+        />
+      ) : null}
+      <TextArea
+        id="purge-reason"
+        labelText={t('queue.bulk.reason')}
+        value={deleteReason}
+        onChange={(event) => setDeleteReason(event.target.value)}
+      />
+      <TextInput
+        id="purge-confirmation"
+        labelText={t('queue.bulk.typeDelete')}
+        value={deleteConfirmation}
+        onChange={(event) => setDeleteConfirmation(event.target.value)}
+      />
+    </Modal>
+    </>
   );
 }

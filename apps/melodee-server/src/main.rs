@@ -676,6 +676,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // preview URLs on the frozen native stream route (PRD-UI-007); the
     // resolver mirrors the native trusted-proxy rules so issued tokens
     // validate for the requesting browser.
+    let admin_purge_state = melodee_server::admin_purge::AdminPurgeState::new(
+        admin_access_state.clone(),
+        ingestion_config
+            .sources
+            .iter()
+            .map(|source| melodee_server::admin_purge::PurgeSourceRoot {
+                id: source.id,
+                root: source.root.clone(),
+            })
+            .collect(),
+        storage_roots.staging_root.clone(),
+        ingestion_config.work_area_base.clone(),
+        storage_roots.storage_root.clone(),
+    );
     let admin_catalog_state = melodee_server::admin_catalog::AdminCatalogState::new(
         admin_access_state.clone(),
         Arc::new(native::stream::DatabaseStreamUrlSigner::new(
@@ -711,6 +725,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .merge(melodee_server::admin_identity::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_duplicates::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_release_identity::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_purge::router().with_state(admin_purge_state))
         .merge(melodee_server::admin_metadata::router(ingestion_config.clone()).with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_catalog::router().with_state(admin_catalog_state))
         .merge(melodee_server::admin_charts::router().with_state(admin_access_state.clone()))

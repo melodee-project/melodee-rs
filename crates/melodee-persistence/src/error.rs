@@ -24,6 +24,12 @@ pub enum WorkStoreError {
     #[error("work item {0} is in state {1:?}, which does not allow this operation")]
     InvalidState(Uuid, IngestionState),
 
+    #[error("work item {0} is cataloged and cannot be purged")]
+    Cataloged(Uuid),
+
+    #[error("invalid work-item request: {0}")]
+    InvalidRequest(&'static str),
+
     #[error("work item {0} has exhausted automatic retries")]
     RetriesExhausted(Uuid),
 

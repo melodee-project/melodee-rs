@@ -751,7 +751,7 @@
   "queue.actions.unavailable": "Work-item actions are not available yet. Decision and reprocess endpoints ship with the review-queue wave.",
   "queue.bulk.actions": "Bulk actions",
   "queue.bulk.selected": "{{count}} selected",
-  "queue.bulk.unavailable": "Bulk actions are not available yet. They ship with the decision endpoints in a later wave.",
+  "queue.bulk.unavailable": "Bulk actions are not available for this selection.",
   "queue.column.added": "Added",
   "queue.column.attempts": "Attempts",
   "queue.column.lastError": "Last error",
@@ -1463,5 +1463,17 @@
   "users.fieldPreferredTheme": "Preferred theme",
   "users.fieldPreferredThemeHelp": "Optional theme identifier for clients.",
   "users.fieldTimeZone": "Time zone",
-  "users.fieldTimeZoneHelp": "IANA time-zone identifier, for example UTC or Europe/London."
+  "users.fieldTimeZoneHelp": "IANA time-zone identifier, for example UTC or Europe/London.",
+  "queue.bulk.title": "Bulk actions",
+  "queue.bulk.deleteSelected": "Delete selected",
+  "queue.bulk.deleteHelp": "Delete the selected failed items and their processing evidence. Choose this, then confirm with a reason.",
+  "queue.bulk.onlyFailed": "Only failed items can be purged. Deselect the other items to continue.",
+  "queue.bulk.confirmTitle": "Delete {{count}} processing items?",
+  "queue.bulk.confirmBody": "This permanently removes the selected failed items, their processing event log, and all owned inbound, staging, work-area, and canonical directories. It cannot be undone.",
+  "queue.bulk.reason": "Reason",
+  "queue.bulk.typeDelete": "Type DELETE to confirm",
+  "queue.bulk.deletePermanently": "Delete permanently",
+  "queue.bulk.success": "Deleted {{count}} processing items.",
+  "queue.bulk.partial": "Deleted {{deleted}} items; {{failed}} could not be deleted. Refresh the queue and retry the remaining items.",
+  "queue.bulk.deleteError": "The selected items could not be deleted."
 }

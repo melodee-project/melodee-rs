@@ -58,6 +58,7 @@ import type {
   UnresolvedObservation,
   UserCreateRequest,
   UserSummary,
+  PurgeWorkItemsResult,
   UserUpdateRequest,
   WorkItem,
   WorkItemEvent,
@@ -641,6 +642,21 @@ export function setUserPassword(id: string, password: string): Promise<void> {
   return apiFetch<void>(`${ADMIN}/users/${encodeURIComponent(id)}/password`, {
     method: 'POST',
     body: { password },
+  });
+}
+
+/**
+ * Hard-deletes failed pre-catalog work items, their processing log, and the
+ * owned storage trees. The server refuses cataloged items and requires the
+ * explicit confirmation flag.
+ */
+export function purgeWorkItems(
+  workItemIds: string[],
+  reason: string,
+): Promise<PurgeWorkItemsResult> {
+  return apiFetch<PurgeWorkItemsResult>(`${ADMIN}/ingest/work-items/purge`, {
+    method: 'POST',
+    body: { workItemIds, reason, confirm: true },
   });
 }
 
