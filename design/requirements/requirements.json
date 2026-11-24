@@ -2195,7 +2195,7 @@
     "line": 1504,
     "status": "tested",
     "implementation": [
-      "crates/melodee-application/src/notifications.rs (lettre 0.11.23 MIT rustls/tokio1 SMTP transport behind the NotificationTransport trait; NoopTransport when disabled; bounded 10s SMTP timeout; no new infrastructure)",
+      "crates/melodee-application/src/notifications.rs (lettre 0.11.24 MIT rustls/tokio1 SMTP transport behind the NotificationTransport trait; NoopTransport when disabled; bounded 10s SMTP timeout; no new infrastructure)",
       "crates/melodee-application/src/notifications.rs (NotificationService::dispatch spawns fire-and-record sends; delivery failures are audited and logged, never propagated to the triggering operation)",
       "crates/melodee-persistence/migrations/0024_phase9_notifications.sql (notification_deliveries append-only audit stores no message content; 30-day retention purge in code)"
     ],

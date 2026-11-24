@@ -44,10 +44,10 @@ getrandom = "=0.4.3"
 hmac = "=0.13.0"
 jsonwebtoken = { version = "=11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 # PRD-NOTIF-002: FOSS SMTP transport for notification delivery.
-# lettre 0.11.23, MIT, lettre/lettre; no hosted service, no broker. rustls
+# lettre 0.11.24, MIT, lettre/lettre; no hosted service, no broker. rustls
 # TLS only (no native-tls/OpenSSL linkage) on the tokio1 executor; default
 # features off so no connection pool, sendmail, or file transport is linked.
-lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls"] }
+lettre = { version = "=0.11.24", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls"] }
 # ADR-0130: OpenSubsonic token+salt authentication is defined by the protocol
 # as md5(secret + salt); the digest is a frozen wire contract, not a security
 # primitive. RustCrypto md-5, MIT/Apache-2.0.
@@ -112,7 +112,7 @@ uuid = { version = "=1.27.0", features = ["serde", "v7"] }
 # ADR-0123: bounded in-memory native-v1 theme-pack import/export. Only the
 # standard DEFLATE codec is enabled; encrypted and exotic archive codecs are
 # intentionally outside the compatibility boundary.
-zip = { version = "=9.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
