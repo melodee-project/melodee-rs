@@ -80,12 +80,19 @@ impl Reservation {
         bundle: &PublicationBundle,
         manifest: &[u8],
         lock: &File,
+        asset_io: AssetIo<'_>,
     ) -> Result<bool, PublicationError> {
         if !self.owned(lock)? {
             return Ok(false);
         }
         if path_exists(&target.join("manifest.json"))? {
-            verify_sealed_bundle(target, bundle, manifest, Some(self.marker_name()?))?;
+            verify_sealed_bundle(
+                target,
+                bundle,
+                Some(manifest),
+                Some(self.marker_name()?),
+                asset_io,
+            )?;
             self.finish(target, lock)?;
             return Ok(false);
         }

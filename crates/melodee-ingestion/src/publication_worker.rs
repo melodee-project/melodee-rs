@@ -20,7 +20,7 @@ use tokio::{
     task::JoinSet,
     time::{self, Duration as TokioDuration, MissedTickBehavior},
 };
-use tracing::{Instrument as _, error, info};
+use tracing::{Instrument as _, error, info, warn};
 
 use crate::{
     IngestionConfig, PublicationBundle, PublicationError, PublicationMilestone, PublicationOutcome,
@@ -82,8 +82,10 @@ async fn validate_once_with_shutdown(
     now: OffsetDateTime,
     shutdown: Arc<AtomicBool>,
 ) -> Result<ValidationStats> {
-    validate_worker_config(ingestion, work_config)?;
-    if !ingestion.publication_enabled() {
+    if validated_publication_roots(ingestion, work_config)
+        .await?
+        .is_none()
+    {
         return Ok(ValidationStats::default());
     }
     let started = Instant::now();
@@ -328,8 +330,7 @@ async fn publish_once_with_shutdown(
     now: OffsetDateTime,
     shutdown: Arc<AtomicBool>,
 ) -> Result<PublicationStats> {
-    validate_worker_config(ingestion, work_config)?;
-    let Some(roots) = ingestion.publication_roots()? else {
+    let Some(roots) = validated_publication_roots(ingestion, work_config).await? else {
         return Ok(PublicationStats::default());
     };
     let started = Instant::now();
@@ -514,6 +515,7 @@ async fn publish_one(
     let task_root = storage_root.to_path_buf();
     let task_cancellation = cancellation.clone();
     let observer_cancellation = cancellation.clone();
+    let nfs_io_budget = ingestion.nfs_io_budget.clone();
     #[cfg(feature = "test-support")]
     let copy_test_barrier = ingestion.publication_copy_test_barrier.clone();
     let mut handle = tokio::task::spawn_blocking(move || {
@@ -523,6 +525,7 @@ async fn publish_one(
                 &task_root,
                 &task_bundle,
                 &task_cancellation,
+                &nfs_io_budget,
                 |milestone| {
                     if milestone_tx.blocking_send(milestone).is_err() {
                         observer_cancellation.store(true, Ordering::SeqCst);
@@ -536,6 +539,7 @@ async fn publish_one(
             &task_root,
             &task_bundle,
             &task_cancellation,
+            &nfs_io_budget,
             |milestone| {
                 if milestone_tx.blocking_send(milestone).is_err() {
                     observer_cancellation.store(true, Ordering::SeqCst);
@@ -743,10 +747,13 @@ async fn await_with_heartbeat<T>(
     }
 }
 
-fn validate_worker_config(
+async fn validated_publication_roots(
     ingestion: &IngestionConfig,
     work_config: &WorkEngineConfig,
-) -> Result<()> {
+) -> Result<Option<crate::PublicationRoots>> {
+    if !ingestion.publication_enabled() {
+        return Ok(None);
+    }
     work_config
         .validate()
         .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
@@ -755,8 +762,14 @@ fn validate_worker_config(
             "validation and publication concurrency must be greater than zero".to_owned(),
         ));
     }
-    let _validated_roots = ingestion.publication_roots()?;
-    Ok(())
+    // Proving path containment involves filesystem calls. An unavailable mount
+    // must not pin a Tokio executor thread while it waits on the kernel.
+    let config = ingestion.clone();
+    Ok(
+        tokio::task::spawn_blocking(move || config.publication_roots())
+            .await
+            .map_err(|error| IngestionError::InspectionTask(error.to_string()))??,
+    )
 }
 
 fn classify_validation_error(error: &StructuralValidationError) -> (&'static str, FailureClass) {
@@ -815,6 +828,22 @@ pub fn start_publication_loop(
     start_stage_loop("publication", ingestion, pool, store, work_config, false)
 }
 
+enum AfterBatch {
+    Drain,
+    Poll,
+    BackOff { made_progress: bool },
+}
+
+impl AfterBatch {
+    fn from_claims(claimed: u64, limit: u64) -> Self {
+        if claimed >= limit {
+            Self::Drain
+        } else {
+            Self::Poll
+        }
+    }
+}
+
 fn start_stage_loop(
     stage: &'static str,
     ingestion: IngestionConfig,
@@ -834,6 +863,12 @@ fn start_stage_loop(
         let interval = TokioDuration::try_from(ingestion.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
         let mut ticker = time::interval(interval);
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let retry_base =
+            TokioDuration::try_from(work_config.retry_policy.base_delay).unwrap_or(interval);
+        let retry_max =
+            TokioDuration::try_from(work_config.retry_policy.max_delay).unwrap_or(retry_base);
+        let mut retry_delay = retry_base;
         let mut results = Vec::new();
         loop {
             let should_run = tokio::select! {
@@ -859,7 +894,13 @@ fn start_stage_loop(
                             shutdown.clone(),
                         )
                         .await
-                        .map(|stats| (stats.duration_ms, stats.errors, stats.claimed))
+                        .map(|stats| {
+                            (
+                                stats.duration_ms,
+                                stats.errors,
+                                AfterBatch::from_claims(stats.claimed, claim_batch_size),
+                            )
+                        })
                     } else {
                         publish_once_with_shutdown(
                             &ingestion,
@@ -870,7 +911,16 @@ fn start_stage_loop(
                             shutdown.clone(),
                         )
                         .await
-                        .map(|stats| (stats.duration_ms, stats.errors, stats.claimed))
+                        .map(|stats| {
+                            let next = if stats.failed > 0 || stats.errors > 0 {
+                                AfterBatch::BackOff {
+                                    made_progress: stats.completed > 0,
+                                }
+                            } else {
+                                AfterBatch::from_claims(stats.claimed, claim_batch_size)
+                            };
+                            (stats.duration_ms, stats.errors, next)
+                        })
                     }
                 };
                 tokio::pin!(batch);
@@ -881,8 +931,8 @@ fn start_stage_loop(
                         (true, batch.await)
                     }
                 };
-                let full_batch = match result {
-                    Ok((duration_ms, errors, claimed)) => {
+                let next = match result {
+                    Ok((duration_ms, errors, next)) => {
                         results.push(ReconcileResult {
                             source: stage.to_owned(),
                             stats: ReconcileStats {
@@ -891,18 +941,39 @@ fn start_stage_loop(
                                 ..ReconcileStats::default()
                             },
                         });
-                        claimed >= claim_batch_size
+                        next
                     }
                     Err(error) => {
                         error!(%error, stage, "ingestion stage loop failed");
-                        false
+                        if validation {
+                            AfterBatch::Poll
+                        } else {
+                            AfterBatch::BackOff {
+                                made_progress: false,
+                            }
+                        }
                     }
                 };
                 if interrupted {
                     stopping = true;
                     break;
                 }
-                if !full_batch {
+                if let AfterBatch::BackOff { made_progress } = next {
+                    if made_progress {
+                        retry_delay = retry_base;
+                    }
+                    let delay = retry_delay.max(interval);
+                    warn!(
+                        stage,
+                        ?delay,
+                        "pausing publication claims after a failed batch"
+                    );
+                    ticker.reset_after(delay);
+                    retry_delay = retry_delay.saturating_mul(2).min(retry_max);
+                    break;
+                }
+                retry_delay = retry_base;
+                if matches!(next, AfterBatch::Poll) {
                     break;
                 }
                 tokio::task::yield_now().await;

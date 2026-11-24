@@ -53,6 +53,10 @@ Important rules:
 
 The service account needs permission to create directories, hard links, and files on the export. Enable server-coordinated file locking for clients that share the library. Keep the hidden per-Release publication lock files in place.
 
+When the NAS also serves playback, set `MELODEE__PUBLICATION__CONCURRENCY=1` for the first bulk import. The publisher shares an 8 MiB/s default budget across its media and artwork writes and verification reads. Each new asset uses the budget for one write and two verification reads. Directory operations, filesystem syncs, kernel caching, playback and transfers by other applications affect the NAS separately. Adjust `MELODEE__PUBLICATION__NFS_MIB_PER_SECOND` based on observed playback latency and NAS health. Starting a service with ingestion enabled can resume outstanding publications automatically.
+
+For a supervised first Release, keep automatic ingestion paused and run `melodee-cli ingest publish` once with ingestion enabled for that invocation, publication concurrency set to one, and the same service account, paths and database as the server. The command claims at most one eligible Release with those settings. Check its completed, failed and error counts before repeating it. [Publication settings](./configuration/#throughput-tuning)
+
 A file browser may show the new Release directory as Tracks arrive. Melodee installs `manifest.json` after the media and artwork are complete. A Release enters the catalog after the publisher verifies its manifest and files. An interrupted worker can resume its own partial Release. If publication reports a target conflict, preserve the directory and inspect its contents. A crash during initial reservation can leave an empty directory without an ownership marker. With the service stopped, move that directory aside after confirming the conflict path, then retry the work item. Staged originals are retained.
 
 ### Retained copies and disk planning

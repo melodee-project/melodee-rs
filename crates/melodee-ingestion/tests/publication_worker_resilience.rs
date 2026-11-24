@@ -11,6 +11,7 @@ use melodee_domain::{
     NormalizationExecutionProvenance, NormalizationObservations, NormalizedOutput, ObservedFile,
     ObservedFileKind, ObservedTrack, ReleaseManifest, TransitionKind,
 };
+use melodee_ingestion::start_publication_loop;
 use melodee_ingestion::{InboundSource, IngestionConfig, publish_once, validate_once};
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId};
 use time::OffsetDateTime;
@@ -307,6 +308,101 @@ async fn assert_released_without_media_failure(
     assert_eq!(
         (release_events, failure_events, failed_journal),
         (expected_release_events, 0, 0)
+    );
+}
+
+#[tokio::test]
+async fn failed_periodic_publication_waits_before_claiming_again_then_adopts() {
+    let mut roots = FixtureRoots::new();
+    roots.config.reconciliation_interval = time::Duration::milliseconds(20);
+    let database = common::TestDb::create("publication_cooldown").await;
+    let id = seed_validating_item(&database, &roots).await;
+    let mut work = WorkEngineConfig {
+        claim_batch_size: 1,
+        ..WorkEngineConfig::default()
+    };
+    work.retry_policy.base_delay = time::Duration::seconds(3);
+    let validated = validate_once(
+        &roots.config,
+        &WorkItemStore,
+        &database.pool,
+        &work,
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(validated.completed, 1);
+    install_receipt_fault(&database.pool).await;
+    let scheduler = start_publication_loop(
+        roots.config.clone(),
+        database.pool.clone(),
+        WorkItemStore,
+        work,
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        while !sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM release_work_item_events
+              WHERE work_item_id = $1 AND event_type = 'lease_released')",
+        )
+        .bind(id)
+        .fetch_one(&database.pool)
+        .await
+        .unwrap()
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("first attempt releases its lease");
+    remove_receipt_fault(&database.pool).await;
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        while WorkItemStore.get(&database.pool, id).await.unwrap().state
+            != IngestionState::Published
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+        }
+    })
+    .await
+    .expect("publication resumed after cooldown");
+    scheduler.stop().await;
+    let attempts: Vec<OffsetDateTime> = sqlx::query_scalar(
+        "SELECT created_at FROM release_work_item_events WHERE work_item_id = $1
+          AND reason_code IN ('publication.claimed','publication.reclaimed') ORDER BY id",
+    )
+    .bind(id)
+    .fetch_all(&database.pool)
+    .await
+    .unwrap();
+    assert!(attempts.len() >= 2);
+    for pair in attempts.windows(2) {
+        assert!(pair[1] - pair[0] >= work.retry_policy.base_delay);
+    }
+    database.drop().await;
+}
+
+#[tokio::test]
+async fn disabled_one_shot_workers_skip_roots_and_database_access() {
+    let mut roots = FixtureRoots::new();
+    roots.config.enabled = false;
+    roots.config.storage_root = Some(roots.work_area.clone());
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgresql://127.0.0.1:1/unused")
+        .unwrap();
+    let work = WorkEngineConfig::default();
+    let now = OffsetDateTime::now_utc();
+    assert_eq!(
+        validate_once(&roots.config, &WorkItemStore, &pool, &work, now)
+            .await
+            .unwrap()
+            .claimed,
+        0
+    );
+    assert_eq!(
+        publish_once(&roots.config, &WorkItemStore, &pool, &work, now)
+            .await
+            .unwrap()
+            .claimed,
+        0
     );
 }
 

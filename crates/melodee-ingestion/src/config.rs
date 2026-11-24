@@ -6,6 +6,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use crate::publication::io_budget::{DEFAULT_NFS_MIB_PER_SECOND, NfsIoBudget};
 use serde::{Deserialize, Serialize};
 use time::Duration;
 use uuid::Uuid;
@@ -38,6 +39,7 @@ pub const ENV_FPCALC_TIMEOUT_SECONDS: &str = "MELODEE__NORMALIZATION__FPCALC_TIM
 pub const ENV_WORK_AREA_BASE: &str = "MELODEE__NORMALIZATION__WORK_AREA";
 pub const ENV_VALIDATION_CONCURRENCY: &str = "MELODEE__VALIDATION__CONCURRENCY";
 pub const ENV_PUBLICATION_CONCURRENCY: &str = "MELODEE__PUBLICATION__CONCURRENCY";
+pub const ENV_PUBLICATION_NFS_MIB_PER_SECOND: &str = "MELODEE__PUBLICATION__NFS_MIB_PER_SECOND";
 pub const ENV_STORAGE_ROOT: &str = "MELODEE__STORAGE__ROOT";
 
 pub const DEFAULT_READY_MARKER: &str = ".melodee-ready";
@@ -75,6 +77,7 @@ pub struct IngestionConfig {
     pub work_area_base: PathBuf,
     pub validation_concurrency: u32,
     pub publication_concurrency: u32,
+    pub(crate) nfs_io_budget: NfsIoBudget,
     /// Canonical publication is deliberately opt-in. An inbound source must
     /// never imply a destination with destructive operational consequences.
     pub storage_root: Option<PathBuf>,
@@ -123,6 +126,7 @@ impl IngestionConfig {
             work_area_base: PathBuf::from(DEFAULT_WORK_AREA_BASE),
             validation_concurrency: DEFAULT_VALIDATION_CONCURRENCY,
             publication_concurrency: DEFAULT_PUBLICATION_CONCURRENCY,
+            nfs_io_budget: NfsIoBudget::default(),
             storage_root: None,
             #[cfg(feature = "test-support")]
             publication_copy_test_barrier: None,
@@ -207,6 +211,10 @@ impl IngestionConfig {
                 ENV_PUBLICATION_CONCURRENCY,
                 DEFAULT_PUBLICATION_CONCURRENCY,
             )?,
+            nfs_io_budget: NfsIoBudget::new(parse_positive_u32(
+                ENV_PUBLICATION_NFS_MIB_PER_SECOND,
+                DEFAULT_NFS_MIB_PER_SECOND,
+            )?),
             storage_root: env::var_os(ENV_STORAGE_ROOT).map(PathBuf::from),
             #[cfg(feature = "test-support")]
             publication_copy_test_barrier: None,

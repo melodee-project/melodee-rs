@@ -124,34 +124,28 @@ or an equivalent supervisor to start MPV with the configured socket.
 
 ### Throughput tuning
 
-The default worker concurrency (`2` per stage) is deliberately conservative so a small host is never
-overloaded. Throughput is bound by concurrency, not by the number of stages: for a 25-Release /
-1.8 GB batch on a 24-core host, the median wait before a Release was claimed was ~200 s while the
+The default worker concurrency is `2` per stage. Even one publisher can keep a shared disk busy.
+For a 25-Release, 1.8 GB batch on a 24-core host, the median wait before a Release was claimed was ~200 s while the
 work itself took seconds to tens of seconds per stage.
 
-Every stage drains while it has work: when a pass claims its full batch, the worker runs the next
-pass immediately instead of waiting for the next poll tick. Each stage's poll interval is therefore
-an **idle cadence**, not a throughput ceiling — a queue of several hundred Releases is limited by the
-concurrency you configure, not by how often the scheduler wakes up. (Before this, the policy stage
-polled once a minute and claimed four Releases per tick, so a 643-Release backlog advanced at exactly
-4/minute while the worker sat idle 99 % of the time; the same backlog now clears in well under a
-minute.)
+Workers can drain consecutive full batches between poll ticks. The automatic publisher pauses
+after a failed batch. With default settings it waits at least 60 seconds. Consecutive batches
+that fail to publish anything double that delay up to one hour. These limits follow
+`MELODEE__WORK__RETRY_BASE_SECONDS` and `MELODEE__WORK__RETRY_MAX_SECONDS`. The reconciliation
+interval is also a minimum wait after a failure. A successful batch resets the delay.
 
-Sizing rule:
+Tune the stages independently.
 
-- `MELODEE__INSPECTION__CONCURRENCY` — mostly I/O (hashing, `ffprobe`); raise to the number of
-  spindles you can saturate (4–8 is safe on a modern host).
+- `MELODEE__INSPECTION__CONCURRENCY` controls parallel hashing and media probes. Increase it
+  only while the source and staging disks have headroom.
 - `MELODEE__NORMALIZATION__CONCURRENCY` — the CPU bound (transcoding). Keep it at or below half the
   physical cores so the database and API keep responsive.
-- `MELODEE__VALIDATION__CONCURRENCY` and `MELODEE__PUBLICATION__CONCURRENCY` — I/O bound; match
-  inspection.
+- `MELODEE__VALIDATION__CONCURRENCY` controls verification against the work area. For a shared
+  NFS library, start with `MELODEE__PUBLICATION__CONCURRENCY=1` and check playback latency during
+  publication. All publisher workers in the service share its NFS asset bandwidth budget.
 - `MELODEE__CATALOG__CONCURRENCY` — PostgreSQL bound; 2–4.
 - `MELODEE__INGEST__SETTLING_QUIET_SECONDS` — the floor on per-Release latency (default `10`); the
   ready marker (`MELODEE__INGEST__READY_MARKER_NAME`) skips the wait when the source can write it.
-
-Raising concurrency cannot corrupt state — every stage is lease-fenced — it only changes how much
-runs at once.
-
 
 ### Media inspection
 
@@ -178,6 +172,7 @@ runs at once.
 | --- | --- | --- |
 | `MELODEE__VALIDATION__CONCURRENCY` | `2` | Maximum normalized Releases structurally validated simultaneously by one process. |
 | `MELODEE__PUBLICATION__CONCURRENCY` | `2` | Maximum complete Release bundles copied and finalized simultaneously by one process. |
+| `MELODEE__PUBLICATION__NFS_MIB_PER_SECOND` | `8` | Positive integer. Combined MiB/s for canonical media and artwork writes and verification reads by one Linux NFS publisher service. Separate processes have separate budgets. |
 | `MELODEE__STORAGE__ROOT` | — (publication disabled) | Dedicated canonical-library root. Setting it enables validation/publication workers. It is distinct from staging. |
 
 ### Catalog import

@@ -1,6 +1,9 @@
 //! Deterministic, convergent canonical filesystem publication (ADR-0116).
 
+pub(crate) mod io_budget;
 mod nfs;
+
+use io_budget::{AssetIo, NfsIoBudget};
 
 use std::{
     collections::BTreeMap,
@@ -237,7 +240,9 @@ pub fn publish_canonical_bundle(
     bundle: &PublicationBundle,
     cancellation: &AtomicBool,
 ) -> Result<PublicationReceipt, PublicationError> {
-    publish_canonical_bundle_with_observer(storage_root, bundle, cancellation, |_| {})
+    static BUDGET: std::sync::LazyLock<NfsIoBudget> =
+        std::sync::LazyLock::new(NfsIoBudget::default);
+    publish_canonical_bundle_with_observer(storage_root, bundle, cancellation, &BUDGET, |_| {})
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -254,6 +259,7 @@ pub(crate) fn publish_canonical_bundle_with_observer(
     storage_root: &Path,
     bundle: &PublicationBundle,
     cancellation: &AtomicBool,
+    budget: &NfsIoBudget,
     mut observer: impl FnMut(PublicationMilestone),
 ) -> Result<PublicationReceipt, PublicationError> {
     publish_canonical_bundle_impl(
@@ -263,6 +269,7 @@ pub(crate) fn publish_canonical_bundle_with_observer(
         &mut observer,
         &mut |_| Ok(()),
         nfs::on_nfs,
+        budget,
         None,
     )
 }
@@ -272,6 +279,7 @@ pub(crate) fn publish_canonical_bundle_with_observer_and_test_barrier(
     storage_root: &Path,
     bundle: &PublicationBundle,
     cancellation: &AtomicBool,
+    budget: &NfsIoBudget,
     mut observer: impl FnMut(PublicationMilestone),
     barrier: Option<&PublicationCopyTestBarrier>,
 ) -> Result<PublicationReceipt, PublicationError> {
@@ -282,10 +290,12 @@ pub(crate) fn publish_canonical_bundle_with_observer_and_test_barrier(
         &mut observer,
         &mut |_| Ok(()),
         nfs::on_nfs,
+        budget,
         barrier,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn publish_canonical_bundle_impl(
     storage_root: &Path,
     bundle: &PublicationBundle,
@@ -293,6 +303,7 @@ fn publish_canonical_bundle_impl(
     observer: &mut dyn FnMut(PublicationMilestone),
     fault: &mut dyn FnMut(PublicationFaultPoint) -> io::Result<()>,
     detect_nfs: fn(&File) -> io::Result<bool>,
+    budget: &NfsIoBudget,
     #[cfg(feature = "test-support")] copy_barrier: Option<&PublicationCopyTestBarrier>,
     #[cfg(not(feature = "test-support"))] _copy_barrier: Option<&()>,
 ) -> Result<PublicationReceipt, PublicationError> {
@@ -338,12 +349,22 @@ fn publish_canonical_bundle_impl(
             source,
         })?
         .then(|| nfs::Reservation::new(&final_path, &bundle.plan_hash));
+    let asset_io = AssetIo {
+        cancellation,
+        budget: nfs.as_ref().map(|_| budget),
+    };
     let resuming = match &nfs {
-        Some(r) => r.resume(&final_path, bundle, &manifest_bytes, &lock)?,
+        Some(r) => r.resume(&final_path, bundle, &manifest_bytes, &lock, asset_io)?,
         None => false,
     };
     if !resuming && path_exists(&final_path)? {
-        let receipt = verify_final_and_receipt(bundle, &final_path, PublicationOutcome::Adopted)?;
+        let receipt = verify_final_and_receipt(
+            bundle,
+            &final_path,
+            PublicationOutcome::Adopted,
+            &manifest_bytes,
+            asset_io,
+        )?;
         fsync_directory(&final_path)?;
         fsync_directory(final_parent)?;
         for asset in unique_assets(&bundle.plan) {
@@ -398,7 +419,7 @@ fn publish_canonical_bundle_impl(
             asset,
             &incoming_path,
             nfs.as_ref(),
-            cancellation,
+            asset_io,
             fault,
             #[cfg(feature = "test-support")]
             copy_barrier,
@@ -417,6 +438,12 @@ fn publish_canonical_bundle_impl(
             return Err(PublicationError::Canceled);
         }
         r.check_inventory(&final_path, &bundle.plan)?;
+        inject_fault(
+            fault,
+            PublicationFaultPoint::SealedTreeFsync,
+            "fsync NFS asset directories before sealing",
+            &final_path,
+        )?;
         fsync_tree(&final_path)?;
     }
     write_manifest(&incoming_path, bundle, &manifest_bytes, fault, nfs.as_ref())?;
@@ -428,21 +455,33 @@ fn publish_canonical_bundle_impl(
             &final_path,
         )?;
         r.finish(&final_path, &lock)?;
+    } else {
+        verify_sealed_bundle(
+            &incoming_path,
+            bundle,
+            Some(&manifest_bytes),
+            None,
+            asset_io,
+        )?;
+        inject_fault(
+            fault,
+            PublicationFaultPoint::SealedTreeFsync,
+            "fsync sealed incoming tree",
+            &incoming_path,
+        )?;
+        fsync_tree(&incoming_path)?;
     }
-    verify_sealed_bundle(&incoming_path, bundle, &manifest_bytes, None)?;
-    inject_fault(
-        fault,
-        PublicationFaultPoint::SealedTreeFsync,
-        "fsync sealed incoming tree",
-        &incoming_path,
-    )?;
-    fsync_tree(&incoming_path)?;
-    observer(PublicationMilestone {
+    let sealed = PublicationMilestone {
         step: PublicationJournalStep::BundleSealed,
         asset_path: None,
         size_bytes: None,
         byte_hash: None,
-    });
+    };
+    // The NFS reservation is already at its final path. Verify it once after
+    // syncing the parent, then record both milestones against that verification.
+    if nfs.is_none() {
+        observer(sealed.clone());
+    }
     if cancellation.load(Ordering::SeqCst) {
         return Err(PublicationError::Canceled);
     }
@@ -467,8 +506,16 @@ fn publish_canonical_bundle_impl(
                 final_parent,
             )?;
             fsync_directory(final_parent)?;
-            let receipt =
-                verify_final_and_receipt(bundle, &final_path, PublicationOutcome::Published)?;
+            let receipt = verify_final_and_receipt(
+                bundle,
+                &final_path,
+                PublicationOutcome::Published,
+                &manifest_bytes,
+                asset_io,
+            )?;
+            if nfs.is_some() {
+                observer(sealed);
+            }
             observer(PublicationMilestone {
                 step: PublicationJournalStep::Finalized,
                 asset_path: Some(bundle.plan.manifest_relative_path.clone()),
@@ -478,8 +525,13 @@ fn publish_canonical_bundle_impl(
             Ok(receipt)
         }
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            let receipt =
-                verify_final_and_receipt(bundle, &final_path, PublicationOutcome::Adopted)?;
+            let receipt = verify_final_and_receipt(
+                bundle,
+                &final_path,
+                PublicationOutcome::Adopted,
+                &manifest_bytes,
+                asset_io,
+            )?;
             observer(PublicationMilestone {
                 step: PublicationJournalStep::FinalAdopted,
                 asset_path: Some(bundle.plan.manifest_relative_path.clone()),
@@ -536,7 +588,15 @@ fn preflight_bundle(
             return Err(PublicationError::Canceled);
         }
         let source = checked_join(&bundle.work_root, &asset.normalized_path)?;
-        verify_file(&source, asset.size_bytes, &asset.byte_hash)?;
+        verify_file(
+            &source,
+            asset.size_bytes,
+            &asset.byte_hash,
+            AssetIo {
+                cancellation,
+                budget: None,
+            },
+        )?;
     }
     serde_json::to_vec_pretty(&bundle.manifest).map_err(PublicationError::from)
 }
@@ -555,7 +615,7 @@ fn copy_verified_asset(
     asset: &melodee_domain::CanonicalAsset,
     incoming_root: &Path,
     nfs: Option<&nfs::Reservation>,
-    cancellation: &AtomicBool,
+    asset_io: AssetIo<'_>,
     fault: &mut dyn FnMut(PublicationFaultPoint) -> io::Result<()>,
     #[cfg(feature = "test-support")] copy_barrier: Option<&PublicationCopyTestBarrier>,
     #[cfg(not(feature = "test-support"))] _copy_barrier: Option<&()>,
@@ -568,7 +628,7 @@ fn copy_verified_asset(
     ensure_directory_tree(parent)?;
     ensure_contained(incoming_root, parent)?;
     if path_exists(&destination)? {
-        return verify_file(&destination, asset.size_bytes, &asset.byte_hash);
+        return verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io);
     }
 
     let file_name = destination
@@ -604,7 +664,7 @@ fn copy_verified_asset(
     let mut size = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
     loop {
-        if cancellation.load(Ordering::SeqCst) {
+        if asset_io.cancellation.load(Ordering::SeqCst) {
             return Err(PublicationError::Canceled);
         }
         let count = input
@@ -617,6 +677,7 @@ fn copy_verified_asset(
         if count == 0 {
             break;
         }
+        asset_io.before_chunk(count)?;
         output
             .write_all(&buffer[..count])
             .map_err(|source| PublicationError::Io {
@@ -628,7 +689,7 @@ fn copy_verified_asset(
         size = size.saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
         #[cfg(feature = "test-support")]
         if let Some(barrier) = copy_barrier {
-            barrier.pause_until_canceled(cancellation);
+            barrier.pause_until_canceled(asset_io.cancellation);
             return Err(PublicationError::Canceled);
         }
     }
@@ -660,7 +721,7 @@ fn copy_verified_asset(
     }
     drop(output);
     if nfs.is_none() && path_exists(&destination)? {
-        return verify_file(&destination, asset.size_bytes, &asset.byte_hash);
+        return verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io);
     }
     match nfs.map_or_else(
         || rename_noreplace(&temporary, &destination),
@@ -668,7 +729,7 @@ fn copy_verified_asset(
     ) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            return verify_file(&destination, asset.size_bytes, &asset.byte_hash);
+            return verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io);
         }
         Err(source) => {
             return Err(PublicationError::Io {
@@ -679,7 +740,7 @@ fn copy_verified_asset(
         }
     }
     fsync_directory(parent)?;
-    verify_file(&destination, asset.size_bytes, &asset.byte_hash)
+    verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io)
 }
 
 fn write_manifest(
@@ -762,15 +823,15 @@ fn verify_final_and_receipt(
     bundle: &PublicationBundle,
     final_path: &Path,
     outcome: PublicationOutcome,
+    manifest_bytes: &[u8],
+    asset_io: AssetIo<'_>,
 ) -> Result<PublicationReceipt, PublicationError> {
-    let manifest_bytes =
-        read_regular_bytes(&final_path.join("manifest.json")).map_err(|error| {
-            PublicationError::TargetConflict {
-                path: final_path.to_path_buf(),
-                reason: format!("final manifest is unreadable: {error}"),
-            }
-        })?;
-    verify_sealed_bundle(final_path, bundle, &manifest_bytes, None).map_err(|error| {
+    let expected = (outcome == PublicationOutcome::Published).then_some(manifest_bytes);
+    let sealed_manifest_hash = verify_sealed_bundle(final_path, bundle, expected, None, asset_io)
+        .map_err(|error| {
+        if matches!(error, PublicationError::Canceled) {
+            return error;
+        }
         PublicationError::TargetConflict {
             path: final_path.to_path_buf(),
             reason: error.to_string(),
@@ -780,16 +841,17 @@ fn verify_final_and_receipt(
         outcome,
         target_relative_path: bundle.plan.target_relative_path.clone(),
         manifest_relative_path: bundle.plan.manifest_relative_path.clone(),
-        sealed_manifest_hash: blake3::hash(&manifest_bytes).to_hex().to_string(),
+        sealed_manifest_hash,
     })
 }
 
 fn verify_sealed_bundle(
     root: &Path,
     bundle: &PublicationBundle,
-    expected_manifest_bytes: &[u8],
+    expected_manifest_bytes: Option<&[u8]>,
     reservation_marker: Option<&str>,
-) -> Result<(), PublicationError> {
+    asset_io: AssetIo<'_>,
+) -> Result<String, PublicationError> {
     let metadata = fs::symlink_metadata(root).map_err(|source| PublicationError::Io {
         operation: "inspect sealed bundle",
         path: root.to_path_buf(),
@@ -807,7 +869,7 @@ fn verify_sealed_bundle(
     let manifest_path = root.join("manifest.json");
     reject_symlink_if_present(&manifest_path)?;
     let manifest_bytes = read_regular_bytes(&manifest_path)?;
-    if manifest_bytes != expected_manifest_bytes {
+    if expected_manifest_bytes.is_some_and(|expected| manifest_bytes != expected) {
         return Err(PublicationError::TargetConflict {
             path: manifest_path,
             reason: "manifest bytes do not match the immutable publication plan".to_owned(),
@@ -835,7 +897,7 @@ fn verify_sealed_bundle(
             (asset.size_bytes, Some(asset.byte_hash.as_str())),
         );
         let path = checked_join(root, &asset.canonical_path)?;
-        verify_file(&path, asset.size_bytes, &asset.byte_hash)?;
+        verify_file(&path, asset.size_bytes, &asset.byte_hash, asset_io)?;
     }
     let observed_files = collect_bundle_files(root)?;
     let expected_names = expected_files.keys().cloned().collect::<Vec<_>>();
@@ -847,7 +909,7 @@ fn verify_sealed_bundle(
             ),
         });
     }
-    Ok(())
+    Ok(blake3::hash(&manifest_bytes).to_hex().to_string())
 }
 
 fn collect_bundle_files(root: &Path) -> Result<Vec<String>, PublicationError> {
@@ -896,6 +958,7 @@ fn verify_file(
     path: &Path,
     expected_size: u64,
     expected_hash: &str,
+    asset_io: AssetIo<'_>,
 ) -> Result<(), PublicationError> {
     let mut file = open_regular_file(path)?;
     let metadata = file.metadata().map_err(|source| PublicationError::Io {
@@ -914,15 +977,26 @@ fn verify_file(
     let mut size = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
     loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|source| PublicationError::Io {
-                operation: "hash publication asset",
-                path: path.to_path_buf(),
-                source,
-            })?;
+        let remaining = expected_size - size;
+        let request = remaining.min(buffer.len() as u64) as usize;
+        asset_io.before_chunk(request)?;
+        // At the expected length, a one-byte probe still detects a growing file.
+        let count =
+            file.read(&mut buffer[..request.max(1)])
+                .map_err(|source| PublicationError::Io {
+                    operation: "hash publication asset",
+                    path: path.to_path_buf(),
+                    source,
+                })?;
         if count == 0 {
             break;
+        }
+        if remaining == 0 {
+            return Err(PublicationError::SizeMismatch {
+                path: path.to_owned(),
+                expected: expected_size,
+                actual: size.saturating_add(1),
+            });
         }
         hasher.update(&buffer[..count]);
         size = size.saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
@@ -1329,6 +1403,7 @@ mod tests {
                 }
             },
             |_| Ok(false),
+            &NfsIoBudget::default(),
             None,
         );
         assert!(injected, "fault point was not reached");
@@ -1383,6 +1458,7 @@ mod tests {
                 }
             },
             |_| Ok(false),
+            &NfsIoBudget::default(),
             None,
         );
         assert!(injected, "fault point was not reached");
@@ -1413,8 +1489,58 @@ mod tests {
             observer,
             fault,
             |_| Ok(true),
+            &NfsIoBudget::default(),
             None,
         )
+    }
+
+    #[test]
+    fn nfs_budgets_asset_writes_and_both_verifications_and_rechecks_on_adoption() {
+        let f = FaultFixture::new("nfs-budget");
+        let budget = NfsIoBudget::default();
+        let publish = || {
+            publish_canonical_bundle_impl(
+                &f.storage_root,
+                &f.bundle,
+                &AtomicBool::new(false),
+                &mut |_| {},
+                &mut |_| Ok(()),
+                |_| Ok(true),
+                &budget,
+                None,
+            )
+        };
+        assert_eq!(publish().unwrap().outcome, PublicationOutcome::Published);
+        let size = ASSET_BYTES.len() as u64;
+        assert_eq!(budget.charged_bytes.load(Ordering::Relaxed), 3 * size);
+        assert_eq!(publish().unwrap().outcome, PublicationOutcome::Adopted);
+        assert_eq!(budget.charged_bytes.load(Ordering::Relaxed), 4 * size);
+    }
+
+    #[test]
+    fn nfs_refuses_a_receipt_if_an_installed_asset_changes_after_sealing() {
+        let f = FaultFixture::new("nfs-seal-damage");
+        let mut milestones = Vec::new();
+        let result = publish_nfs(
+            &f,
+            &AtomicBool::new(false),
+            &mut |m| milestones.push(m.step),
+            &mut |point| {
+                if point == PublicationFaultPoint::NfsManifestInstalled {
+                    fs::write(
+                        f.final_path().join(&f.bundle.plan.assets[0].canonical_path),
+                        vec![0; ASSET_BYTES.len()],
+                    )?;
+                }
+                Ok(())
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(PublicationError::TargetConflict { .. })
+        ));
+        assert!(!milestones.contains(&PublicationJournalStep::BundleSealed));
+        assert!(!milestones.contains(&PublicationJournalStep::Finalized));
     }
 
     #[test]
