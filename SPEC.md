@@ -526,11 +526,12 @@ human-readable prefix; future generated `by-artist` views may use display values
 disposable.
 
 Merge/split/rename operations must not require moving media merely because identity metadata changed.
-Publication persists immutable authorization/plan intent before filesystem I/O, seals and fsyncs a
-hidden incoming bundle, uses a no-replace directory rename, and records the receipt only after final
-verification. Retry adopts an exact final and fails closed on a conflict. Canonical publication
+Publication persists immutable authorization/plan intent before filesystem I/O. It seals and fsyncs a
+hidden incoming bundle and installs it with a no-replace directory rename on supported local filesystems.
+On Linux NFS it reserves the final directory, links verified files without replacement, and installs the
+manifest last. Both protocols record the receipt only after final verification. Retry adopts an exact final and fails closed on a conflict. Canonical publication
 retains staged source by default; inbound is drained after ADR-0145 staging acquisition. See
-ADR-0106, ADR-0116, and ADR-0145 for the binding layout/publication decision.
+ADR-0106, ADR-0116, ADR-0145, and ADR-0202 for the binding layout/publication decisions.
 
 ## 17. Catalog persistence
 

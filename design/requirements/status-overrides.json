@@ -1636,12 +1636,14 @@
     "implementation": [
       "crates/melodee-domain/src/manifest.rs (canonical layout v1 and stable shard derivation)",
       "crates/melodee-ingestion/src/publication.rs (no-clobber Release-centric publication)",
+      "crates/melodee-ingestion/src/publication/nfs.rs and design/adr/ADR-0202-publish-sealed-release-files-on-nfs-using-exclusive-hard-links.md (exclusive reservation and manifest-last publication on Linux NFS)",
       "crates/melodee-persistence/migrations/0006_canonical_publication.sql (portable target/manifest path constraints)",
       "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
     ],
     "tests": [
       "crates/melodee-domain/tests/manifest_versions.rs (canonical_release_layout_has_a_stable_golden_vector)",
       "crates/melodee-ingestion/tests/publication.rs (complete manifest/media/artwork layout, adoption, and conflict protection)",
+      "crates/melodee-ingestion/src/publication.rs (NFS interruption, retry, concurrent writer, conflict and automatic filesystem selection tests)",
       "crates/melodee-ingestion/tests/normalization.rs (real-format and 200-Release canonical publication)"
     ],
     "note": "ADR-0116 accepted and normalization and publication implemented the exact immutable-ID-centric layout required before storage implementation."

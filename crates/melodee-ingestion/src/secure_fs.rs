@@ -15,7 +15,7 @@ mod platform {
     use rustix::{
         fd::OwnedFd,
         fs::{
-            AtFlags, CWD, Dir, FileType, Mode, OFlags, RenameFlags, fstat, mkdirat, openat,
+            AtFlags, CWD, Dir, FileType, Mode, OFlags, RenameFlags, fstat, linkat, mkdirat, openat,
             renameat_with, statat, unlinkat,
         },
     };
@@ -153,6 +153,22 @@ mod platform {
         open_absolute_directory(path, false).map(File::from)
     }
 
+    pub fn mkdir_new(path: &Path) -> io::Result<()> {
+        let (parent, name) = open_parent(path, false)?;
+        mkdirat(&parent, name, Mode::RWXU | Mode::RGRP | Mode::XGRP).map_err(io_error)
+    }
+
+    pub fn link_new(source: &Path, destination: &Path) -> io::Result<()> {
+        let (from, leaf) = open_parent(source, false)?;
+        let (to, name) = open_parent(destination, false)?;
+        linkat(&from, leaf, &to, name, AtFlags::empty()).map_err(io_error)
+    }
+
+    pub fn unlink_file(path: &Path) -> io::Result<()> {
+        let (parent, name) = open_parent(path, false)?;
+        unlinkat(&parent, name, AtFlags::empty()).map_err(io_error)
+    }
+
     pub fn rename_noreplace(source: &Path, destination: &Path) -> io::Result<()> {
         let (source_parent, source_name) = open_parent(source, false)?;
         let (destination_parent, destination_name) = open_parent(destination, false)?;
@@ -261,6 +277,16 @@ mod platform {
         Err(unsupported())
     }
 
+    pub fn mkdir_new(_path: &Path) -> io::Result<()> {
+        Err(unsupported())
+    }
+    pub fn link_new(_source: &Path, _destination: &Path) -> io::Result<()> {
+        Err(unsupported())
+    }
+    pub fn unlink_file(_path: &Path) -> io::Result<()> {
+        Err(unsupported())
+    }
+
     pub fn rename_noreplace(_source: &Path, _destination: &Path) -> io::Result<()> {
         Err(unsupported())
     }
@@ -271,6 +297,6 @@ mod platform {
 }
 
 pub(crate) use platform::{
-    create_directory_tree, open_directory, open_lock, open_read, open_write, open_write_new,
-    remove_directory_tree, rename_noreplace,
+    create_directory_tree, link_new, mkdir_new, open_directory, open_lock, open_read, open_write,
+    open_write_new, remove_directory_tree, rename_noreplace, unlink_file,
 };

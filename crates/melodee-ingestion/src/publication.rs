@@ -1,5 +1,7 @@
 //! Deterministic, convergent canonical filesystem publication (ADR-0116).
 
+mod nfs;
+
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -226,7 +228,8 @@ pub fn hash_publication_plan(plan: &PublicationPlan) -> Result<String, Publicati
 
 /// Copies, verifies, seals, fsyncs, and atomically publishes one canonical bundle.
 ///
-/// The final rename is a kernel-enforced no-replace operation. If a final path
+/// Linux NFS uses an exclusive directory reservation and installs the manifest last.
+/// Other filesystems use a kernel-enforced no-replace rename. If a final path
 /// already exists it is verified and adopted only when every immutable fact
 /// and byte matches this plan.
 pub fn publish_canonical_bundle(
@@ -244,6 +247,7 @@ enum PublicationFaultPoint {
     SealedTreeFsync,
     FinalRename,
     FinalParentFsync,
+    NfsManifestInstalled,
 }
 
 pub(crate) fn publish_canonical_bundle_with_observer(
@@ -258,6 +262,7 @@ pub(crate) fn publish_canonical_bundle_with_observer(
         cancellation,
         &mut observer,
         &mut |_| Ok(()),
+        nfs::on_nfs,
         None,
     )
 }
@@ -276,6 +281,7 @@ pub(crate) fn publish_canonical_bundle_with_observer_and_test_barrier(
         cancellation,
         &mut observer,
         &mut |_| Ok(()),
+        nfs::on_nfs,
         barrier,
     )
 }
@@ -286,6 +292,7 @@ fn publish_canonical_bundle_impl(
     cancellation: &AtomicBool,
     observer: &mut dyn FnMut(PublicationMilestone),
     fault: &mut dyn FnMut(PublicationFaultPoint) -> io::Result<()>,
+    detect_nfs: fn(&File) -> io::Result<bool>,
     #[cfg(feature = "test-support")] copy_barrier: Option<&PublicationCopyTestBarrier>,
     #[cfg(not(feature = "test-support"))] _copy_barrier: Option<&()>,
 ) -> Result<PublicationReceipt, PublicationError> {
@@ -318,14 +325,27 @@ fn publish_canonical_bundle_impl(
         Err(std::fs::TryLockError::Error(source)) => {
             return Err(PublicationError::Io {
                 operation: "lock",
-                path: lock_path,
+                path: lock_path.clone(),
                 source,
             });
         }
     }
 
-    if path_exists(&final_path)? {
+    let nfs = detect_nfs(&lock)
+        .map_err(|source| PublicationError::Io {
+            operation: "identify canonical filesystem",
+            path: final_parent.to_owned(),
+            source,
+        })?
+        .then(|| nfs::Reservation::new(&final_path, &bundle.plan_hash));
+    let resuming = match &nfs {
+        Some(r) => r.resume(&final_path, bundle, &manifest_bytes, &lock)?,
+        None => false,
+    };
+    if !resuming && path_exists(&final_path)? {
         let receipt = verify_final_and_receipt(bundle, &final_path, PublicationOutcome::Adopted)?;
+        fsync_directory(&final_path)?;
+        fsync_directory(final_parent)?;
         for asset in unique_assets(&bundle.plan) {
             observer(PublicationMilestone {
                 step: PublicationJournalStep::AssetCopied,
@@ -352,8 +372,17 @@ fn publish_canonical_bundle_impl(
         return Err(PublicationError::Canceled);
     }
 
-    let incoming_path = final_parent.join(format!(".{release_name}.incoming"));
-    ensure_directory(&incoming_path)?;
+    let incoming_path = if let Some(r) = &nfs {
+        if !resuming {
+            r.reserve(&final_path, final_parent, &lock_path)?;
+        }
+        r.check_inventory(&final_path, &bundle.plan)?;
+        final_path.clone()
+    } else {
+        let path = final_parent.join(format!(".{release_name}.incoming"));
+        ensure_directory(&path)?;
+        path
+    };
     observer(PublicationMilestone {
         step: PublicationJournalStep::IncomingPrepared,
         asset_path: None,
@@ -368,6 +397,7 @@ fn publish_canonical_bundle_impl(
             bundle,
             asset,
             &incoming_path,
+            nfs.as_ref(),
             cancellation,
             fault,
             #[cfg(feature = "test-support")]
@@ -382,8 +412,24 @@ fn publish_canonical_bundle_impl(
             byte_hash: Some(asset.byte_hash.clone()),
         });
     }
-    write_manifest(&incoming_path, bundle, &manifest_bytes, fault)?;
-    verify_sealed_bundle(&incoming_path, bundle, &manifest_bytes)?;
+    if let Some(r) = &nfs {
+        if cancellation.load(Ordering::SeqCst) {
+            return Err(PublicationError::Canceled);
+        }
+        r.check_inventory(&final_path, &bundle.plan)?;
+        fsync_tree(&final_path)?;
+    }
+    write_manifest(&incoming_path, bundle, &manifest_bytes, fault, nfs.as_ref())?;
+    if let Some(r) = &nfs {
+        inject_fault(
+            fault,
+            PublicationFaultPoint::NfsManifestInstalled,
+            "commit NFS manifest",
+            &final_path,
+        )?;
+        r.finish(&final_path, &lock)?;
+    }
+    verify_sealed_bundle(&incoming_path, bundle, &manifest_bytes, None)?;
     inject_fault(
         fault,
         PublicationFaultPoint::SealedTreeFsync,
@@ -401,13 +447,18 @@ fn publish_canonical_bundle_impl(
         return Err(PublicationError::Canceled);
     }
 
-    inject_fault(
-        fault,
-        PublicationFaultPoint::FinalRename,
-        "atomically rename incoming bundle without replacement",
-        &final_path,
-    )?;
-    match rename_noreplace(&incoming_path, &final_path) {
+    let install_result = if nfs.is_some() {
+        Ok(())
+    } else {
+        inject_fault(
+            fault,
+            PublicationFaultPoint::FinalRename,
+            "atomically rename incoming bundle without replacement",
+            &final_path,
+        )?;
+        rename_noreplace(&incoming_path, &final_path)
+    };
+    match install_result {
         Ok(()) => {
             inject_fault(
                 fault,
@@ -498,10 +549,12 @@ fn unique_assets(plan: &PublicationPlan) -> Vec<&melodee_domain::CanonicalAsset>
     assets.into_values().collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn copy_verified_asset(
     bundle: &PublicationBundle,
     asset: &melodee_domain::CanonicalAsset,
     incoming_root: &Path,
+    nfs: Option<&nfs::Reservation>,
     cancellation: &AtomicBool,
     fault: &mut dyn FnMut(PublicationFaultPoint) -> io::Result<()>,
     #[cfg(feature = "test-support")] copy_barrier: Option<&PublicationCopyTestBarrier>,
@@ -522,14 +575,19 @@ fn copy_verified_asset(
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| PublicationError::UnsafePath(destination.clone()))?;
-    let temporary = parent.join(format!(".{file_name}.copying"));
+    let temporary = nfs.map_or_else(
+        || parent.join(format!(".{file_name}.copying")),
+        |r| r.scratch.clone(),
+    );
     reject_symlink_if_present(&temporary)?;
     let mut input = open_regular_file(&source)?;
-    let mut output = open_write_nofollow(&temporary).map_err(|source| PublicationError::Io {
-        operation: "create incoming temporary asset",
-        path: temporary.clone(),
-        source,
-    })?;
+    let mut output = nfs
+        .map_or_else(|| open_write_nofollow(&temporary), |r| r.create_scratch())
+        .map_err(|source| PublicationError::Io {
+            operation: "create incoming temporary asset",
+            path: temporary.clone(),
+            source,
+        })?;
     if !output
         .metadata()
         .map_err(|source| PublicationError::Io {
@@ -600,10 +658,14 @@ fn copy_verified_asset(
             actual: observed_hash,
         });
     }
-    if path_exists(&destination)? {
+    drop(output);
+    if nfs.is_none() && path_exists(&destination)? {
         return verify_file(&destination, asset.size_bytes, &asset.byte_hash);
     }
-    match rename_noreplace(&temporary, &destination) {
+    match nfs.map_or_else(
+        || rename_noreplace(&temporary, &destination),
+        |r| r.install_file(&destination),
+    ) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
             return verify_file(&destination, asset.size_bytes, &asset.byte_hash);
@@ -625,6 +687,7 @@ fn write_manifest(
     bundle: &PublicationBundle,
     manifest_bytes: &[u8],
     fault: &mut dyn FnMut(PublicationFaultPoint) -> io::Result<()>,
+    nfs: Option<&nfs::Reservation>,
 ) -> Result<(), PublicationError> {
     let destination = incoming_root.join("manifest.json");
     if path_exists(&destination)? {
@@ -640,13 +703,18 @@ fn write_manifest(
             ),
         });
     }
-    let temporary = incoming_root.join(".manifest.json.copying");
+    let temporary = nfs.map_or_else(
+        || incoming_root.join(".manifest.json.copying"),
+        |r| r.scratch.clone(),
+    );
     reject_symlink_if_present(&temporary)?;
-    let mut file = open_write_nofollow(&temporary).map_err(|source| PublicationError::Io {
-        operation: "create incoming manifest",
-        path: temporary.clone(),
-        source,
-    })?;
+    let mut file = nfs
+        .map_or_else(|| open_write_nofollow(&temporary), |r| r.create_scratch())
+        .map_err(|source| PublicationError::Io {
+            operation: "create incoming manifest",
+            path: temporary.clone(),
+            source,
+        })?;
     file.write_all(manifest_bytes)
         .map_err(|source| PublicationError::Io {
             operation: "write incoming manifest",
@@ -664,7 +732,11 @@ fn write_manifest(
         path: temporary.clone(),
         source,
     })?;
-    match rename_noreplace(&temporary, &destination) {
+    drop(file);
+    match nfs.map_or_else(
+        || rename_noreplace(&temporary, &destination),
+        |r| r.install_file(&destination),
+    ) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
             let existing = read_regular_bytes(&destination)?;
@@ -698,7 +770,7 @@ fn verify_final_and_receipt(
                 reason: format!("final manifest is unreadable: {error}"),
             }
         })?;
-    verify_sealed_bundle(final_path, bundle, &manifest_bytes).map_err(|error| {
+    verify_sealed_bundle(final_path, bundle, &manifest_bytes, None).map_err(|error| {
         PublicationError::TargetConflict {
             path: final_path.to_path_buf(),
             reason: error.to_string(),
@@ -716,6 +788,7 @@ fn verify_sealed_bundle(
     root: &Path,
     bundle: &PublicationBundle,
     expected_manifest_bytes: &[u8],
+    reservation_marker: Option<&str>,
 ) -> Result<(), PublicationError> {
     let metadata = fs::symlink_metadata(root).map_err(|source| PublicationError::Io {
         operation: "inspect sealed bundle",
@@ -749,6 +822,9 @@ fn verify_sealed_bundle(
     }
 
     let mut expected_files = BTreeMap::new();
+    if let Some(marker) = reservation_marker {
+        expected_files.insert(marker.to_owned(), (0, None));
+    }
     expected_files.insert(
         "manifest.json".to_owned(),
         (manifest_bytes.len() as u64, None),
@@ -1236,6 +1312,7 @@ mod tests {
             PublicationFaultPoint::SealedTreeFsync => "tree-fsync",
             PublicationFaultPoint::FinalRename => "rename",
             PublicationFaultPoint::FinalParentFsync => "final-parent-fsync",
+            PublicationFaultPoint::NfsManifestInstalled => "manifest-installed",
         });
         let mut injected = false;
         let result = publish_canonical_bundle_impl(
@@ -1251,6 +1328,7 @@ mod tests {
                     Ok(())
                 }
             },
+            |_| Ok(false),
             None,
         );
         assert!(injected, "fault point was not reached");
@@ -1304,6 +1382,7 @@ mod tests {
                     Ok(())
                 }
             },
+            |_| Ok(false),
             None,
         );
         assert!(injected, "fault point was not reached");
@@ -1320,5 +1399,164 @@ mod tests {
         )
         .expect("retry adopts verified final");
         assert_eq!(receipt.outcome, PublicationOutcome::Adopted);
+    }
+    fn publish_nfs(
+        f: &FaultFixture,
+        cancel: &AtomicBool,
+        observer: &mut dyn FnMut(PublicationMilestone),
+        fault: &mut dyn FnMut(PublicationFaultPoint) -> io::Result<()>,
+    ) -> Result<PublicationReceipt, PublicationError> {
+        publish_canonical_bundle_impl(
+            &f.storage_root,
+            &f.bundle,
+            cancel,
+            observer,
+            fault,
+            |_| Ok(true),
+            None,
+        )
+    }
+
+    #[test]
+    fn nfs_partial_is_exclusive_and_retry_publishes_manifest_last() {
+        let f = FaultFixture::new("nfs-resume");
+        let cancel = AtomicBool::new(false);
+        let target = f.final_path();
+        let result = publish_nfs(
+            &f,
+            &cancel,
+            &mut |event| {
+                if event.step == PublicationJournalStep::AssetCopied {
+                    assert!(!target.join("manifest.json").exists());
+                    assert!(matches!(
+                        publish_nfs(&f, &AtomicBool::new(false), &mut |_| {}, &mut |_| Ok(())),
+                        Err(PublicationError::Busy(_))
+                    ));
+                    cancel.store(true, Ordering::SeqCst);
+                }
+            },
+            &mut |_| Ok(()),
+        );
+        assert!(matches!(result, Err(PublicationError::Canceled)));
+        assert!(
+            target
+                .join(&f.bundle.plan.assets[0].canonical_path)
+                .is_file()
+        );
+        cancel.store(false, Ordering::SeqCst);
+        let result = publish_nfs(&f, &cancel, &mut |_| {}, &mut |_| Ok(())).unwrap();
+        assert_eq!(result.outcome, PublicationOutcome::Published);
+        assert_eq!(
+            publish_nfs(&f, &cancel, &mut |_| {}, &mut |_| Ok(()))
+                .unwrap()
+                .outcome,
+            PublicationOutcome::Adopted
+        );
+        assert_eq!(collect_bundle_files(&target).unwrap().len(), 2);
+        assert_eq!(
+            fs::read(f.bundle.work_root.join("audio/input.mp3")).unwrap(),
+            ASSET_BYTES
+        );
+    }
+
+    #[test]
+    fn nfs_refuses_empty_foreign_directory_and_forged_marker() {
+        let f = FaultFixture::new("nfs-conflict");
+        let target = f.final_path();
+        fs::create_dir_all(&target).unwrap();
+        for forged in [false, true] {
+            if forged {
+                fs::write(
+                    target.join(format!(".melodee-publishing-{}", f.bundle.plan_hash)),
+                    b"foreign",
+                )
+                .unwrap();
+            }
+            let before = collect_bundle_files(&target).unwrap();
+            assert!(matches!(
+                publish_nfs(&f, &AtomicBool::new(false), &mut |_| {}, &mut |_| Ok(())),
+                Err(PublicationError::TargetConflict { .. })
+            ));
+            assert_eq!(before, collect_bundle_files(&target).unwrap());
+            if forged {
+                fs::remove_file(target.join(format!(".melodee-publishing-{}", f.bundle.plan_hash)))
+                    .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn nfs_retry_after_manifest_install_adopts_or_rejects_damage() {
+        for damaged in [false, true] {
+            let f = FaultFixture::new("nfs-commit");
+            let cancel = AtomicBool::new(false);
+            let failed = publish_nfs(&f, &cancel, &mut |_| {}, &mut |point| {
+                if point == PublicationFaultPoint::NfsManifestInstalled {
+                    Err(io::Error::other("simulated process loss"))
+                } else {
+                    Ok(())
+                }
+            });
+            assert!(matches!(failed, Err(PublicationError::Io { .. })));
+            let target = f.final_path();
+            assert!(target.join("manifest.json").exists());
+            let asset = target.join(&f.bundle.plan.assets[0].canonical_path);
+            if damaged {
+                fs::remove_file(&asset).unwrap();
+            }
+            let retry = publish_nfs(&f, &cancel, &mut |_| {}, &mut |_| Ok(()));
+            if damaged {
+                assert!(retry.is_err());
+                assert!(!asset.exists());
+            } else {
+                assert_eq!(retry.unwrap().outcome, PublicationOutcome::Adopted);
+            }
+        }
+    }
+
+    #[test]
+    fn nfs_retry_preserves_conflicting_bytes_and_unexpected_files() {
+        let f = FaultFixture::new("nfs-partial-conflict");
+        let target = f.final_path();
+        let cancel = AtomicBool::new(false);
+        let _result = publish_nfs(
+            &f,
+            &cancel,
+            &mut |m| {
+                if m.step == PublicationJournalStep::AssetCopied {
+                    cancel.store(true, Ordering::SeqCst);
+                }
+            },
+            &mut |_| Ok(()),
+        );
+        cancel.store(false, Ordering::SeqCst);
+        let asset = target.join(&f.bundle.plan.assets[0].canonical_path);
+        fs::write(&asset, b"preserve").unwrap();
+        fs::write(target.join("foreign"), b"also preserve").unwrap();
+        assert!(matches!(
+            publish_nfs(&f, &cancel, &mut |_| {}, &mut |_| Ok(())),
+            Err(PublicationError::TargetConflict { .. })
+        ));
+        fs::remove_file(target.join("foreign")).unwrap();
+        assert!(publish_nfs(&f, &cancel, &mut |_| {}, &mut |_| Ok(())).is_err());
+        assert_eq!(fs::read(asset).unwrap(), b"preserve");
+        assert!(!target.join("manifest.json").exists());
+    }
+    #[test]
+    fn nfs_public_entrypoint_installs_and_adopts_verified_bundle() {
+        let f = FaultFixture::new("filesystem-selected");
+        let cancel = AtomicBool::new(false);
+        assert_eq!(
+            publish_canonical_bundle(&f.storage_root, &f.bundle, &cancel)
+                .unwrap()
+                .outcome,
+            PublicationOutcome::Published
+        );
+        assert_eq!(
+            publish_canonical_bundle(&f.storage_root, &f.bundle, &cancel)
+                .unwrap()
+                .outcome,
+            PublicationOutcome::Adopted
+        );
     }
 }

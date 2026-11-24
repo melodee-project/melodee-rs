@@ -49,6 +49,12 @@ Important rules:
 - Watchers (if enabled in future work) are accelerators only; reconciliation scans and durable work items are
   the source of truth.
 
+### Publishing to a Linux NFS library
+
+The service account needs permission to create directories, hard links, and files on the export. Enable server-coordinated file locking for clients that share the library. Keep the hidden per-Release publication lock files in place.
+
+A file browser may show the new Release directory as Tracks arrive. Melodee installs `manifest.json` after the media and artwork are complete. A Release enters the catalog after the publisher verifies its manifest and files. An interrupted worker can resume its own partial Release. If publication reports a target conflict, preserve the directory and inspect its contents. A crash during initial reservation can leave an empty directory without an ownership marker. With the service stopped, move that directory aside after confirming the conflict path, then retry the work item. Staged originals are retained.
+
 ### Retained copies and disk planning
 
 A processed Release exists in up to four places, and only one of them is the library:
@@ -94,7 +100,7 @@ The two shards come from the immutable Release ID. Artist names, Release titles,
 never determine storage identity. Database paths are storage-root-relative so the library can be
 relocated as a unit.
 
-Melodee copies each planned regular file into a hidden incoming directory on the target filesystem,
-checks its size and BLAKE3 hash, seals the schema-v3 manifest, flushes the bundle, and performs an
-atomic no-replace finalization. A retry adopts an already-complete matching bundle. A mismatching
-target is a durable conflict and is never overwritten.
+On supported local filesystems, Melodee assembles a hidden directory, verifies and flushes its
+contents, then atomically renames the directory into place. On Linux NFS, Melodee installs each
+verified file in the reserved Release directory and commits the manifest last. Both paths can
+adopt a matching complete Release on retry and preserve conflicting files for inspection.
