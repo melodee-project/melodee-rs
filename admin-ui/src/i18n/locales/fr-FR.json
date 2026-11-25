@@ -53,6 +53,7 @@
   "common.yes": "Oui",
   "destructive.areYouSure": "Es-tu sûr?",
   "destructive.deleteConfirmation": "Confirmation de suppression",
+  "destructive.optionalReasonLabel": "Motif (facultatif)",
   "empty.noData": "Aucune donnée disponible",
   "empty.noRecords": "Aucun enregistrement à afficher",
   "nav.artists": "Artistes",

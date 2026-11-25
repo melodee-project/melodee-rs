@@ -53,6 +53,7 @@
   "common.yes": "نعم",
   "destructive.areYouSure": "هل أنت متأكد؟",
   "destructive.deleteConfirmation": "حذف التأكيد",
+  "destructive.optionalReasonLabel": "السبب (اختياري)",
   "empty.noData": "لا توجد بيانات متاحة",
   "empty.noRecords": "لا توجد سجلات لعرضها",
   "nav.artists": "الفنانون",

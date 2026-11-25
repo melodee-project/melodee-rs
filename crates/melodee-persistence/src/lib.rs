@@ -30,6 +30,8 @@ mod policy;
 mod provider_enrichment;
 mod providers;
 mod radio;
+mod review_delete;
+pub use review_delete::ReviewDeletionAuthorization;
 mod scripts;
 mod search;
 mod settings;

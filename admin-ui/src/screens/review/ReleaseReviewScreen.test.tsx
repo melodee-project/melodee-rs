@@ -284,10 +284,7 @@ describe('ReleaseReviewScreen', () => {
     ).toBeInTheDocument();
     const confirmButton = screen.getByRole('button', { name: 'Delete Release' });
     expect(confirmButton).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Reason'), {
-      target: { value: 'Duplicate of catalog content.' },
-    });
-    expect(confirmButton).toBeDisabled();
+    expect(screen.getByLabelText('Reason (optional)')).toHaveValue('');
     fireEvent.change(screen.getByLabelText(/Type DELETE to confirm/), {
       target: { value: 'DELETE' },
     });
@@ -296,7 +293,7 @@ describe('ReleaseReviewScreen', () => {
     await waitFor(() =>
       expect(mockPostReviewDecision).toHaveBeenCalledWith(WORK_ITEM_ID, {
         action: 'delete',
-        reason: 'Duplicate of catalog content.',
+        reason: '',
         override: true,
       }),
     );

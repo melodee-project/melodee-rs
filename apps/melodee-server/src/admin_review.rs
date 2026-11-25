@@ -4,12 +4,9 @@
 //! comparison, policy decision, timeline), audited decisions, operator
 //! reprocess, and a gated pre-publication audio preview.
 //!
-//! All routes are `AdminPrincipal`-gated. Decisions are driven through the
-//! durable policy store (`apply_admin_override`) when a pending durable
-//! decision exists, and through the operator arm of the work-item state
-//! machine otherwise. A confirmed `delete` removes the exact durable staging
-//! and canonical directories before `complete_destructive_action` records the
-//! catalog tombstone and completed audit evidence.
+//! Administrators and editors can inspect the queue and explicitly delete a Release.
+//! Pre-catalog deletion is authorized against the work item. Cataloged deletion
+//! uses the pending policy decision. Both record authorization before file removal.
 //!
 //! The preview endpoint never trusts client-supplied paths: the track file
 //! is located from the durable manifest and the configured staging/work
@@ -118,9 +115,39 @@ impl AdminReviewState {
     }
 }
 
-/// The review surface shares the administrator gate; extraction delegates to
-/// the canonical `AdminAccessState` implementation so 401/403 behavior is
-/// identical on every admin route.
+struct Reviewer {
+    user_id: Uuid,
+    public_api_id: Uuid,
+    is_admin: bool,
+}
+
+impl FromRequestParts<AdminReviewState> for Reviewer {
+    type Rejection = Response;
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &AdminReviewState,
+    ) -> Result<Self, Response> {
+        let user = crate::admin_access::authenticated_operator_user(parts, &state.admin).await?;
+        if !user.is_admin && !user.is_editor {
+            return Err(review_error(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "Release Review requires an administrator or editor",
+            ));
+        }
+        Ok(Self {
+            user_id: user.id,
+            public_api_id: user.public_api_id,
+            is_admin: user.is_admin,
+        })
+    }
+}
+
+async fn review_access(user: Reviewer) -> Json<serde_json::Value> {
+    Json(serde_json::json!({"role": if user.is_admin { "administrator" } else { "editor" }}))
+}
+
+/// Administrator-only review operations use the standard admin gate.
 impl FromRequestParts<AdminReviewState> for AdminPrincipal {
     type Rejection = Response;
 
@@ -337,12 +364,12 @@ pub struct ReviewDetailDto {
     pub timeline: Vec<WorkItemEventDto>,
 }
 
-/// Operator decision request. `reason` is required and audited (SPEC §20).
+/// Review deletion accepts an optional note. Other decisions require a reason.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecisionRequest {
     pub action: String,
-    pub reason: String,
+    pub reason: Option<String>,
     /// Explicit destructive acknowledgement; required when `action` is
     /// `delete` so a destructive authorization is never recorded by default.
     #[serde(default, rename = "override")]
@@ -398,6 +425,7 @@ impl ReviewAction {
 
 pub fn router() -> Router<AdminReviewState> {
     Router::new()
+        .route("/api/admin/v1/review/access", get(review_access))
         .route("/api/admin/v1/review/queue", get(review_queue))
         .route("/api/admin/v1/review/{workItemId}", get(review_detail))
         .route(
@@ -418,7 +446,7 @@ pub fn router() -> Router<AdminReviewState> {
 /// GET /api/admin/v1/review/queue — review-able work items with counts.
 async fn review_queue(
     State(state): State<AdminReviewState>,
-    _admin: AdminPrincipal,
+    _reviewer: Reviewer,
     Query(params): Query<ReviewQueueParams>,
 ) -> Response {
     let states: Vec<IngestionState> = match params.state.as_deref() {
@@ -498,10 +526,21 @@ async fn review_queue(
 /// GET /api/admin/v1/review/{workItemId} — full review detail.
 async fn review_detail(
     State(state): State<AdminReviewState>,
-    _admin: AdminPrincipal,
+    reviewer: Reviewer,
     AxumPath(work_item_id): AxumPath<Uuid>,
 ) -> Response {
     match load_review_detail(&state.admin.pool, work_item_id).await {
+        Ok(detail)
+            if !reviewer.is_admin
+                && !REVIEW_STATES.contains(&detail.work_item.state)
+                && detail.work_item.state != IngestionState::Deleted =>
+        {
+            review_error(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "Editor access is limited to Release Review",
+            )
+        }
         Ok(detail) => Json(detail).into_response(),
         Err(response) => *response,
     }
@@ -580,18 +619,10 @@ async fn load_review_detail(
 /// POST /api/admin/v1/review/{workItemId}/decision — audited decision.
 async fn review_decision(
     State(state): State<AdminReviewState>,
-    admin: AdminPrincipal,
+    admin: Reviewer,
     AxumPath(work_item_id): AxumPath<Uuid>,
     Json(request): Json<DecisionRequest>,
 ) -> Response {
-    let reason = request.reason.trim();
-    if reason.is_empty() {
-        return review_error(
-            StatusCode::BAD_REQUEST,
-            "invalid_reason",
-            "a non-blank reason is required",
-        );
-    }
     let Some(action) = ReviewAction::parse(&request.action) else {
         return review_error(
             StatusCode::BAD_REQUEST,
@@ -599,6 +630,21 @@ async fn review_decision(
             format!("unknown action '{}'", request.action),
         );
     };
+    if !admin.is_admin && action != ReviewAction::Delete {
+        return review_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "This review decision requires an administrator",
+        );
+    }
+    let reason = request.reason.as_deref().unwrap_or("").trim();
+    if action != ReviewAction::Delete && reason.is_empty() {
+        return review_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_reason",
+            "a non-blank reason is required",
+        );
+    }
     if action == ReviewAction::Delete && !request.override_ {
         return review_error(
             StatusCode::BAD_REQUEST,
@@ -618,6 +664,9 @@ async fn review_decision(
         }
         Err(error) => return store_failure("work item read failed", &error),
     };
+    if item.state == IngestionState::Deleted && action == ReviewAction::Delete {
+        return review_deleted(item);
+    }
     if item.state != IngestionState::NeedsReview {
         return review_error(
             StatusCode::CONFLICT,
@@ -653,11 +702,7 @@ async fn review_decision(
         return apply_policy_override(&state, &item, &pending, action, reason, &admin, now).await;
     }
 
-    // Validation-parked items predate catalog import and have no durable
-    // policy decision. Accept and delete both require that durable decision
-    // context (SPEC §15/§20: a decision record must exist before any
-    // destructive execution, and accept routes through policy evaluation);
-    // quarantine/ignore are honest operator state-machine moves.
+    // Before import the work item owns the review evidence and managed files.
     let target = match action {
         ReviewAction::Accept => {
             return review_error(
@@ -666,11 +711,14 @@ async fn review_decision(
                 "accept requires a durable pending policy decision; this work item has not completed catalog import and policy evaluation",
             );
         }
+        ReviewAction::Delete if import.is_none() => {
+            return delete_unpublished_review(&state, &item, &admin, reason).await;
+        }
         ReviewAction::Delete => {
             return review_error(
                 StatusCode::CONFLICT,
-                "delete_requires_policy_decision",
-                "delete requires a durable policy decision record; classification is uncertain for this pre-catalog work item",
+                "decision_conflict",
+                "Catalog review changed. Reload the Release before confirming deletion.",
             );
         }
         ReviewAction::Quarantine => IngestionState::Quarantined,
@@ -707,17 +755,93 @@ async fn review_decision(
     }
 }
 
+fn review_deleted(item: melodee_domain::ReleaseWorkItem) -> Response {
+    Json(ReviewDecisionResultDto {
+        work_item: WorkItemDto::from(item),
+        decision: None,
+        pending_execution: false,
+    })
+    .into_response()
+}
+
+async fn delete_unpublished_review(
+    state: &AdminReviewState,
+    item: &melodee_domain::ReleaseWorkItem,
+    reviewer: &Reviewer,
+    reason: &str,
+) -> Response {
+    let pool = &state.admin.pool;
+    let role = if reviewer.is_admin {
+        "administrator"
+    } else {
+        "editor"
+    };
+    let paths = match WorkItemStore
+        .authorize_unpublished_delete(
+            pool,
+            item.id,
+            reviewer.public_api_id,
+            role,
+            if reason.is_empty() {
+                None
+            } else {
+                Some(reason)
+            },
+            OffsetDateTime::now_utc(),
+        )
+        .await
+    {
+        Ok(paths) => paths,
+        Err(WorkStoreError::InvalidState(_, IngestionState::Deleted)) => {
+            return match WorkItemStore.get(pool, item.id).await {
+                Ok(deleted) => review_deleted(deleted),
+                Err(error) => work_transition_error(item.id, error),
+            };
+        }
+        Err(error) => return work_transition_error(item.id, error),
+    };
+    if let Err(error) = melodee_ingestion::delete_unpublished_storage(
+        item.id,
+        &state.preview.work_area_base,
+        state.deletion.staging_root.as_deref(),
+        paths.staging_path.as_deref(),
+        state.deletion.canonical_root.as_deref(),
+        paths.canonical_path.as_deref(),
+    )
+    .await
+    {
+        tracing::error!(work_item=%item.id,?error,"confirmed review deletion pending storage cleanup");
+        return review_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "delete_execution_failed",
+            "Deletion is pending. Check the configured storage and retry Delete.",
+        );
+    }
+    match WorkItemStore
+        .complete_unpublished_delete(pool, item.id, OffsetDateTime::now_utc())
+        .await
+    {
+        Ok(updated) => review_deleted(updated),
+        Err(error) => work_transition_error(item.id, error),
+    }
+}
+
 async fn apply_policy_override(
     state: &AdminReviewState,
     item: &melodee_domain::ReleaseWorkItem,
     pending: &StoredPolicyDecision,
     action: ReviewAction,
     reason: &str,
-    admin: &AdminPrincipal,
+    admin: &Reviewer,
     now: OffsetDateTime,
 ) -> Response {
     let pool = &state.admin.pool;
     let disposition = action.disposition();
+    let reason = if reason.is_empty() {
+        "Delete confirmed without a note"
+    } else {
+        reason
+    };
     let request = PolicyAdminOverrideRequest {
         work_item_id: item.id,
         decision_id: pending.id,
@@ -727,7 +851,12 @@ async fn apply_policy_override(
         source_fingerprint: pending.source_fingerprint.clone(),
         now,
     };
-    match PolicyStore.apply_admin_override(pool, &request).await {
+    let result = if admin.is_admin {
+        PolicyStore.apply_admin_override(pool, &request).await
+    } else {
+        PolicyStore.apply_editor_delete(pool, &request).await
+    };
+    match result {
         Ok(result) => {
             tracing::info!(
                 actor = %admin.public_api_id,
@@ -755,6 +884,20 @@ async fn execute_release_deletion(
     state: &AdminReviewState,
     decision: StoredPolicyDecision,
 ) -> Response {
+    let (actor, reason) = match (&decision.actor, decision.override_reason.as_deref()) {
+        (
+            melodee_domain::PolicyActor::Administrator { actor }
+            | melodee_domain::PolicyActor::Editor { actor },
+            Some(reason),
+        ) => (actor.clone(), reason.to_owned()),
+        _ => {
+            return review_error(
+                StatusCode::CONFLICT,
+                "delete_authorization_invalid",
+                "Delete requires confirmation from an administrator or editor",
+            );
+        }
+    };
     let Some(canonical_root) = state.deletion.canonical_root.as_deref() else {
         return review_error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -806,18 +949,6 @@ async fn execute_release_deletion(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "delete_execution_failed",
                 "Release deletion failed and remains pending; inspect the server log and retry",
-            );
-        }
-    };
-    let (actor, reason) = match (&decision.actor, decision.override_reason.as_deref()) {
-        (melodee_domain::PolicyActor::Administrator { actor }, Some(reason)) => {
-            (actor.clone(), reason.to_owned())
-        }
-        _ => {
-            return review_error(
-                StatusCode::CONFLICT,
-                "delete_authorization_invalid",
-                "delete authorization is not an administrator-confirmed decision",
             );
         }
     };
@@ -981,7 +1112,7 @@ async fn review_reprocess(
 /// is located exclusively from the durable manifest and configured roots.
 async fn track_preview(
     State(state): State<AdminReviewState>,
-    admin: AdminPrincipal,
+    admin: Reviewer,
     AxumPath((work_item_id, track_index)): AxumPath<(Uuid, u32)>,
     headers: HeaderMap,
 ) -> Response {
@@ -997,6 +1128,13 @@ async fn track_preview(
         }
         Err(error) => return store_failure("work item read failed", &error),
     };
+    if !admin.is_admin && !REVIEW_STATES.contains(&item.state) {
+        return review_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Preview requires a Release in review",
+        );
+    }
     let stored = match WorkItemStore.get_manifest(pool, item.id).await {
         Ok(Some(stored)) => stored,
         Ok(None) => {

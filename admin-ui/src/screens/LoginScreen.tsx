@@ -36,7 +36,7 @@ export function LoginScreen() {
       ? String((location.state as { from: unknown }).from)
       : '/';
 
-  if (session.kind === 'admin') {
+  if (session.kind === 'admin' || session.kind === 'editor') {
     return <Navigate to={from} replace />;
   }
 

@@ -1047,17 +1047,17 @@ Other traits such as Bootleg/Promo/Live must remain configurable and shall not r
 
 ### PRD-POLICY-007 — Durable decision record before delete
 
-Before deleting source/canonical files, Melodee must persist:
+Catalog-backed deletion requires a durable policy decision with these fields before Melodee removes media.
 
 - Policy evaluation.
 - Disposition.
 - Rule identifier/version.
 - Evidence summary.
 - Source fingerprint.
-- Actor (system/admin).
+- Actor (system evaluation or administrator/editor confirmation).
 - Timestamp.
 
-Deletion completion is recorded separately.
+Before catalog import, record explicit administrator or editor authorization, the work item, time, managed paths and any optional note. In both flows, record completion separately (ADR-0206).
 
 ### PRD-POLICY-008 — Policy test mode
 

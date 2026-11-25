@@ -1,18 +1,17 @@
-import { Loading } from '@carbon/react';
-import type { ReactNode } from 'react';
+import { Button, Loading } from '@carbon/react';
+import { Suspense, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { ErrorState } from '../components/ErrorState';
 import { useAuth } from './AuthContext';
 
 /**
  * Route guard (ADR-0139). UX only — the server enforces authorization on
- * every request; this keeps anonymous users on the login screen and shows
- * authenticated non-administrators an explicit access-denied state.
+ * every request. Editors enter the review queue and listeners see access denied.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const location = useLocation();
   const { t } = useTranslation();
 
@@ -25,6 +24,24 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (session.kind === 'forbidden') {
     // Distinct from not-found (PRD-WEB-002): signed in, not an administrator.
     return <ErrorState kind="forbidden" />;
+  }
+  if (session.kind === 'editor') {
+    if (!/^\/processing\/review(?:\/[^/]+)?\/?$/.test(location.pathname)) {
+      return <Navigate to="/processing/review" replace />;
+    }
+    return (
+      <>
+        <header className="melodee-editor-header">
+          <Link to="/processing/review">{t('nav.reviewQueue')}</Link>
+          <Button kind="ghost" onClick={() => void signOut()}>{t('auth.signOut')}</Button>
+        </header>
+        <main className="melodee-editor-content">
+          <Suspense fallback={<Loading description={t('common.loading')} withOverlay={false} />}>
+            <Outlet context={{ editorOnly: true }} />
+          </Suspense>
+        </main>
+      </>
+    );
   }
   return <>{children}</>;
 }

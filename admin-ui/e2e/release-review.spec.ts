@@ -301,6 +301,23 @@ test('decision happy path posts the audited reason', async ({ page }) => {
   });
 });
 
+test('an editor can open a review link and confirm Delete with an empty note', async ({ page }) => {
+  const api = await mockAdminApi(page);
+  await page.route('**/api/admin/v1/system/info', (route) => route.fulfill({ status: 403, json: { code: 'forbidden' } }));
+  await page.route('**/api/admin/v1/review/access', (route) => route.fulfill({ json: { role: 'editor' } }));
+  await page.goto(`processing/review/${WORK_ITEM_ID}`);
+  await expect(page.getByRole('button', { name: /^Accept Release/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^Delete/ }).click();
+  const dialog = page.getByRole('dialog');
+  const confirm = dialog.getByRole('button', { name: 'Delete Release' });
+  await expect(confirm).toBeDisabled();
+  await expect(dialog.getByLabel('Reason (optional)')).toBeEmpty();
+  await dialog.getByLabel(/Type.*DELETE/i).fill('DELETE');
+  await confirm.click();
+  await expect(page.getByText('Release and managed media deleted.')).toBeVisible();
+  expect(api.getDecisionBody()).toEqual({ action: 'delete', reason: '', override: true });
+});
+
 test('rtl smoke: ar-SA renders the workspace with dir=rtl', async ({ page }) => {
   await mockAdminApi(page);
   await page.goto(`processing/review/${WORK_ITEM_ID}`);

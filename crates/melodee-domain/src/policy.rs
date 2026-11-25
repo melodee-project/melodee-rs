@@ -39,6 +39,8 @@ pub enum PolicyActor {
     },
     /// An administrator override.
     Administrator { actor: String },
+    /// Explicit Release Review deletion by an editor.
+    Editor { actor: String },
 }
 
 impl PolicyActor {
@@ -62,7 +64,9 @@ impl PolicyActor {
                 }
                 Ok(())
             }
-            Self::Administrator { actor } => validate_nonblank("policy decision actor", actor),
+            Self::Administrator { actor } | Self::Editor { actor } => {
+                validate_nonblank("policy decision actor", actor)
+            }
         }
     }
 
@@ -81,7 +85,7 @@ impl PolicyActor {
                 policy_rule_set_version,
                 ..
             } => *policy_rule_set_version,
-            Self::Administrator { .. } => 0,
+            Self::Administrator { .. } | Self::Editor { .. } => 0,
         }
     }
 }
@@ -131,6 +135,9 @@ impl PolicyRuleSet {
         }
         value.created_by.validate()?;
         match &value.created_by {
+            PolicyActor::Editor { .. } => {
+                return Err(DomainInvariantError::EditorRequiresDelete);
+            }
             PolicyActor::System {
                 policy_rule_set_version,
             }
@@ -348,6 +355,9 @@ impl ReleasePolicyDecision {
         }
         value.actor.validate()?;
         match &value.actor {
+            PolicyActor::Editor { .. } if value.disposition != Disposition::Delete => {
+                return Err(DomainInvariantError::EditorRequiresDelete);
+            }
             PolicyActor::System {
                 policy_rule_set_version,
             }
@@ -427,6 +437,9 @@ impl PolicyTestSummary {
         }
         value.ran_by.validate()?;
         match &value.ran_by {
+            PolicyActor::Editor { .. } => {
+                return Err(DomainInvariantError::EditorRequiresDelete);
+            }
             PolicyActor::System {
                 policy_rule_set_version,
             }

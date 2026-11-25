@@ -50,6 +50,7 @@
   "common.yes": "Sì",
   "destructive.areYouSure": "Sei sicuro?",
   "destructive.deleteConfirmation": "Conferma eliminazione",
+  "destructive.optionalReasonLabel": "Motivo (facoltativo)",
   "empty.noData": "Nessun dato disponibile",
   "empty.noRecords": "[NEEDS TRANSLATION] No records to display",
   "nav.artists": "Artisti",

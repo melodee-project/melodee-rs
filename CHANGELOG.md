@@ -7,6 +7,9 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+Administrators and editors can delete a Release awaiting review even when validation stopped
+before catalog import. Type the confirmation shown in Release Review. A reason is optional.
+
 ## 0.2.1 — 2026-11-24
 
 Interrupted Release inspections now recover automatically after their worker lease expires.

@@ -601,6 +601,8 @@ independently versioned from native v1.
 - Authorization is checked server-side for every data-changing action.
 - File roots are canonicalized and constrained.
 - Audit records capture administrator identity and reason for destructive/identity decisions.
+  In Release Review an administrator or editor may confirm Delete with an optional note. Record
+  the actor and authorization against the work item before touching media (ADR-0206).
 - Secrets are redacted from logs, compatibility captures, fixtures, and diagnostics.
 
 ## 21. Admin UI

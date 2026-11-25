@@ -56,19 +56,21 @@ presents evidence first and choices last:
 
 ### Deciding
 
-The decision rail offers the ordered actions **Accept**, **Quarantine**, **Ignore**, and
-**Delete**. Every decision requires an operator-supplied **reason**, recorded in the audit with
-the acting administrator. `Accept`, `Quarantine`, and `Ignore` complete the non-destructive
-decision and route the work item. **Delete** is destructive-class: it opens an impact dialog,
-requires typed confirmation plus a reason, and sends an explicit override flag. Melodee first
-records that authorization, then removes the Release's canonical bundle and retained staged source.
-Only after both removals succeed does it mark the Release deleted and retire it from catalog,
-search, artwork, and playback surfaces. Catalog identifiers and audit evidence remain as
-non-browsable tombstones. A storage, path-safety, or stale-fingerprint failure leaves the deletion
-pending and surfaces an error; inspect the server log, correct the problem, and repeat the confirmed
-action.
+An administrator or editor can delete a Release marked **Needs review**, including one that
+stopped during validation before it reached the catalog. Open the Release, choose **Delete**,
+check the affected items, type the confirmation shown (`DELETE` in English), and select **Delete
+Release**. **Reason (optional)** lets you leave a note for the audit history.
 
-**Reprocess** re-queues the Release for another processing pass, with an optional reason.
+Melodee records who confirmed deletion before removing files. For a Release that stopped during
+validation, it removes that work item's managed staging and normalization directories. A file
+later copied into the original inbound location is safe. For a cataloged Release, deletion also
+removes its published bundle and retires the Release from browsing, search and playback.
+If storage becomes unavailable, correct the storage issue and confirm **Delete** again. The
+retry uses the original authorization and finishes the outstanding cleanup.
+
+Administrators can also **Accept**, **Quarantine**, or **Ignore** a Release and supply a reason.
+**Accept** requires a pending catalog policy decision. **Reprocess** returns a failed or
+quarantined Release to the queue and accepts an optional reason.
 
 ## Safe metadata transformations
 

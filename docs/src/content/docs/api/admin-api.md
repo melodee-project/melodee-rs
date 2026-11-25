@@ -16,8 +16,9 @@ ingestion, diagnosing failures, and curating the catalog. It is **not** a compat
 
 Every `/api/admin/v1` route requires a valid native access token
 (`Authorization: Bearer …`) or valid browser session cookie (`Cookie: melodee_auth=…`) for an
-enabled, unlocked account with administrator rights. Requests without valid credentials return
-`401`; authenticated non-administrators receive `403`. Both use the stable
+enabled, unlocked account. General administration requires administrator rights. Editors can
+access the Release review operations described below. Missing or invalid credentials return
+`401`, and insufficient privileges return `403`. Both use the stable
 [error envelope](#error-behavior). The infrastructure probes `/healthz` and `/readyz` are
 separate routes and remain anonymous.
 
@@ -396,9 +397,9 @@ required check fails; otherwise it records the durable completion marker with th
 ## Release review
 
 These routes back the operator review workflow for ingestion work items parked in
-`needs_review` (awaiting an operator decision), `failed`, or `quarantined`. All routes require
-an administrator's native access token; every mutation is audit-logged with the acting
-administrator's public user id.
+`needs_review` (awaiting an operator decision), `failed`, or `quarantined`. Administrators and editors can read the queue, inspect review items and preview their Tracks.
+`GET /api/admin/v1/review/access` returns the caller's review role (`administrator` or `editor`).
+Editors can submit confirmed deletion. The other decisions and reprocessing require an administrator.
 
 ### Review queue
 
@@ -433,20 +434,18 @@ POST /api/admin/v1/review/{workItemId}/decision
 ```
 
 Body: `{"action": "accept"|"quarantine"|"ignore"|"delete", "reason": "…", "override": false}`.
-A non-blank `reason` is required and audited. The work item must be in `needs_review`
-(otherwise `409 invalid_state`).
+The work item must be in `needs_review`. For `delete`, both administrators and editors can omit
+`reason` or leave it blank. The API requires `"override": true` and returns `400 override_required`
+if confirmation is missing. Other decisions require an administrator and a nonblank reason.
 
-When the Release has a pending policy decision, the decision applies the durable override path:
-`accept` resumes the pipeline (the work item moves to `indexing`), `quarantine`, `ignore`, and
-`delete` record the corresponding disposition. `delete` additionally requires the explicit
-`"override": true` acknowledgement (`400 override_required` otherwise). The server commits the
-authorization, removes the exact canonical and retained staging directories, and then atomically
-marks the Release/work item deleted, appends audit evidence, and schedules search removal. Success
-returns `pendingExecution: false` and `workItem.state: "deleted"`. A filesystem/configuration error
-returns `500 delete_execution_failed` or `503 delete_storage_unavailable`; the authorization remains
-pending and the confirmed action is safe to retry. For items parked before cataloging (no policy decision),
-`quarantine` and `ignore` park the work item directly; `accept` and `delete` are unavailable in
-that state (`409`).
+For a pre-catalog work item, Delete records who authorized removal of its managed files. For a
+cataloged Release, Delete uses the pending policy decision, retires the Release and schedules
+search removal. Success returns `pendingExecution: false` and `workItem.state: "deleted"`. A
+storage failure leaves the authorization pending. Retry the same confirmed action after storage
+recovers. Confirming an already deleted work item returns success.
+
+`accept` requires a pending catalog decision and moves the work item to `indexing`. `quarantine`
+and `ignore` can also park work items before catalog import.
 
 ### Reprocess a work item
 

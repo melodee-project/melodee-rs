@@ -18,7 +18,7 @@ import { getSystemInfo } from '../api/admin';
  * token in web storage. Session truth comes from the server: the boot probe
  * calls an admin-gated endpoint and reads the gate's answer:
  *   200 → authenticated administrator
- *   403 → authenticated but not an administrator (access-denied state)
+ *   403 → check review access for editors, otherwise show access denied
  *   401 → anonymous / expired session
  * The 401 path also fires from any later API call via `melodee:auth-expired`.
  */
@@ -27,7 +27,7 @@ export type SessionState =
   | { kind: 'loading' }
   | { kind: 'anonymous' }
   | { kind: 'forbidden' }
-  | { kind: 'admin'; username: string | null };
+  | { kind: 'admin' | 'editor'; username: string | null };
 
 export interface AuthContextValue {
   session: SessionState;
@@ -55,6 +55,19 @@ function readStoredUsername(): string | null {
   }
 }
 
+async function probeSession(): Promise<'admin' | 'editor'> {
+  try {
+    await getSystemInfo({ suppressAuthEvent: true });
+    return 'admin';
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 403) throw error;
+    const access = await apiFetch<{ role: 'administrator' | 'editor' }>('/api/admin/v1/review/access', {
+      suppressAuthEvent: true,
+    });
+    return access.role === 'administrator' ? 'admin' : 'editor';
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionState>({ kind: 'loading' });
 
@@ -62,10 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // asynchronously, never synchronously inside the effect body.
   useEffect(() => {
     let cancelled = false;
-    getSystemInfo({ suppressAuthEvent: true })
-      .then(() => {
+    probeSession()
+      .then((kind) => {
         if (!cancelled) {
-          setSession({ kind: 'admin', username: readStoredUsername() });
+          setSession({ kind, username: readStoredUsername() });
         }
       })
       .catch((error: unknown) => {
@@ -108,8 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // The probe re-reads the gate so a non-admin account lands on the
     // access-denied state instead of the shell.
     try {
-      await getSystemInfo({ suppressAuthEvent: true });
-      setSession({ kind: 'admin', username: identifier });
+      const kind = await probeSession();
+      setSession({ kind, username: identifier });
     } catch (error) {
       if (error instanceof ApiError && error.status === 403) {
         setSession({ kind: 'forbidden' });

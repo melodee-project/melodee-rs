@@ -1598,6 +1598,41 @@ impl PolicyStore {
         pool: &PgPool,
         request: &PolicyAdminOverrideRequest,
     ) -> Result<PolicyCommitResult, PolicyStoreError> {
+        self.apply_review_override(
+            pool,
+            request,
+            PolicyActor::Administrator {
+                actor: request.actor.clone(),
+            },
+        )
+        .await
+    }
+
+    /// Editors may explicitly delete a reviewed Release.
+    pub async fn apply_editor_delete(
+        &self,
+        pool: &PgPool,
+        request: &PolicyAdminOverrideRequest,
+    ) -> Result<PolicyCommitResult, PolicyStoreError> {
+        if request.chosen_disposition != Disposition::Delete {
+            return Err(PolicyStoreError::AuthorizationRequired);
+        }
+        self.apply_review_override(
+            pool,
+            request,
+            PolicyActor::Editor {
+                actor: request.actor.clone(),
+            },
+        )
+        .await
+    }
+
+    async fn apply_review_override(
+        &self,
+        pool: &PgPool,
+        request: &PolicyAdminOverrideRequest,
+        actor: PolicyActor,
+    ) -> Result<PolicyCommitResult, PolicyStoreError> {
         if request.actor.trim().is_empty() || request.reason.trim().is_empty() {
             return Err(PolicyStoreError::AuthorizationRequired);
         }
@@ -1627,9 +1662,25 @@ impl PolicyStore {
         };
         let completed_at =
             (completion_state == DecisionCompletionState::Completed).then_some(request.now);
-        let actor = PolicyActor::Administrator {
-            actor: request.actor.clone(),
-        };
+        // A committed human delete may already have removed part of the storage.
+        // Retries keep the original authorizer. A competing disposition cannot reopen it.
+        if stored.disposition == Disposition::Delete
+            && matches!(
+                stored.actor,
+                PolicyActor::Administrator { .. } | PolicyActor::Editor { .. }
+            )
+        {
+            if request.chosen_disposition != Disposition::Delete {
+                return Err(PolicyStoreError::DecisionConflict);
+            }
+            tx.commit().await?;
+            return Ok(PolicyCommitResult {
+                item,
+                decision: stored,
+                inserted: false,
+                set_based_mutation_statement_count: 0,
+            });
+        }
         let rule_payload: (serde_json::Value,) =
             sqlx::query_as("SELECT rules FROM policy_rule_sets WHERE id = $1 AND version = $2")
                 .bind(stored.rule_set_id.into_uuid())
@@ -1646,7 +1697,12 @@ impl PolicyStore {
             .ok_or(PolicyStoreError::AuthorizationRequired)?;
         let matched_rule_ids = vec![admin_rule.id.clone()];
         let evidence_summary = format!(
-            "Administrator '{}' selected {}: {}",
+            "{} '{}' selected {}: {}",
+            if actor.is_administrator() {
+                "Administrator"
+            } else {
+                "Editor"
+            },
             request.actor,
             request.chosen_disposition.as_str(),
             request.reason
@@ -1714,7 +1770,7 @@ impl PolicyStore {
             .ok_or(PolicyStoreError::DecisionConflict)?;
         let authorization_matches = matches!(
             &stored.actor,
-            PolicyActor::Administrator { actor }
+            PolicyActor::Administrator { actor } | PolicyActor::Editor { actor }
                 if actor == &request.actor
                     && stored.override_reason.as_deref() == Some(request.reason.as_str())
         );

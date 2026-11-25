@@ -8,8 +8,8 @@ import { formatBytes, formatNumber } from '../i18n/format';
 /**
  * Destructive action gate (UI-SPEC §6, PRD-UI-008). Shows affected counts,
  * storage impact, the matched rule, and (unless `hideAlternativeNote`) the
- * quarantine/ignore alternative; requires an operator reason; delete-class
- * actions additionally require the typed confirmation phrase before the
+ * quarantine/ignore alternative. A reason is required unless the caller opts
+ * into optional notes. Delete-class actions require the typed phrase before the
  * danger button enables.
  */
 export interface DestructiveActionDialogProps {
@@ -18,6 +18,7 @@ export interface DestructiveActionDialogProps {
   actionLabel: string;
   /** Delete-class actions require typed confirmation. */
   deleteClass?: boolean;
+  optionalReason?: boolean;
   /** Typed-confirmation phrase override (default: destructive.confirmPhrase). */
   confirmPhrase?: string;
   affectedReleases?: number;
@@ -40,6 +41,7 @@ export function DestructiveActionDialog({
   title,
   actionLabel,
   deleteClass = false,
+  optionalReason = false,
   confirmPhrase,
   affectedReleases,
   affectedTracks,
@@ -62,7 +64,7 @@ export function DestructiveActionDialog({
   };
 
   const phrase = confirmPhrase ?? t('destructive.confirmPhrase');
-  const reasonValid = reason.trim().length > 0;
+  const reasonValid = optionalReason || reason.trim().length > 0;
   const confirmationValid = !deleteClass || confirmation.trim() === phrase;
   const canConfirm = reasonValid && confirmationValid;
 
@@ -82,6 +84,7 @@ export function DestructiveActionDialog({
       primaryButtonDisabled={!canConfirm}
       onRequestClose={resetAndClose}
       onRequestSubmit={() => {
+        if (!canConfirm) return;
         const submitted = reason.trim();
         setReason('');
         setConfirmation('');
@@ -122,7 +125,7 @@ export function DestructiveActionDialog({
       {children}
       <TextArea
         id="destructive-reason"
-        labelText={t('destructive.reasonLabel')}
+        labelText={optionalReason ? t('destructive.optionalReasonLabel') : t('destructive.reasonLabel')}
         value={reason}
         invalid={!reasonValid && reason.length > 0}
         invalidText={t('destructive.reasonRequired')}

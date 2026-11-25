@@ -53,6 +53,7 @@
   "common.yes": "Ja",
   "destructive.areYouSure": "[NEEDS TRANSLATION] Are you sure?",
   "destructive.deleteConfirmation": "[NEEDS TRANSLATION] Delete confirmation",
+  "destructive.optionalReasonLabel": "Reden (optioneel)",
   "empty.noData": "[NEEDS TRANSLATION] No data available",
   "empty.noRecords": "[NEEDS TRANSLATION] No records to display",
   "nav.artists": "Artiesten",

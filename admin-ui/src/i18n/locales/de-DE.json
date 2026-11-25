@@ -51,6 +51,7 @@
   "common.yes": "Ja",
   "destructive.areYouSure": "Sind Sie sicher?",
   "destructive.deleteConfirmation": "Löschbestätigung",
+  "destructive.optionalReasonLabel": "Grund (optional)",
   "empty.noData": "Keine Daten verfügbar",
   "empty.noRecords": "Keine Datensätze zum Anzeigen vorhanden",
   "nav.artists": "Künstler",

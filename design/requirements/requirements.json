@@ -1178,7 +1178,7 @@
     "tests": [
       "crates/melodee-policy/tests/policy_acceptance.rs",
       "apps/melodee-server/tests/policy_worker.rs",
-      "apps/melodee-server/tests/admin_review_api.rs (confirmed deletion removes managed media and completes the work item)"
+      "apps/melodee-server/tests/admin_review_api.rs (confirmed administrator/editor deletion before and after catalog import, optional notes, scoped cleanup and retry, ADR-0206)"
     ]
   },
   {

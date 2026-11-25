@@ -459,6 +459,7 @@
   "destructive.confirmPhrase": "DELETE",
   "destructive.deleteConfirmation": "Delete confirmation",
   "destructive.matchedRule": "Matched rule",
+  "destructive.optionalReasonLabel": "Reason (optional)",
   "destructive.reasonLabel": "Reason",
   "destructive.reasonRequired": "A reason is required. It is recorded in the audit log.",
   "destructive.storageImpact": "Storage impact",

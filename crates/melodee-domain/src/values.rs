@@ -88,6 +88,8 @@ pub enum DomainInvariantError {
     InvalidDecisionCompletionState,
     #[error("the policy decision actor does not match the evaluated rule-set version")]
     PolicyActorVersionMismatch,
+    #[error("editors can authorize only Release Review deletion")]
+    EditorRequiresDelete,
     #[error("policy decision completion state transition is invalid")]
     InvalidDecisionCompletionTransition,
     #[error("policy test summary aggregates are inconsistent")]

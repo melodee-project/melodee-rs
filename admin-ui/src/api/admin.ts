@@ -302,7 +302,7 @@ export function getReviewDetail(workItemId: string): Promise<ReviewDetail> {
 
 export interface ReviewDecisionRequest {
   action: 'accept' | 'quarantine' | 'ignore' | 'delete';
-  reason: string;
+  reason?: string;
   /** Explicit destructive acknowledgement; required for `delete`. */
   override?: boolean;
 }

@@ -53,6 +53,7 @@
   "common.yes": "是的",
   "destructive.areYouSure": "你确定吗？",
   "destructive.deleteConfirmation": "删除确认",
+  "destructive.optionalReasonLabel": "原因（可选）",
   "empty.noData": "无可用数据",
   "empty.noRecords": "没有记录可显示",
   "nav.artists": "艺术家",

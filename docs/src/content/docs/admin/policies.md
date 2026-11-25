@@ -32,7 +32,7 @@ for review can add an explicit `unknown_classification` rule in a new immutable 
 The safe preference ranges and exact settings are listed in
 [Configuration](../installation/configuration/#policy-evaluation). A policy-produced `Delete`
 outcome is never sufficient to remove media. It creates a pending decision and routes the Release
-to `NeedsReview`; an administrator must complete the typed confirmation in
+to `NeedsReview`. An administrator or editor must complete the typed confirmation in
 [Release Review](../library-management/release-review/). The policy CLI has no action that completes
 deletion.
 

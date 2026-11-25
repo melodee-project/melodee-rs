@@ -53,6 +53,7 @@
   "common.yes": "はい",
   "destructive.areYouSure": "よろしいですか？",
   "destructive.deleteConfirmation": "削除の確認",
+  "destructive.optionalReasonLabel": "理由（任意）",
   "empty.noData": "データがありません",
   "empty.noRecords": "表示するレコードがありません",
   "nav.artists": "アーティスト",

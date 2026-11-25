@@ -2393,6 +2393,12 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
 
+        if item.state == IngestionState::NeedsReview && sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM review_deletion_authorizations WHERE work_item_id=$1)"
+        ).bind(id).fetch_one(&mut *tx).await? {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+
         // These boundaries have additional durable invariants and must use
         // stage_authorized_publication, claim_publication, and
         // complete_publication respectively. A generic state-only transition

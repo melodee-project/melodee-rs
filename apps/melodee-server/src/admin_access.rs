@@ -67,47 +67,7 @@ impl FromRequestParts<AdminAccessState> for AdminPrincipal {
         parts: &mut Parts,
         state: &AdminAccessState,
     ) -> Result<Self, Self::Rejection> {
-        let now = OffsetDateTime::now_utc();
-        let user_public_id = if let Some(token) = parts
-            .headers
-            .get(header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Bearer "))
-        {
-            let claims = state
-                .auth
-                .validate_access(token, now)
-                .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
-            claims.sid
-        } else if let Some(cookie_header) = parts
-            .headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok())
-        {
-            let cookie_str = crate::native::auth::cookie_value(cookie_header)
-                .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
-            let claims = state
-                .auth
-                .validate_cookie(cookie_str, now)
-                .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
-            claims.public_api_id
-        } else {
-            return Err(admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"));
-        };
-
-        let user = match melodee_persistence::AuthStore::new()
-            .user_by_public_id(&state.pool, user_public_id)
-            .await
-        {
-            Ok(Some(user)) => user,
-            Ok(None) => {
-                return Err(admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"));
-            }
-            Err(_) => return Err(admin_error(StatusCode::SERVICE_UNAVAILABLE, "store_error")),
-        };
-        if !user.can_authenticate() {
-            return Err(admin_error(StatusCode::UNAUTHORIZED, "account_unavailable"));
-        }
+        let user = authenticated_operator_user(parts, state).await?;
         if !user.is_admin {
             return Err(admin_error(StatusCode::FORBIDDEN, "forbidden"));
         }
@@ -116,6 +76,84 @@ impl FromRequestParts<AdminAccessState> for AdminPrincipal {
             public_api_id: user.public_api_id,
         })
     }
+}
+
+pub(crate) struct OperatorAccessError(StatusCode, &'static str);
+
+impl From<OperatorAccessError> for Response {
+    fn from(error: OperatorAccessError) -> Self {
+        admin_error(error.0, error.1)
+    }
+}
+
+/// Resolve native credentials and current account status before applying a route's role gate.
+pub(crate) async fn authenticated_operator_user(
+    parts: &Parts,
+    state: &AdminAccessState,
+) -> Result<StoredNativeUser, OperatorAccessError> {
+    let now = OffsetDateTime::now_utc();
+    let user_public_id = if let Some(token) = parts
+        .headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+    {
+        let claims = state
+            .auth
+            .validate_access(token, now)
+            .ok_or(OperatorAccessError(
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+            ))?;
+        claims.sid
+    } else if let Some(cookie_header) = parts
+        .headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+    {
+        let cookie_str = crate::native::auth::cookie_value(cookie_header).ok_or(
+            OperatorAccessError(StatusCode::UNAUTHORIZED, "unauthenticated"),
+        )?;
+        let claims = state
+            .auth
+            .validate_cookie(cookie_str, now)
+            .ok_or(OperatorAccessError(
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+            ))?;
+        claims.public_api_id
+    } else {
+        return Err(OperatorAccessError(
+            StatusCode::UNAUTHORIZED,
+            "unauthenticated",
+        ));
+    };
+
+    let user = match melodee_persistence::AuthStore::new()
+        .user_by_public_id(&state.pool, user_public_id)
+        .await
+    {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return Err(OperatorAccessError(
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+            ));
+        }
+        Err(_) => {
+            return Err(OperatorAccessError(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "store_error",
+            ));
+        }
+    };
+    if !user.can_authenticate() {
+        return Err(OperatorAccessError(
+            StatusCode::UNAUTHORIZED,
+            "account_unavailable",
+        ));
+    }
+    Ok(user)
 }
 
 /// Stable admin API error envelope (matches `admin.rs` conventions).

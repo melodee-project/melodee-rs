@@ -75,6 +75,55 @@ pub async fn delete_release_storage(
     })
 }
 
+/// Remove only the directories pinned by a pre-catalog authorization and this work item's scratch.
+pub async fn delete_unpublished_storage(
+    id: uuid::Uuid,
+    work_root: &Path,
+    staging_root: Option<&Path>,
+    staging_path: Option<&str>,
+    canonical_root: Option<&Path>,
+    canonical_path: Option<&str>,
+) -> Result<(), ReleaseDeletionError> {
+    let scratch = id.simple().to_string();
+    let expected = format!("releases/{id}/source");
+    if staging_path.is_some_and(|p| p != expected) {
+        return Err(ReleaseDeletionError::InvalidPath {
+            kind: "staging",
+            path: staging_path.unwrap_or_default().to_owned(),
+        });
+    }
+    let mut trees = Vec::new();
+    for (kind, root, path) in [
+        ("work", Some(work_root), Some(scratch.as_str())),
+        ("staging", staging_root, staging_path),
+        ("canonical", canonical_root, canonical_path),
+    ] {
+        if let Some(relative) = path {
+            let root = root.ok_or_else(|| ReleaseDeletionError::InvalidPath {
+                kind,
+                path: relative.to_owned(),
+            })?;
+            trees.push((kind, root.to_owned(), owned_path(root, relative, kind)?));
+        }
+    }
+    tokio::task::spawn_blocking(move || {
+        for (kind, root, _) in &trees {
+            crate::secure_fs::open_directory(root).map_err(|source| {
+                ReleaseDeletionError::Remove {
+                    kind,
+                    path: root.clone(),
+                    source,
+                }
+            })?;
+        }
+        for (kind, _, path) in trees {
+            remove_owned_tree(&path, kind)?;
+        }
+        Ok(())
+    })
+    .await?
+}
+
 fn owned_path(
     root: &Path,
     relative: &str,

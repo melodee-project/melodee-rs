@@ -53,6 +53,7 @@
   "common.yes": "Да",
   "destructive.areYouSure": "Вы уверены?",
   "destructive.deleteConfirmation": "Подтверждение удаления",
+  "destructive.optionalReasonLabel": "Причина (необязательно)",
   "empty.noData": "Нет доступных данных",
   "empty.noRecords": "Нет записей для отображения",
   "nav.artists": "Исполнители",

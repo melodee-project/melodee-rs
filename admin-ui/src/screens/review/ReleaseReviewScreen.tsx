@@ -16,7 +16,7 @@ import {
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useOutletContext, Link as RouterLink, useParams } from 'react-router-dom';
 
 import {
   getReviewDetail,
@@ -63,8 +63,8 @@ import {
  * breakdown with inline audio preview; the right rail carries the ordered
  * decision actions, the policy match, and the review timeline.
  *
- * Decision POSTs go to /review/{id}/decision with a required audited reason;
- * delete additionally sends `override: true` after the typed confirmation in
+ * Decision POSTs go to /review/{id}/decision. Reasons are optional for Delete.
+ * Delete sends `override: true` after the typed confirmation in
  * DestructiveActionDialog. 409 illegal-transition/conflict and 400
  * override_required responses surface as localized inline notifications.
  */
@@ -154,6 +154,7 @@ function DecisionConfirmDialog({
 }
 
 export function ReleaseReviewScreen() {
+  const editorOnly = useOutletContext<{ editorOnly?: boolean } | null>()?.editorOnly;
   const { t } = useTranslation();
   const { workItemId = '' } = useParams();
 
@@ -248,7 +249,7 @@ export function ReleaseReviewScreen() {
 
   const recommended = useMemo(() => recommendedAction(detail), [detail]);
 
-  const choices: DecisionChoice[] = REVIEW_ACTIONS.map((action) => ({
+  const choices: DecisionChoice[] = REVIEW_ACTIONS.filter((action) => !editorOnly || action === 'delete').map((action) => ({
     id: action,
     label: t(`review.decision.action.${action}`),
     description: t(`review.decision.action.${action}Description`),
@@ -324,7 +325,7 @@ export function ReleaseReviewScreen() {
       .finally(() => setBusy(false));
   };
 
-  const reprocessable = state === 'failed' || state === 'quarantined';
+  const reprocessable = !editorOnly && (state === 'failed' || state === 'quarantined');
   const decisionAffected = manifest
     ? {
         affectedReleases: 1,
@@ -332,7 +333,7 @@ export function ReleaseReviewScreen() {
         affectedFiles:
           manifest.tracks.length + manifest.artwork.length + manifest.sidecars.length,
       }
-    : {};
+    : { affectedReleases: 1 };
 
   return (
     <div>
@@ -664,6 +665,8 @@ export function ReleaseReviewScreen() {
           title={t('review.decision.deleteTitle')}
           actionLabel={t('review.decision.deleteActionLabel')}
           deleteClass
+          optionalReason
+          hideAlternativeNote={editorOnly}
           {...decisionAffected}
           matchedRule={
             decision && decision.matchedRuleIds.length > 0

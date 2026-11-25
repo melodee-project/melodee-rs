@@ -38,7 +38,9 @@ pub use config::{
     ENV_VALIDATION_CONCURRENCY, ENV_WORK_AREA_BASE, IngestionConfig, IngestionSourceParseError,
     PublicationRoots, StorageRoots,
 };
-pub use deletion::{DeletedReleasePaths, ReleaseDeletionError, delete_release_storage};
+pub use deletion::{
+    DeletedReleasePaths, ReleaseDeletionError, delete_release_storage, delete_unpublished_storage,
+};
 
 pub use error::{IngestionError, Result};
 pub use gate::{DirectoryGateFuture, DirectoryGateOutcome, DirectoryProcessingGate};

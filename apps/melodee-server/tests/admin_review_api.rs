@@ -281,7 +281,7 @@ async fn seed_failed_item(db: &TestDb, source_path: &str) -> Uuid {
 }
 
 #[tokio::test]
-async fn review_routes_require_administrator() {
+async fn review_routes_reject_anonymous_and_listener_requests() {
     let db = TestDb::create("wp12_review_gate").await;
     let fixture = seed_users(&db).await;
     let work_area = tempfile::tempdir().expect("work area");
@@ -843,5 +843,190 @@ async fn track_preview_streams_from_staging_with_range_and_no_store() {
     assert_eq!(response.status, StatusCode::NOT_FOUND);
     assert_eq!(response.body["code"], "not_found");
 
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn editor_can_delete_cataloged_review_without_a_note() {
+    let db = TestDb::create("cataloged_editor_delete").await;
+    let users = seed_users(&db).await;
+    sqlx::query("UPDATE native_users SET is_editor = true WHERE public_api_id = $1")
+        .bind(users.plain_public)
+        .execute(&db.pool)
+        .await
+        .expect("give fixture the editor role");
+    let editor = token_for(users.plain_public, "wp12-plain");
+    let work = tempfile::tempdir().expect("work area");
+    let app = build_app(db.pool.clone(), vec![], work.path());
+    let fixture = seed_pending_review(&db, 8).await;
+    let response = call(
+        app,
+        "POST",
+        &format!("/api/admin/v1/review/{}/decision", fixture.work_item_id()),
+        Some(serde_json::json!({"action": "delete", "override": true})),
+        Some(&editor),
+        &[],
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::OK, "{}", response.body);
+    assert_eq!(response.body["workItem"]["state"], "deleted");
+    assert_eq!(response.body["decision"]["actor"]["authority"], "editor");
+    assert_eq!(
+        response.body["decision"]["actor"]["actor"],
+        users.plain_public.to_string()
+    );
+    assert_eq!(
+        response.body["decision"]["overrideReason"],
+        "Delete confirmed without a note"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn confirmed_pre_catalog_delete_scopes_files_roles_and_retries() {
+    let db = TestDb::create("pre_catalog_review_delete").await;
+    let users = seed_users(&db).await;
+    let work = tempfile::tempdir().unwrap();
+    let app = build_app(db.pool.clone(), vec![], work.path());
+    let editor = token_for(users.plain_public, "review-editor");
+    let id = seed_ready_item(&WorkItemStore, &db.pool, "inbound-name").await;
+    sqlx::query("UPDATE release_work_items SET state='needs_review',state_reason='validation.needs_review' WHERE id=$1").bind(id).execute(&db.pool).await.unwrap();
+    let path = format!("/api/admin/v1/review/{id}/decision");
+    let delete = serde_json::json!({"action":"delete","override":true});
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &path,
+            Some(delete.clone()),
+            Some(&editor),
+            &[]
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    sqlx::query("UPDATE native_users SET is_editor=true WHERE public_api_id=$1")
+        .bind(users.plain_public)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let access = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/review/access",
+        None,
+        Some(&editor),
+        &[],
+    )
+    .await;
+    assert_eq!(access.body["role"], "editor");
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &path,
+            Some(serde_json::json!({"action":"ignore","reason":"test"})),
+            Some(&editor),
+            &[]
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &path,
+            Some(serde_json::json!({"action":"delete"})),
+            Some(&editor),
+            &[]
+        )
+        .await
+        .body["code"],
+        "override_required"
+    );
+    let relative = format!("releases/{id}/source");
+    sqlx::query("INSERT INTO release_work_item_staging_handoffs(work_item_id,staging_relative_path,source_generation,status,intended_at) VALUES ($1,$2,'test','intent',now())")
+        .bind(id).bind(&relative).execute(&db.pool).await.unwrap();
+    let staged = work.path().join("staging").join(&relative);
+    std::fs::create_dir_all(&staged).unwrap();
+    std::fs::write(staged.join("original.flac"), b"fixture").unwrap();
+    let scratch = work.path().join(id.simple().to_string());
+    std::fs::create_dir_all(&scratch).unwrap();
+    let unrelated = work.path().join("inbound-name");
+    std::fs::create_dir_all(&unrelated).unwrap();
+    let sibling = work
+        .path()
+        .join("staging/releases")
+        .join(Uuid::now_v7().to_string())
+        .join("source");
+    std::fs::create_dir_all(&sibling).unwrap();
+    let library_entry = work.path().join("library/another-release");
+    std::fs::create_dir_all(&library_entry).unwrap();
+    // A missing configured root interrupts cleanup after durable authorization.
+    std::fs::rename(work.path().join("staging"), work.path().join("offline")).unwrap();
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &path,
+            Some(delete.clone()),
+            Some(&editor),
+            &[]
+        )
+        .await
+        .body["code"],
+        "delete_execution_failed"
+    );
+    assert!(scratch.exists());
+    let admin = token_for(users.admin_public, "review-admin");
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &path,
+            Some(serde_json::json!({"action":"ignore","reason":"different decision"})),
+            Some(&admin),
+            &[]
+        )
+        .await
+        .status,
+        StatusCode::CONFLICT
+    );
+    std::fs::rename(work.path().join("offline"), work.path().join("staging")).unwrap();
+    for _ in 0..2 {
+        let result = call(
+            app.clone(),
+            "POST",
+            &path,
+            Some(delete.clone()),
+            Some(&admin),
+            &[],
+        )
+        .await;
+        assert_eq!(result.status, StatusCode::OK, "{}", result.body);
+        assert_eq!(result.body["workItem"]["state"], "deleted");
+    }
+    assert!(!scratch.exists());
+    assert!(!staged.exists());
+    assert!(unrelated.is_dir());
+    assert!(sibling.is_dir());
+    assert!(library_entry.is_dir());
+    let next = seed_ready_item(&WorkItemStore, &db.pool, "inbound-name").await;
+    assert_ne!(
+        next, id,
+        "the old inbound name is available for a new Release"
+    );
+    let audit: (Uuid, String, Option<String>, bool) = sqlx::query_as(
+        "SELECT actor_id, actor_role, note, completed_at IS NOT NULL
+         FROM review_deletion_authorizations WHERE work_item_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(audit, (users.plain_public, "editor".to_owned(), None, true));
     db.drop().await;
 }
