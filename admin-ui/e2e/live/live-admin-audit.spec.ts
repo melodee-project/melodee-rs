@@ -89,6 +89,18 @@ test.describe('live admin UI', () => {
     await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   });
 
+  test('statistics show registered asset files separately from database size', async ({ page, context, request }) => {
+    const cookie = await signIn(context, request);
+    const stats = await apiGet<{ database: { assetFileBytes: number; assetFileCount: number } }>(
+      request, cookie, `${LIVE_API}/api/admin/v1/stats`,
+    );
+    expect(stats.database.assetFileBytes).toBeGreaterThanOrEqual(0);
+    expect(stats.database.assetFileCount).toBeGreaterThanOrEqual(0);
+    await page.goto(`${BASE_URL}/system/stats`);
+    await expect(page.getByText('Artwork, avatars and theme files', { exact: true })).toBeVisible();
+    await expect(page.getByText('Database size', { exact: true })).toBeVisible();
+  });
+
   test('every canonical screen loads with no console error and no failed request', async ({ page, context, request }) => {
     await signIn(context, request);
     const failures: string[] = [];

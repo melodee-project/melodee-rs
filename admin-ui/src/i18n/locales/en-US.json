@@ -1270,6 +1270,8 @@
   "shell.skipToContent": "Skip to main content",
   "shell.userMenu": "User menu",
   "stats.barLabel": "{{label}}: {{value}}",
+  "stats.database.assetFiles": "Artwork, avatars and theme files",
+  "stats.database.assetFilesHint": "{{files}} unique files on persistent storage",
   "stats.database.connections": "Connections",
   "stats.database.connectionsHint": "In use / server capacity",
   "stats.database.pendingProjection": "Pending projection",

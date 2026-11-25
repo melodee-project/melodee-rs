@@ -61,17 +61,22 @@ async fn avatar_table_enforces_content_type_and_size_bounds() {
 
     // Only jpeg/png are accepted.
     let result = sqlx::query(
-        "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
-         VALUES ($1, 'image/gif', '\\x00', now())",
+        "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
+         VALUES ($1, 'image/gif', $2, now())",
     )
     .bind(user_id)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, b"x")
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await;
     assert!(result.is_err(), "gif content type must be rejected");
 
     // Empty image is rejected.
     let result = sqlx::query(
-        "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
+        "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
          VALUES ($1, 'image/png', '\\x', now())",
     )
     .bind(user_id)
@@ -82,11 +87,15 @@ async fn avatar_table_enforces_content_type_and_size_bounds() {
     // Over 1 MiB is rejected.
     let oversized = vec![0x55_u8; 1024 * 1024 + 1];
     let result = sqlx::query(
-        "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
+        "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
          VALUES ($1, 'image/png', $2, now())",
     )
     .bind(user_id)
-    .bind(&oversized)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &oversized)
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await;
     assert!(result.is_err(), "oversized image must be rejected");
@@ -94,21 +103,30 @@ async fn avatar_table_enforces_content_type_and_size_bounds() {
     // Exactly 1 MiB is accepted.
     let at_bound = vec![0x55_u8; 1024 * 1024];
     sqlx::query(
-        "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
+        "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
          VALUES ($1, 'image/png', $2, now())",
     )
     .bind(user_id)
-    .bind(&at_bound)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &at_bound)
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await
     .expect("1 MiB avatar is in bounds");
 
     // Unknown user is rejected by the FK.
     let result = sqlx::query(
-        "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
-         VALUES ($1, 'image/png', '\\x01', now())",
+        "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
+         VALUES ($1, 'image/png', $2, now())",
     )
     .bind(Uuid::now_v7())
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, b"x")
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await;
     assert!(result.is_err(), "orphan avatar must be rejected");

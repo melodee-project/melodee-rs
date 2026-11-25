@@ -64,6 +64,8 @@ function makeStats(overrides: Partial<Stats> = {}): Stats {
       workItems: 321,
       playEvents: 12_345,
       pendingProjection: 0,
+      assetFileBytes: 2097152,
+      assetFileCount: 3,
       poolCapacity: 100,
       poolInUse: 26,
     },
@@ -91,6 +93,7 @@ describe('StatsScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Media library' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Playback activity' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Database' })).toBeInTheDocument();
+    expect(screen.getByText('3 unique files on persistent storage')).toBeInTheDocument();
 
     expect(screen.getByRole('heading', { name: 'Release processing' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Waiting for publication.*84/ })).toHaveAttribute('href', '/processing/queue?state=staged');

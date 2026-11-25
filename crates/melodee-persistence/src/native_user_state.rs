@@ -820,14 +820,17 @@ impl NativeUserStateStore {
             ));
         }
         let affected = sqlx::query(
-            "UPDATE native_playlists SET image_mime_type = $3, image_bytes = $4,
+            "UPDATE native_playlists SET image_mime_type = $3, asset_key = $4,
                     revision = revision + 1, updated_at = $5
              WHERE public_api_id = $1 AND owner_user_id = $2",
         )
         .bind(playlist_public_id)
         .bind(owner_user_id)
         .bind(image.map(|value| value.0))
-        .bind(image.map(|value| value.1))
+        .bind(match image {
+            Some((_, bytes)) => Some(crate::asset_files::put(pool, bytes).await?),
+            None => None,
+        })
         .bind(now)
         .execute(pool)
         .await?

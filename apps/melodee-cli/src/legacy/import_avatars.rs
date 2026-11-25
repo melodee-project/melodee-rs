@@ -214,26 +214,30 @@ pub async fn import_user_avatars(
                 issues += 1;
                 continue;
             }
-            let existing = sqlx::query_as::<_, (String, Vec<u8>)>(
-                "SELECT content_type,image FROM native_user_avatars WHERE user_id=$1 FOR UPDATE",
+            let key = melodee_persistence::asset_files::put_on(&mut tx, &normalized)
+                .await
+                .map_err(|e| format!("avatar file write failed: {e}"))?;
+            let existing = sqlx::query_as::<_, (String, String)>(
+                "SELECT content_type,asset_key FROM native_user_avatars WHERE user_id=$1 FOR UPDATE",
             )
             .bind(target_id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(|error| format!("avatar target read failed: {error}"))?;
-            if existing.as_ref().is_some_and(|(content_type, image)| {
-                content_type == "image/png" && image == &normalized
-            }) {
+            if existing
+                .as_ref()
+                .is_some_and(|(content_type, image)| content_type == "image/png" && image == &key)
+            {
                 continue;
             }
             sqlx::query(
-                "INSERT INTO native_user_avatars (user_id,content_type,image,updated_at)
+                "INSERT INTO native_user_avatars (user_id,content_type,asset_key,updated_at)
                  VALUES ($1,'image/png',$2,$3)
                  ON CONFLICT (user_id) DO UPDATE
-                    SET content_type='image/png', image=$2, updated_at=$3",
+                    SET content_type='image/png', asset_key=$2, updated_at=$3",
             )
             .bind(target_id)
-            .bind(&normalized)
+            .bind(key)
             .bind(OffsetDateTime::now_utc())
             .execute(&mut *tx)
             .await

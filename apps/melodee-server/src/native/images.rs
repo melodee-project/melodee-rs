@@ -512,15 +512,22 @@ async fn load_image(
 ) -> Result<Option<Response<Body>>, sqlx::Error> {
     match kind {
         ImageKind::Playlist => {
-            let image = sqlx::query_as::<_, (Option<String>, Option<Vec<u8>>)>(
-                "SELECT image_mime_type, image_bytes FROM native_playlists WHERE public_api_id = $1",
+            let image = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+                "SELECT image_mime_type, asset_key FROM native_playlists WHERE public_api_id = $1",
             )
             .bind(public_id)
             .fetch_optional(&state.pool)
             .await?;
             match image {
-                Some((_, Some(bytes))) => Ok(Some(
-                    processed_response(kind, bytes, size, headers, admission).await?,
+                Some((_, Some(key))) => Ok(Some(
+                    processed_response(
+                        kind,
+                        melodee_persistence::asset_files::read(key).await?,
+                        size,
+                        headers,
+                        admission,
+                    )
+                    .await?,
                 )),
                 Some((_, None)) => Ok(Some(byte_response(
                     kind.fallback().to_vec(),
@@ -534,8 +541,8 @@ async fn load_image(
         ImageKind::User => {
             // `native_user_avatars` is the avatar authority; the
             // migration-0010 columns remain the legacy-import fallback.
-            let image = sqlx::query_as::<_, (Option<String>, Option<Vec<u8>>)>(
-                "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)
+            let image = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+                "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.asset_key, u.asset_key)
                  FROM native_users u
                  LEFT JOIN native_user_avatars a ON a.user_id = u.id
                  WHERE u.public_api_id = $1",
@@ -544,8 +551,15 @@ async fn load_image(
             .fetch_optional(&state.pool)
             .await?;
             match image {
-                Some((_, Some(bytes))) => Ok(Some(
-                    processed_response(kind, bytes, size, headers, admission).await?,
+                Some((_, Some(key))) => Ok(Some(
+                    processed_response(
+                        kind,
+                        melodee_persistence::asset_files::read(key).await?,
+                        size,
+                        headers,
+                        admission,
+                    )
+                    .await?,
                 )),
                 Some((_, None)) => Ok(Some(byte_response(
                     kind.fallback().to_vec(),
@@ -749,27 +763,28 @@ async fn artwork_override_bytes(
 ) -> Result<Option<Vec<u8>>, sqlx::Error> {
     let query = match kind {
         ImageKind::Album => {
-            "SELECT img.image_bytes FROM catalog_entity_images img
+            "SELECT img.asset_key FROM catalog_entity_images img
              JOIN releases release ON release.id = img.release_id AND release.status = 'active'
              WHERE img.entity_type = 'release' AND release.public_api_id = $1"
         }
         ImageKind::Song => {
-            "SELECT img.image_bytes FROM catalog_entity_images img
+            "SELECT img.asset_key FROM catalog_entity_images img
              JOIN releases release ON release.id = img.release_id AND release.status = 'active'
              JOIN tracks track ON track.release_id = release.id
              WHERE img.entity_type = 'release' AND track.public_api_id = $1"
         }
         ImageKind::Artist => {
-            "SELECT img.image_bytes FROM catalog_entity_images img
+            "SELECT img.asset_key FROM catalog_entity_images img
              JOIN artists artist ON artist.id = img.artist_id
              WHERE img.entity_type = 'artist' AND artist.public_api_id = $1"
         }
         ImageKind::Playlist | ImageKind::User => return Ok(None),
     };
-    sqlx::query_scalar(query)
+    let key = sqlx::query_scalar(query)
         .bind(public_id)
         .fetch_optional(pool)
-        .await
+        .await?;
+    melodee_persistence::asset_files::read_optional(key).await
 }
 
 /// Provider-sourced artwork (`catalog_provider_images`) for the addressed
@@ -785,14 +800,14 @@ async fn provider_artwork_bytes(
 ) -> Result<Option<Vec<u8>>, sqlx::Error> {
     let provider_query = match kind {
         ImageKind::Album => {
-            "SELECT image.image_bytes FROM catalog_provider_images image
+            "SELECT image.asset_key FROM catalog_provider_images image
              JOIN releases release ON release.id=image.entity_id
              WHERE image.entity_type='release' AND release.public_api_id=$1
                AND release.status='active'
              ORDER BY image.confidence DESC, image.observed_at DESC, image.id DESC LIMIT 1"
         }
         ImageKind::Song => {
-            "SELECT image.image_bytes FROM catalog_provider_images image
+            "SELECT image.asset_key FROM catalog_provider_images image
              JOIN releases release ON release.id=image.entity_id
              JOIN tracks track ON track.release_id=release.id
              WHERE image.entity_type='release' AND track.public_api_id=$1
@@ -800,7 +815,7 @@ async fn provider_artwork_bytes(
              ORDER BY image.confidence DESC, image.observed_at DESC, image.id DESC LIMIT 1"
         }
         ImageKind::Artist => {
-            "SELECT image.image_bytes FROM catalog_provider_images image
+            "SELECT image.asset_key FROM catalog_provider_images image
              JOIN artists artist ON artist.id=image.entity_id
              WHERE image.entity_type='artist' AND artist.public_api_id=$1
                AND artist.status NOT IN ('merged','deprecated')
@@ -808,10 +823,11 @@ async fn provider_artwork_bytes(
         }
         ImageKind::Playlist | ImageKind::User => return Ok(None),
     };
-    sqlx::query_scalar(provider_query)
+    let key = sqlx::query_scalar(provider_query)
         .bind(public_id)
         .fetch_optional(pool)
-        .await
+        .await?;
+    melodee_persistence::asset_files::read_optional(key).await
 }
 
 async fn canonical_artwork_bytes(

@@ -1408,7 +1408,7 @@ async fn coalesce_extended_artist_data(
         "UPDATE catalog_provider_images target
             SET source_url=source.source_url,
                 image_mime_type=source.image_mime_type,
-                image_bytes=source.image_bytes,
+                asset_key=source.asset_key,
                 confidence=source.confidence,
                 observed_at=source.observed_at
            FROM catalog_provider_images source

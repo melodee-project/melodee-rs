@@ -269,10 +269,14 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     .await
     .expect("theme");
     sqlx::query(
-        "INSERT INTO native_theme_assets(theme_id,relative_path,mime_type,bytes) \
+        "INSERT INTO native_theme_assets(theme_id,relative_path,mime_type,asset_key) \
          VALUES('fixture','theme.css','text/css',$1)",
     )
-    .bind(b"body{}".as_slice())
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, b"body{}")
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await
     .expect("theme asset");

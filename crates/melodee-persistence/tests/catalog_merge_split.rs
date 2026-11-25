@@ -820,11 +820,15 @@ async fn batch_merge_coalesces_user_provider_image_and_discovery_data() {
     ] {
         sqlx::query(
             "INSERT INTO catalog_entity_images (
-                 entity_type,artist_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at
+                 entity_type,artist_id,image_mime_type,asset_key,uploaded_by,created_at,updated_at
              ) VALUES ('artist',$1,'image/png',$2,'merge-test',$3,$3)",
         )
         .bind(artist_id.into_uuid())
-        .bind(bytes)
+        .bind(
+            melodee_persistence::asset_files::put(&db.pool, &bytes)
+                .await
+                .expect("store fixture"),
+        )
         .bind(now)
         .execute(&db.pool)
         .await
@@ -839,14 +843,18 @@ async fn batch_merge_coalesces_user_provider_image_and_discovery_data() {
         sqlx::query(
             "INSERT INTO catalog_provider_images (
                  id,entity_type,entity_id,provider,source_url,image_mime_type,
-                 image_bytes,confidence,observed_at
+                 asset_key,confidence,observed_at
              ) VALUES ($1,'artist',$2,$3,$4,'image/png',$5,$6,$7)",
         )
         .bind(Uuid::now_v7())
         .bind(artist_id.into_uuid())
         .bind(provider)
         .bind(format!("https://example.test/{provider}/{marker}"))
-        .bind(vec![0x89, 0x50, 0x4e, 0x47, marker])
+        .bind(
+            melodee_persistence::asset_files::put(&db.pool, &[0x89, 0x50, 0x4e, 0x47, marker])
+                .await
+                .expect("store fixture"),
+        )
         .bind(confidence)
         .bind(now + Duration::seconds(i64::from(marker)))
         .execute(&db.pool)

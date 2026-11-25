@@ -1181,6 +1181,8 @@ export const STATS = {
     workItems: 321,
     playEvents: 12_345,
     pendingProjection: 0,
+    assetFileBytes: 2097152,
+    assetFileCount: 3,
     poolCapacity: 100,
     poolInUse: 26,
   },

@@ -22,8 +22,9 @@ services:
   initialize-storage:
     image: alpine:3.22
     user: "0:0"
-    command: ["sh", "-ec", "chown 10001:10001 /library /staging /work /search /logs"]
+    command: ["sh", "-ec", "chown 10001:10001 /library /staging /work /search /logs /assets"]
     volumes:
+      - melodee_assets:/assets
       - melodee_library:/library
       - melodee_staging:/staging
       - melodee_work:/work
@@ -56,6 +57,7 @@ services:
       MELODEE__INGEST__SOURCE_LIBRARY_NAME: main
       MELODEE__INGEST__STAGING_ROOT: /var/lib/melodee/staging
       MELODEE__NORMALIZATION__WORK_AREA: /var/lib/melodee/work
+      MELODEE__STORAGE__ASSET_ROOT: /var/lib/melodee/assets
       MELODEE__STORAGE__ROOT: /var/lib/melodee/library
       MELODEE__SEARCH__ENABLED: "true"
       MELODEE__SEARCH__ROOT: /var/lib/melodee/search
@@ -65,6 +67,7 @@ services:
       # firewalled direct deployment.
       - "${MELODEE_BIND_ADDRESS:-127.0.0.1}:8080:8080"
     volumes:
+      - melodee_assets:/var/lib/melodee/assets
       - melodee_library:/var/lib/melodee/library
       - melodee_staging:/var/lib/melodee/staging
       - melodee_work:/var/lib/melodee/work
@@ -77,6 +80,7 @@ services:
 
 volumes:
   melodee_postgres:
+  melodee_assets:
   melodee_library:
   melodee_staging:
   melodee_work:

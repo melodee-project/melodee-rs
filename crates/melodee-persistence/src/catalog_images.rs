@@ -69,19 +69,23 @@ pub struct CatalogImageAudit<'a> {
 /// Unit store, matching the `CatalogStore` associated-function pattern.
 pub struct CatalogImageStore;
 
-type ImageRow = (String, Vec<u8>, String, OffsetDateTime, OffsetDateTime);
+type ImageRow = (String, String, String, OffsetDateTime, OffsetDateTime);
 
 impl CatalogImageStore {
-    fn row(entity: CatalogImageEntity, entity_id: Uuid, row: ImageRow) -> StoredCatalogEntityImage {
-        StoredCatalogEntityImage {
+    async fn row(
+        entity: CatalogImageEntity,
+        entity_id: Uuid,
+        row: ImageRow,
+    ) -> Result<StoredCatalogEntityImage, CatalogImageError> {
+        Ok(StoredCatalogEntityImage {
             entity_type: entity,
             entity_id,
             image_mime_type: row.0,
-            image_bytes: row.1,
+            image_bytes: crate::asset_files::read(row.1).await?,
             uploaded_by: row.2,
             created_at: row.3,
             updated_at: row.4,
-        }
+        })
     }
 
     /// Reads the override for one entity (internal id), when present.
@@ -96,7 +100,7 @@ impl CatalogImageStore {
         let row = match entity {
             CatalogImageEntity::Artist => {
                 sqlx::query_as::<_, ImageRow>(
-                    "SELECT image_mime_type, image_bytes, uploaded_by, created_at, updated_at
+                    "SELECT image_mime_type, asset_key, uploaded_by, created_at, updated_at
                      FROM catalog_entity_images
                      WHERE entity_type = 'artist' AND artist_id = $1",
                 )
@@ -106,7 +110,7 @@ impl CatalogImageStore {
             }
             CatalogImageEntity::Release => {
                 sqlx::query_as::<_, ImageRow>(
-                    "SELECT image_mime_type, image_bytes, uploaded_by, created_at, updated_at
+                    "SELECT image_mime_type, asset_key, uploaded_by, created_at, updated_at
                      FROM catalog_entity_images
                      WHERE entity_type = 'release' AND release_id = $1",
                 )
@@ -115,7 +119,10 @@ impl CatalogImageStore {
                 .await?
             }
         };
-        Ok(row.map(|row| Self::row(entity, entity_id, row)))
+        match row {
+            Some(row) => Self::row(entity, entity_id, row).await.map(Some),
+            None => Ok(None),
+        }
     }
 
     /// Installs or replaces the override for one entity and audit-logs the
@@ -144,26 +151,26 @@ impl CatalogImageStore {
         match entity {
             CatalogImageEntity::Artist => sqlx::query(
                 "INSERT INTO catalog_entity_images (
-                        entity_type, artist_id, image_mime_type, image_bytes,
+                        entity_type, artist_id, image_mime_type, asset_key,
                         uploaded_by, created_at, updated_at
                      ) VALUES ('artist', $1, $2, $3, $4, $5, $5)
                      ON CONFLICT (artist_id) WHERE artist_id IS NOT NULL DO UPDATE
-                     SET image_mime_type = $2, image_bytes = $3, uploaded_by = $4,
+                     SET image_mime_type = $2, asset_key = $3, uploaded_by = $4,
                          updated_at = $5",
             ),
             CatalogImageEntity::Release => sqlx::query(
                 "INSERT INTO catalog_entity_images (
-                        entity_type, release_id, image_mime_type, image_bytes,
+                        entity_type, release_id, image_mime_type, asset_key,
                         uploaded_by, created_at, updated_at
                      ) VALUES ('release', $1, $2, $3, $4, $5, $5)
                      ON CONFLICT (release_id) WHERE release_id IS NOT NULL DO UPDATE
-                     SET image_mime_type = $2, image_bytes = $3, uploaded_by = $4,
+                     SET image_mime_type = $2, asset_key = $3, uploaded_by = $4,
                          updated_at = $5",
             ),
         }
         .bind(entity_id)
         .bind(image_mime_type)
-        .bind(image_bytes)
+        .bind(crate::asset_files::put_on(&mut tx, image_bytes).await?)
         .bind(audit.actor)
         .bind(audit.now)
         .execute(&mut *tx)

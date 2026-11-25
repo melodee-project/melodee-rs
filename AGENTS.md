@@ -206,6 +206,14 @@ implementation.
 
 ## Database and data-safety rules
 
+**Never store binary objects in PostgreSQL.** Store artwork, avatars, attachments, theme
+files, audio and all other file payloads in configuration-driven persistent file storage.
+This includes caches, imports, previews and provider responses. Do not embed files in
+`bytea`, large objects, text, JSON, base64 or hex. Persist only references, sizes, media
+types, content hashes, ownership and provenance. Authentication digests, salts, encrypted
+credentials and migration checksums are cryptographic metadata, not file storage.
+Preserve legacy payloads until their filesystem copies have been independently verified.
+
 No schema change without a migration, rollback/forward plan, and data-integrity tests. No
 destructive migration without backup/restore docs and an accepted ADR. Work-item claiming is
 lease-based and safe across processes. DB writes and outbox/index events commit atomically where

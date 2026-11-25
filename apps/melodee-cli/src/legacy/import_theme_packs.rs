@@ -227,13 +227,17 @@ pub async fn import_theme_packs(
         for (path, data) in &parsed.1 {
             let mime = mime_for_asset(path);
             sqlx::query(
-                "INSERT INTO native_theme_assets(theme_id,relative_path,mime_type,bytes) \
+                "INSERT INTO native_theme_assets(theme_id,relative_path,mime_type,asset_key) \
                  VALUES($1,$2,$3,$4)",
             )
             .bind(&parsed.0.id)
             .bind(path)
             .bind(mime)
-            .bind(data)
+            .bind(
+                melodee_persistence::asset_files::put_on(&mut tx, data)
+                    .await
+                    .map_err(|e| format!("theme asset file write failed: {e}"))?,
+            )
             .execute(&mut *tx)
             .await
             .map_err(|e| format!("theme asset insert failed: {e}"))?;

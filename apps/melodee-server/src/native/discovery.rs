@@ -1730,13 +1730,13 @@ async fn theme_import(
     .await?;
     for (path, (mime, bytes)) in parsed.assets {
         sqlx::query(
-            "INSERT INTO native_theme_assets(theme_id,relative_path,mime_type,bytes) \
+            "INSERT INTO native_theme_assets(theme_id,relative_path,mime_type,asset_key) \
              VALUES($1,$2,$3,$4)",
         )
         .bind(&parsed.metadata.id)
         .bind(path)
         .bind(mime)
-        .bind(bytes)
+        .bind(melodee_persistence::asset_files::put_on(&mut tx, &bytes).await?)
         .execute(&mut *tx)
         .await?;
     }
@@ -1769,24 +1769,26 @@ async fn theme_export(
     if !principal.is_admin {
         return Err(NativeApiError::NotFound);
     }
-    let assets = sqlx::query_as::<_, (String, Vec<u8>)>(
-        "SELECT asset.relative_path,asset.bytes FROM native_themes theme \
+    let keys = sqlx::query_as::<_, (String, String)>(
+        "SELECT asset.relative_path,asset.asset_key FROM native_themes theme \
          JOIN native_theme_assets asset ON asset.theme_id=theme.id \
          WHERE theme.id=$1 ORDER BY asset.relative_path",
     )
     .bind(&id)
     .fetch_all(&state.pool)
     .await?;
-    if assets.is_empty() || assets.len() > MAX_THEME_ENTRIES {
+    if keys.is_empty() || keys.len() > MAX_THEME_ENTRIES {
         return Err(NativeApiError::NotFound);
     }
-    let expanded = assets.iter().try_fold(0_usize, |total, (_, bytes)| {
-        total
-            .checked_add(bytes.len())
-            .filter(|sum| *sum <= usize::try_from(MAX_THEME_EXPANDED_BYTES).unwrap_or(usize::MAX))
-    });
-    if expanded.is_none() {
-        return Err(NativeApiError::Unavailable);
+    let mut assets = Vec::with_capacity(keys.len());
+    let mut expanded = 0_u64;
+    for (path, key) in keys {
+        let bytes = melodee_persistence::asset_files::read(key).await?;
+        expanded += bytes.len() as u64;
+        if expanded > MAX_THEME_EXPANDED_BYTES {
+            return Err(NativeApiError::Unavailable);
+        }
+        assets.push((path, bytes));
     }
     let bytes = tokio::task::spawn_blocking(move || build_theme_zip(assets))
         .await
@@ -1836,8 +1838,8 @@ async fn theme_asset(
     {
         return Err(NativeApiError::BadRequest);
     }
-    let row = sqlx::query_as::<_, (String, Vec<u8>)>(
-        "SELECT mime_type,bytes FROM native_theme_assets WHERE theme_id=$1 AND relative_path=$2",
+    let row = sqlx::query_as::<_, (String, String)>(
+        "SELECT mime_type,asset_key FROM native_theme_assets WHERE theme_id=$1 AND relative_path=$2",
     )
     .bind(id)
     .bind(path)
@@ -1868,7 +1870,9 @@ async fn theme_asset(
         return Ok(response);
     };
     let content_type = HeaderValue::from_str(&row.0).map_err(|_| NativeApiError::Unavailable)?;
-    let mut response = Response::new(Body::from(row.1));
+    let mut response = Response::new(Body::from(
+        melodee_persistence::asset_files::read(row.1).await?,
+    ));
     *response.status_mut() = StatusCode::OK;
     response
         .headers_mut()

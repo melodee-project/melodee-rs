@@ -814,11 +814,15 @@ async fn seed_playlist_with_artwork(db: &common::TestDb, state: &OsState, jpeg: 
         .and_then(|raw| Uuid::parse_str(raw).ok())
         .expect("playlist public id");
     sqlx::query(
-        "UPDATE native_playlists SET image_mime_type = 'image/jpeg', image_bytes = $2 \
+        "UPDATE native_playlists SET image_mime_type = 'image/jpeg', asset_key = $2 \
          WHERE public_api_id = $1",
     )
     .bind(public_id)
-    .bind(jpeg)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, jpeg)
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await
     .expect("seed playlist artwork");
@@ -933,10 +937,14 @@ async fn get_avatar_by_username_returns_stored_bytes() {
     let state = state(&db).await;
     let avatar = b"\x89PNG\r\n\x1a\nprobe-avatar-bytes".to_vec();
     sqlx::query(
-        "UPDATE native_users SET image_mime_type = 'image/png', image_bytes = $1 \
+        "UPDATE native_users SET image_mime_type = 'image/png', asset_key = $1 \
          WHERE normalized_username = 'PHASE0-FIXTURE'",
     )
-    .bind(&avatar)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &avatar)
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await
     .expect("seed avatar");
@@ -954,10 +962,14 @@ async fn get_avatar_by_user_id_returns_stored_bytes() {
     let avatar = b"\x89PNG\r\n\x1a\nprobe-avatar-bytes".to_vec();
     let public_api_id = fixture_public_api_id(&db).await;
     sqlx::query(
-        "UPDATE native_users SET image_mime_type = 'image/png', image_bytes = $1 \
+        "UPDATE native_users SET image_mime_type = 'image/png', asset_key = $1 \
          WHERE normalized_username = 'PHASE0-FIXTURE'",
     )
-    .bind(&avatar)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &avatar)
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await
     .expect("seed avatar");
@@ -984,9 +996,13 @@ async fn get_avatar_reads_phase9_avatar_store() {
     // Legacy-imported bytes remain visible when no new-store row exists.
     let legacy = b"\x89PNG\r\n\x1a\nlegacy-imported-avatar".to_vec();
     sqlx::query(
-        "UPDATE native_users SET image_mime_type = 'image/png', image_bytes = $1 WHERE id = $2",
+        "UPDATE native_users SET image_mime_type = 'image/png', asset_key = $1 WHERE id = $2",
     )
-    .bind(&legacy)
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &legacy)
+            .await
+            .expect("store fixture"),
+    )
     .bind(internal_id)
     .execute(&db.pool)
     .await

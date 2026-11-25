@@ -89,10 +89,28 @@ enum MigrationCompatibilityInvariant {
 /// # Errors
 /// Returns the migration error describing the failed migration.
 pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
-    match compatible_migrator(pool).await? {
-        Some(migrator) => migrator.run(pool).await,
-        None => MIGRATOR.run(pool).await,
-    }?;
+    let compatible = compatible_migrator(pool).await?;
+    let migrator = compatible.as_ref().unwrap_or(&MIGRATOR);
+    {
+        let mut conn = pool.acquire().await?;
+        // Hold one session across both schema steps. Closing it releases the lock
+        // even if conversion is cancelled or verification fails.
+        conn.close_on_drop();
+        sqlx::query("SELECT pg_advisory_lock(19761125, 55)")
+            .execute(&mut *conn)
+            .await?;
+        migrator.run_to(54, &mut *conn).await?;
+        let done: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT FROM _sqlx_migrations WHERE version=55 AND success)",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        crate::asset_files::check_binding(&mut conn).await?;
+        if !done {
+            verify_legacy_files(&mut conn).await?;
+        }
+        migrator.run(&mut *conn).await?;
+    }
     crate::catalog_mutations::repair_import_overlay_references(pool)
         .await
         .map_err(|error| MigrateError::Source(Box::new(error)))
@@ -189,7 +207,7 @@ fn compatibility_source_error(error: MigrationCompatibilityInvariant) -> Migrate
     MigrateError::Source(Box::new(error))
 }
 
-fn checksum_hex(checksum: &[u8]) -> String {
+pub(crate) fn checksum_hex(checksum: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut encoded = String::with_capacity(checksum.len() * 2);
     for byte in checksum {
@@ -254,4 +272,33 @@ pub async fn migration_status(pool: &PgPool) -> Result<MigrationStatus, sqlx::Er
         latest_available,
         all_successful: row.1 == 0 && row.0.is_some(),
     })
+}
+
+/// A server-side cursor limits memory to a single legacy payload. The old
+/// columns are retained until the final schema transaction enforces every FK.
+async fn verify_legacy_files(conn: &mut sqlx::PgConnection) -> Result<(), sqlx::Error> {
+    use sqlx::Connection as _;
+    for (table, column) in [
+        ("catalog_provider_images", "image_bytes"),
+        ("catalog_entity_images", "image_bytes"),
+        ("native_user_avatars", "image"),
+        ("native_theme_assets", "bytes"),
+        ("native_playlists", "image_bytes"),
+        ("native_users", "image_bytes"),
+    ] {
+        let mut tx = conn.begin().await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!("DECLARE asset_payloads NO SCROLL CURSOR FOR SELECT {column} FROM {table} WHERE {column} IS NOT NULL")))
+            .execute(&mut *tx).await?;
+        let mut verified = 0_u64;
+        while let Some(payload) = sqlx::query_scalar::<_, Vec<u8>>("FETCH NEXT FROM asset_payloads")
+            .fetch_optional(&mut *tx)
+            .await?
+        {
+            crate::asset_files::put_on(&mut tx, &payload).await?;
+            verified += 1;
+        }
+        tx.commit().await?;
+        tracing::info!(table, verified, "verified legacy assets on file storage");
+    }
+    Ok(())
 }

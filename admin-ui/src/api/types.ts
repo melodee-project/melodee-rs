@@ -1079,6 +1079,8 @@ export interface Stats {
     workItems: number;
     playEvents: number;
     pendingProjection: number;
+    assetFileBytes: number;
+    assetFileCount: number;
     poolCapacity: number;
     poolInUse: number;
   };

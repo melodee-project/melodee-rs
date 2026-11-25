@@ -12,6 +12,23 @@ updates unless you intentionally accept each new stable release automatically. P
 During `0.x`, a minor update can require migration steps. From `1.0.0` onward, a major update
 signals an incompatible change to a supported interface. See the [Melodee versioning policy](https://github.com/melodee-project/melodee-rs/blob/main/VERSIONING.md).
 
+## Moving existing artwork to file storage
+
+Before upgrading past database migration 0053, provision the persistent asset directory for every
+server, worker and file-importing CLI. Stop writers, take a full database backup and test-restore
+it. Allow free space for the original payloads on the asset filesystem and temporary table
+rewrites and WAL on PostgreSQL. Run `melodee-cli migrate` as the service user with the same
+configuration as the server. It copies one payload at a time, verifies a fresh read of every
+file, then atomically replaces the six binary columns with references. An interrupted copy can
+be retried against the same store. A missing or corrupt file fails verification. Preserve the
+original and investigate the filesystem before retrying.
+
+For subsequent backups, take the database snapshot first, then back up the entire immutable
+asset directory including its marker. Retain both for the same restore point. Test restoration
+on a separate database and directory and retrieve a known avatar or cover. Rolling back across
+0055 requires restoring the **pre-upgrade database** and the matching old server revision.
+[Asset storage](./storage/)
+
 ## Before the upgrade
 
 1. Read the GitHub Release notes for the target version.

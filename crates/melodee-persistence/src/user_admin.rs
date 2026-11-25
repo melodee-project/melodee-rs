@@ -170,21 +170,18 @@ impl UserAdminStore {
         pool: &PgPool,
         user_id: Uuid,
     ) -> Result<Option<StoredAvatar>, UserAdminError> {
-        Ok(
-            sqlx::query_as::<_, (Uuid, String, Vec<u8>, OffsetDateTime)>(
-                "SELECT user_id, content_type, image, updated_at
-             FROM native_user_avatars WHERE user_id=$1",
-            )
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await?
-            .map(|(user_id, content_type, image, updated_at)| StoredAvatar {
-                user_id,
-                content_type,
-                image,
-                updated_at,
-            }),
-        )
+        let row = sqlx::query_as::<_, (Uuid,String,String,OffsetDateTime)>(
+            "SELECT user_id,content_type,asset_key,updated_at FROM native_user_avatars WHERE user_id=$1")
+            .bind(user_id).fetch_optional(pool).await?;
+        let Some((user_id, content_type, key, updated_at)) = row else {
+            return Ok(None);
+        };
+        Ok(Some(StoredAvatar {
+            user_id,
+            content_type,
+            image: crate::asset_files::read(key).await?,
+            updated_at,
+        }))
     }
 
     /// Replaces (or installs) one user's avatar. The caller has already
@@ -220,14 +217,14 @@ impl UserAdminStore {
         }
         let mut tx = pool.begin().await?;
         let updated = sqlx::query(
-            "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
+            "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
              VALUES ($1,$2,$3,$4)
              ON CONFLICT (user_id) DO UPDATE
-             SET content_type=$2, image=$3, updated_at=$4",
+             SET content_type=$2, asset_key=$3, updated_at=$4",
         )
         .bind(user_id)
         .bind(content_type)
-        .bind(image)
+        .bind(crate::asset_files::put_on(&mut tx, image).await?)
         .bind(now)
         .execute(&mut *tx)
         .await?;

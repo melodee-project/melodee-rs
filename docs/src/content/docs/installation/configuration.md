@@ -174,6 +174,7 @@ Tune the stages independently.
 | `MELODEE__VALIDATION__CONCURRENCY` | `2` | Maximum normalized Releases structurally validated simultaneously by one process. |
 | `MELODEE__PUBLICATION__CONCURRENCY` | `2` | Maximum complete Release bundles copied and finalized simultaneously by one process. |
 | `MELODEE__PUBLICATION__NFS_MIB_PER_SECOND` | `8` | Positive integer. Combined MiB/s for canonical media and artwork writes and verification reads by one Linux NFS publisher service. Separate processes have separate budgets. |
+| `MELODEE__STORAGE__ASSET_ROOT` | Per-user data directory, or the assets volume in Compose | Existing absolute directory for artwork, avatars and theme files. Mount the same store for the server, workers and CLI imports that write files. |
 | `MELODEE__STORAGE__ROOT` | — (publication disabled) | Dedicated canonical-library root. Setting it enables validation/publication workers. It is distinct from staging. |
 
 ### Catalog import

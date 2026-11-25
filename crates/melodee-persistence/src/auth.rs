@@ -664,13 +664,17 @@ impl AuthStore {
         pool: &PgPool,
         public_api_id: Uuid,
     ) -> Result<Option<(String, Vec<u8>)>, AuthStoreError> {
-        Ok(sqlx::query_as::<_, (String, Vec<u8>)>(
-            "SELECT image_mime_type,image_bytes FROM native_users
-             WHERE public_api_id=$1 AND image_mime_type IS NOT NULL AND image_bytes IS NOT NULL",
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT image_mime_type,asset_key FROM native_users
+             WHERE public_api_id=$1 AND image_mime_type IS NOT NULL AND asset_key IS NOT NULL",
         )
         .bind(public_api_id)
         .fetch_optional(pool)
-        .await?)
+        .await?;
+        match row {
+            Some((mime, key)) => Ok(Some((mime, crate::asset_files::read(key).await?))),
+            None => Ok(None),
+        }
     }
 
     /// Atomically records one attempt using a bounded PostgreSQL key set.

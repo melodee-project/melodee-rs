@@ -434,14 +434,11 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
         assert!(conditional_body.is_empty());
     }
     sqlx::query(
-        "UPDATE native_playlists SET image_mime_type = 'image/png', image_bytes = $2
+        "UPDATE native_playlists SET image_mime_type = 'image/png', asset_key = $2
          WHERE public_api_id = $1",
     )
     .bind(playlist_public_id)
-    .bind(
-        include_bytes!("../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-user-thumb.bin")
-            .as_slice(),
-    )
+    .bind(melodee_persistence::asset_files::put(&db.pool, include_bytes!("../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-user-thumb.bin")).await.expect("store fixture"))
     .execute(&db.pool)
     .await
     .expect("custom playlist image");
@@ -466,8 +463,9 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
             .expect("custom image dimensions"),
         (80, 80)
     );
-    sqlx::query("UPDATE native_playlists SET image_mime_type = 'image/png', image_bytes = 'bad' WHERE public_api_id = $1")
+    sqlx::query("UPDATE native_playlists SET image_mime_type = 'image/png', asset_key = $2 WHERE public_api_id = $1")
         .bind(playlist_public_id)
+        .bind(melodee_persistence::asset_files::put(&db.pool, b"bad").await.expect("store fixture"))
         .execute(&db.pool)
         .await
         .expect("malformed image fixture");
@@ -503,13 +501,13 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     .to_vec();
     sqlx::query(
         "INSERT INTO catalog_provider_images
-           (id, entity_type, entity_id, provider, source_url, image_mime_type, image_bytes,
+           (id, entity_type, entity_id, provider, source_url, image_mime_type, asset_key,
             confidence, observed_at)
          VALUES ($1,'release',$2,'musicbrainz','https://example.invalid/cover.jpg','image/jpeg',$3,90,$4)",
     )
     .bind(Uuid::now_v7())
     .bind(fixture.release_id().into_uuid())
-    .bind(&provider_bytes)
+    .bind(melodee_persistence::asset_files::put(&db.pool, &provider_bytes).await.expect("store fixture"))
     .bind(now)
     .execute(&db.pool)
     .await
@@ -533,11 +531,11 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     .to_vec();
     sqlx::query(
         "INSERT INTO catalog_entity_images
-           (entity_type, release_id, image_mime_type, image_bytes, uploaded_by, created_at, updated_at)
+           (entity_type, release_id, image_mime_type, asset_key, uploaded_by, created_at, updated_at)
          VALUES ('release',$1,'image/jpeg',$2,'test-admin',$3,$3)",
     )
     .bind(fixture.release_id().into_uuid())
-    .bind(&override_bytes)
+    .bind(melodee_persistence::asset_files::put(&db.pool, &override_bytes).await.expect("store fixture"))
     .bind(now)
     .execute(&db.pool)
     .await

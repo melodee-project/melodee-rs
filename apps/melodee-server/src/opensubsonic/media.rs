@@ -734,7 +734,7 @@ enum Artwork {
 }
 
 /// Resolves artwork for a `song_`/`album_`/`artist_`/`playlist_` id. Playlist
-/// ids serve `native_playlists.image_bytes`; catalog ids first consult the
+/// ids serve `native_playlists.asset_key`; catalog ids first consult the
 /// ADR-0143 Artist/Release override table, then fall back to the captured
 /// default artwork; unknown ids return None (the captured 200 empty-body
 /// shape).
@@ -746,20 +746,20 @@ async fn resolve_artwork(
         && let Ok(id) = Uuid::parse_str(rest)
     {
         let row = sqlx::query(
-            "SELECT image_mime_type, image_bytes FROM native_playlists WHERE public_api_id = $1",
+            "SELECT image_mime_type, asset_key FROM native_playlists WHERE public_api_id = $1",
         )
         .bind(id)
         .fetch_optional(pool)
         .await?;
-        let stored = row.and_then(|row| {
-            let mime: Option<String> = row.try_get(0).ok()?;
-            let bytes: Option<Vec<u8>> = row.try_get(1).ok()?;
-            bytes.map(|b| {
-                let mime_type = mime.unwrap_or_else(|| sniff_image_content_type(&b));
-                (b, mime_type)
-            })
-        });
-        return Ok(stored.map(|(bytes, mime)| Artwork::Stored(bytes, mime)));
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let mime: Option<String> = row.try_get(0)?;
+        let bytes = melodee_persistence::asset_files::read_optional(row.try_get(1)?).await?;
+        return Ok(bytes.map(|bytes| {
+            let mime = mime.unwrap_or_else(|| sniff_image_content_type(&bytes));
+            Artwork::Stored(bytes, mime)
+        }));
     }
     if !(raw_id.starts_with("album_")
         || raw_id.starts_with("song_")
@@ -788,13 +788,13 @@ async fn catalog_artwork_override(
 ) -> Result<Option<(Vec<u8>, String)>, sqlx::Error> {
     let (query, public_id) = match entity {
         EntityRef::Artist(id) => (
-            "SELECT COALESCE(image.image_bytes, provider.image_bytes),
+            "SELECT COALESCE(image.asset_key, provider.asset_key),
                     COALESCE(image.image_mime_type, provider.image_mime_type)
              FROM artists artist
              LEFT JOIN catalog_entity_images image
                ON image.entity_type='artist' AND image.artist_id=artist.id
              LEFT JOIN LATERAL (
-                 SELECT image_bytes, image_mime_type
+                 SELECT asset_key, image_mime_type
                  FROM catalog_provider_images
                  WHERE entity_type='artist' AND entity_id=artist.id
                  ORDER BY confidence DESC, observed_at DESC, id DESC LIMIT 1
@@ -803,13 +803,13 @@ async fn catalog_artwork_override(
             id,
         ),
         EntityRef::Release(id) => (
-            "SELECT COALESCE(image.image_bytes, provider.image_bytes),
+            "SELECT COALESCE(image.asset_key, provider.asset_key),
                     COALESCE(image.image_mime_type, provider.image_mime_type)
              FROM releases release
              LEFT JOIN catalog_entity_images image
                ON image.entity_type='release' AND image.release_id=release.id
              LEFT JOIN LATERAL (
-                 SELECT image_bytes, image_mime_type
+                 SELECT asset_key, image_mime_type
                  FROM catalog_provider_images
                  WHERE entity_type='release' AND entity_id=release.id
                  ORDER BY confidence DESC, observed_at DESC, id DESC LIMIT 1
@@ -818,14 +818,14 @@ async fn catalog_artwork_override(
             id,
         ),
         EntityRef::Track(id) => (
-            "SELECT COALESCE(image.image_bytes, provider.image_bytes),
+            "SELECT COALESCE(image.asset_key, provider.asset_key),
                     COALESCE(image.image_mime_type, provider.image_mime_type)
              FROM tracks track
              JOIN releases release ON release.id=track.release_id AND release.status='active'
              LEFT JOIN catalog_entity_images image
                ON image.entity_type='release' AND image.release_id=release.id
              LEFT JOIN LATERAL (
-                 SELECT image_bytes, image_mime_type
+                 SELECT asset_key, image_mime_type
                  FROM catalog_provider_images
                  WHERE entity_type='release' AND entity_id=release.id
                  ORDER BY confidence DESC, observed_at DESC, id DESC LIMIT 1
@@ -834,16 +834,16 @@ async fn catalog_artwork_override(
             id,
         ),
     };
-    let row = sqlx::query_as::<_, (Option<Vec<u8>>, Option<String>)>(query)
+    let row = sqlx::query_as::<_, (Option<String>, Option<String>)>(query)
         .bind(public_id)
         .fetch_optional(pool)
         .await?;
-    Ok(row.and_then(|(bytes, mime_type)| {
-        bytes.map(|bytes| {
-            let mime_type = mime_type.unwrap_or_else(|| sniff_image_content_type(&bytes));
-            (bytes, mime_type)
-        })
-    }))
+    let Some((Some(key), mime)) = row else {
+        return Ok(None);
+    };
+    let bytes = melodee_persistence::asset_files::read(key).await?;
+    let mime = mime.unwrap_or_else(|| sniff_image_content_type(&bytes));
+    Ok(Some((bytes, mime)))
 }
 
 /// Whether an album_/song_/artist_ cover-art id names a known entity.
@@ -997,8 +997,8 @@ async fn get_avatar_impl(
     // ADR-0134 §2). The migration-0010 `native_users` image columns remain the
     // fallback for legacy-imported avatars; the response shape is unchanged.
     let row = if let Some(name) = username {
-        sqlx::query(
-            "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)
+        sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.asset_key, u.asset_key)
              FROM native_users u
              LEFT JOIN native_user_avatars a ON a.user_id = u.id
              WHERE u.normalized_username = UPPER($1)",
@@ -1009,8 +1009,8 @@ async fn get_avatar_impl(
     } else if let Some(raw_id) = params_ref.get("id") {
         if let Some(rest) = raw_id.strip_prefix("user_") {
             if let Ok(id) = Uuid::parse_str(rest) {
-                sqlx::query(
-                    "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)
+                sqlx::query_as::<_, (Option<String>, Option<String>)>(
+                    "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.asset_key, u.asset_key)
                      FROM native_users u
                      LEFT JOIN native_user_avatars a ON a.user_id = u.id
                      WHERE u.public_api_id = $1",
@@ -1034,11 +1034,16 @@ async fn get_avatar_impl(
             return StatusCode::NOT_FOUND.into_response();
         }
     };
-    let Some(row) = row else {
+    let Some((mime, key)) = row else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let mime: Option<String> = row.try_get(0).unwrap_or(None);
-    let bytes: Option<Vec<u8>> = row.try_get(1).unwrap_or(None);
+    let bytes = match melodee_persistence::asset_files::read_optional(key).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::error!(%error, "avatar file unavailable");
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+    };
     // Captured (`os-getavatar`): a user without stored avatar bytes is served
     // the legacy default avatar image, not a 404.
     let (bytes, default_mime) = match bytes {

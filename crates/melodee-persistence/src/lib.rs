@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod asset_files;
 mod auth;
 mod catalog;
 mod catalog_browse;

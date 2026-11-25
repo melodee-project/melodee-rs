@@ -128,7 +128,7 @@ async fn artwork_override_bytes(
 ) -> Result<Option<Vec<u8>>, sqlx::Error> {
     let query = match kind {
         "artist" => {
-            "SELECT image.image_bytes
+            "SELECT image.asset_key
              FROM catalog_entity_images image
              JOIN artists artist ON artist.id = image.artist_id
              WHERE image.entity_type = 'artist'
@@ -136,7 +136,7 @@ async fn artwork_override_bytes(
                AND artist.status NOT IN ('merged', 'deprecated')"
         }
         "album" => {
-            "SELECT image.image_bytes
+            "SELECT image.asset_key
              FROM catalog_entity_images image
              JOIN releases release ON release.id = image.release_id
              WHERE image.entity_type = 'release'
@@ -150,18 +150,18 @@ async fn artwork_override_bytes(
         .fetch_optional(pool)
         .await?;
     if override_bytes.is_some() {
-        return Ok(override_bytes);
+        return melodee_persistence::asset_files::read_optional(override_bytes).await;
     }
     let provider_query = match kind {
         "artist" => {
-            "SELECT image.image_bytes FROM catalog_provider_images image
+            "SELECT image.asset_key FROM catalog_provider_images image
              JOIN artists artist ON artist.id=image.entity_id
              WHERE image.entity_type='artist' AND artist.public_api_id=$1
                AND artist.status NOT IN ('merged','deprecated')
              ORDER BY image.confidence DESC, image.observed_at DESC, image.id DESC LIMIT 1"
         }
         "album" => {
-            "SELECT image.image_bytes FROM catalog_provider_images image
+            "SELECT image.asset_key FROM catalog_provider_images image
              JOIN releases release ON release.id=image.entity_id
              WHERE image.entity_type='release' AND release.public_api_id=$1
                AND release.status='active'
@@ -169,10 +169,11 @@ async fn artwork_override_bytes(
         }
         _ => return Ok(None),
     };
-    sqlx::query_scalar(provider_query)
+    let key = sqlx::query_scalar(provider_query)
         .bind(public_id)
         .fetch_optional(pool)
-        .await
+        .await?;
+    melodee_persistence::asset_files::read_optional(key).await
 }
 
 /// The immutable publication-plan artwork source used after the operator

@@ -24,25 +24,6 @@ const LISTENING_WINDOW_DAYS: i64 = 14;
 const MAX_BREAKDOWN_ROWS: i64 = 12;
 /// Maximum rows in a "top N" list.
 const MAX_TOP_ROWS: i64 = 5;
-/// Relations whose physical size the database panel reports. A fixed list keeps
-/// the query bounded (no catalog-wide scan of `pg_class`).
-const REPORTED_TABLES: &[&str] = &[
-    "tracks",
-    "media_assets",
-    "releases",
-    "artists",
-    "release_work_items",
-    "release_work_item_events",
-    "release_work_item_manifests",
-    "release_publication_plans",
-    "catalog_imports",
-    "native_track_plays",
-    "catalog_projection_outbox",
-    "audio_identity_evidence",
-    "policy_decisions",
-    "artist_catalog_aggregates",
-];
-
 pub fn router() -> Router<AdminSystemState> {
     Router::new().route("/api/admin/v1/stats", axum::routing::get(stats))
 }
@@ -152,6 +133,8 @@ pub struct TopTrackDto {
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseStatsDto {
     pub total_bytes: i64,
+    pub asset_file_bytes: i64,
+    pub asset_file_count: i64,
     pub tables: Vec<TableSizeDto>,
     pub work_items: i64,
     pub play_events: i64,
@@ -462,17 +445,20 @@ async fn database_stats(pool: &sqlx::PgPool) -> Result<DatabaseStatsDto, sqlx::E
         .fetch_one(pool)
         .await?;
 
-    // Sizes for a fixed relation list: no catalog-wide scan, no row-by-row walk.
+    let (asset_file_count, asset_file_bytes): (i64, i64) =
+        sqlx::query_as("SELECT count(*), COALESCE(sum(size_bytes),0) FROM asset_files")
+            .fetch_one(pool)
+            .await?;
+    // Include indexes and TOAST for every application table, then return the largest.
     let tables = sqlx::query_as::<_, (String, i64)>(
         "SELECT relation.relname,
                 pg_total_relation_size(relation.oid)::bigint AS bytes
            FROM pg_class relation
            JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
           WHERE namespace.nspname = current_schema()
-            AND relation.relname = ANY($1::text[])
-          ORDER BY bytes DESC",
+            AND relation.relkind = 'r'
+          ORDER BY bytes DESC, relation.relname LIMIT 14",
     )
-    .bind(REPORTED_TABLES)
     .fetch_all(pool)
     .await?
     .into_iter()
@@ -490,6 +476,8 @@ async fn database_stats(pool: &sqlx::PgPool) -> Result<DatabaseStatsDto, sqlx::E
 
     Ok(DatabaseStatsDto {
         total_bytes,
+        asset_file_count,
+        asset_file_bytes,
         tables,
         work_items,
         play_events,

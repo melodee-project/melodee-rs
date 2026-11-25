@@ -301,6 +301,11 @@ export function StatsScreen() {
             hint={t('stats.database.sizeHint')}
           />
           <MetricCard
+            label={t('stats.database.assetFiles')}
+            value={formatBytes(database.assetFileBytes)}
+            hint={t('stats.database.assetFilesHint', { files: formatNumber(database.assetFileCount) })}
+          />
+          <MetricCard
             label={t('stats.database.connections')}
             value={`${formatNumber(database.poolInUse)} / ${formatNumber(database.poolCapacity)}`}
             hint={t('stats.database.connectionsHint')}

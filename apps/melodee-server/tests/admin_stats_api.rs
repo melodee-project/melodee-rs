@@ -243,10 +243,14 @@ async fn stats_report_library_listening_and_database_panels() {
     let database = &body["database"];
     assert!(database["totalBytes"].as_i64().unwrap_or_default() > 0);
     let tables = database["tables"].as_array().expect("tables");
+    assert_eq!(tables.len(), 14);
     assert!(
-        tables.iter().any(|table| table["name"] == "tracks"),
-        "the tracks relation is reported"
+        tables
+            .windows(2)
+            .all(|rows| rows[0]["bytes"].as_i64() >= rows[1]["bytes"].as_i64())
     );
+    assert_eq!(database["assetFileBytes"], 0);
+    assert_eq!(database["assetFileCount"], 0);
     // The catalog import enqueues search-projection rows, and no search worker runs
     // in this test, so the honest value is whatever the outbox holds — assert it is
     // reported (not invented) rather than pinned to zero.

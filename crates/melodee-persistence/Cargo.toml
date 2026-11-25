@@ -8,6 +8,9 @@ description = "PostgreSQL stores and migrations for the Melodee catalog, work it
 publish = false
 
 [dependencies]
+sha2.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
 getrandom.workspace = true
 melodee-auth = { path = "../melodee-auth", version = "0.3.0" }
 melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
@@ -22,7 +25,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 bcrypt.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

@@ -7,6 +7,12 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+Artwork, avatars, playlist images and theme files now use persistent file storage.
+Configure `MELODEE__STORAGE__ASSET_ROOT` for every service and importing CLI. Upgrades
+verify and migrate all existing payloads. Back up the asset directory alongside PostgreSQL.
+System Stats shows file usage and the largest physical database tables.
+[Upgrade and restore instructions](docs/src/content/docs/installation/upgrading.md)
+
 ## 0.3.0 — 2026-11-25
 
 The Processing Queue shows per-stage throughput and alerts on 15-minute stalls.

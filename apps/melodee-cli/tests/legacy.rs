@@ -943,8 +943,8 @@ async fn mel2_profile_fields_and_user_images_avatar_are_safe_and_idempotent() {
     assert_eq!(profile.2.as_deref(), Some("en-US"));
     assert_eq!(profile.3.as_deref(), Some("dark"));
 
-    let (content_type, image): (String, Vec<u8>) = sqlx::query_as(
-        "SELECT avatar.content_type,avatar.image
+    let (content_type, key): (String, String) = sqlx::query_as(
+        "SELECT avatar.content_type,avatar.asset_key
            FROM native_user_avatars avatar
            JOIN native_users user_record ON user_record.id=avatar.user_id
           WHERE user_record.public_api_id='77777777-7777-7777-7777-777777777777'",
@@ -952,6 +952,9 @@ async fn mel2_profile_fields_and_user_images_avatar_are_safe_and_idempotent() {
     .fetch_one(&target.pool)
     .await
     .expect("migrated avatar");
+    let image = melodee_persistence::asset_files::read(key)
+        .await
+        .expect("avatar file");
     assert_eq!(content_type, "image/png");
     assert!(image.starts_with(b"\x89PNG\r\n\x1a\n"));
     assert!(image.len() <= 1024 * 1024);

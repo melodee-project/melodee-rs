@@ -279,12 +279,12 @@ impl ProviderArtworkStore {
         sqlx::query(
             "INSERT INTO catalog_provider_images (
                 id, entity_type, entity_id, provider, source_url,
-                image_mime_type, image_bytes, confidence, observed_at
+                image_mime_type, asset_key, confidence, observed_at
              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
              ON CONFLICT (entity_type, entity_id, provider) DO UPDATE
              SET source_url=EXCLUDED.source_url,
                  image_mime_type=EXCLUDED.image_mime_type,
-                 image_bytes=EXCLUDED.image_bytes,
+                 asset_key=EXCLUDED.asset_key,
                  confidence=EXCLUDED.confidence,
                  observed_at=EXCLUDED.observed_at",
         )
@@ -294,7 +294,7 @@ impl ProviderArtworkStore {
         .bind(provider)
         .bind(source_url)
         .bind(image_mime_type)
-        .bind(image_bytes)
+        .bind(crate::asset_files::put(pool, image_bytes).await?)
         .bind(confidence.clamp(0, 10_000))
         .bind(observed_at)
         .execute(pool)
@@ -308,8 +308,8 @@ impl ProviderArtworkStore {
         entity_type: EnrichmentEntityType,
         entity_id: Uuid,
     ) -> Result<Option<StoredProviderImage>, ProviderEnrichmentStoreError> {
-        let row = sqlx::query_as::<_, (String, String, String, Vec<u8>, i32, OffsetDateTime)>(
-            "SELECT provider, source_url, image_mime_type, image_bytes, confidence, observed_at
+        let row = sqlx::query_as::<_, (String, String, String, String, i32, OffsetDateTime)>(
+            "SELECT provider, source_url, image_mime_type, asset_key, confidence, observed_at
              FROM catalog_provider_images
              WHERE entity_type=$1 AND entity_id=$2
              ORDER BY confidence DESC, observed_at DESC, id DESC
@@ -319,20 +319,20 @@ impl ProviderArtworkStore {
         .bind(entity_id)
         .fetch_optional(pool)
         .await?;
-        Ok(row.map(
-            |(provider, source_url, image_mime_type, image_bytes, confidence, observed_at)| {
-                StoredProviderImage {
-                    entity_type,
-                    entity_id,
-                    provider,
-                    source_url,
-                    image_mime_type,
-                    image_bytes,
-                    confidence,
-                    observed_at,
-                }
-            },
-        ))
+        let Some((provider, source_url, image_mime_type, key, confidence, observed_at)) = row
+        else {
+            return Ok(None);
+        };
+        Ok(Some(StoredProviderImage {
+            entity_type,
+            entity_id,
+            provider,
+            source_url,
+            image_mime_type,
+            image_bytes: crate::asset_files::read(key).await?,
+            confidence,
+            observed_at,
+        }))
     }
 }
 

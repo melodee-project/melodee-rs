@@ -676,7 +676,10 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
     let artist_id = artist.id().into_uuid();
 
     // Schema-level rejections (no invalid row may be constructed).
-    let columns = "entity_type, artist_id, release_id, image_mime_type, image_bytes, \
+    let valid = melodee_persistence::asset_files::put(&db.pool, b"png")
+        .await
+        .expect("store fixture");
+    let columns = "entity_type, artist_id, release_id, image_mime_type, asset_key, \
                    uploaded_by, created_at, updated_at";
     let dangling = uuid::Uuid::now_v7();
     let cases: [(&str, String); 8] = [
@@ -684,7 +687,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             "unknown entity_type",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'track', '{artist_id}', NULL, 'image/png', '\\x89504e47'::bytea,
+                 'track', '{artist_id}', NULL, 'image/png', '{valid}',
                  'admin', now(), now())"
             ),
         ),
@@ -692,7 +695,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             "entity_type/typed-column mismatch",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'artist', NULL, '{dangling}', 'image/png', '\\x89504e47'::bytea,
+                 'artist', NULL, '{dangling}', 'image/png', '{valid}',
                  'admin', now(), now())"
             ),
         ),
@@ -700,7 +703,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             "no typed column set",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'artist', NULL, NULL, 'image/png', '\\x89504e47'::bytea,
+                 'artist', NULL, NULL, 'image/png', '{valid}',
                  'admin', now(), now())"
             ),
         ),
@@ -708,7 +711,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             "unsupported mime type",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'artist', '{artist_id}', NULL, 'image/gif', '\\x47494638'::bytea,
+                 'artist', '{artist_id}', NULL, 'image/gif', '{valid}',
                  'admin', now(), now())"
             ),
         ),
@@ -716,7 +719,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             "empty bytes",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'artist', '{artist_id}', NULL, 'image/png', ''::bytea,
+                 'artist', '{artist_id}', NULL, 'image/png', '',
                  'admin', now(), now())"
             ),
         ),
@@ -725,14 +728,14 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
                  'artist', '{artist_id}', NULL, 'image/png',
-                 decode(repeat('00', 10485761), 'hex'), 'admin', now(), now())"
+                 repeat('0',64) || '-10485761', 'admin', now(), now())"
             ),
         ),
         (
             "dangling artist FK",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'artist', '{dangling}', NULL, 'image/png', '\\x89504e47'::bytea,
+                 'artist', '{dangling}', NULL, 'image/png', '{valid}',
                  'admin', now(), now())"
             ),
         ),
@@ -740,7 +743,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
             "dangling release FK",
             format!(
                 "INSERT INTO catalog_entity_images ({columns}) VALUES (
-                 'release', NULL, '{dangling}', 'image/png', '\\x89504e47'::bytea,
+                 'release', NULL, '{dangling}', 'image/png', '{valid}',
                  'admin', now(), now())"
             ),
         ),
@@ -818,11 +821,12 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
     // The typed unique index rejects a second raw row for the same entity.
     let duplicate = sqlx::query(
         "INSERT INTO catalog_entity_images (
-            entity_type, artist_id, image_mime_type, image_bytes,
+            entity_type, artist_id, image_mime_type, asset_key,
             uploaded_by, created_at, updated_at
-         ) VALUES ('artist', $1, 'image/png', '\\x89504e47'::bytea, 'admin', now(), now())",
+         ) VALUES ('artist', $1, 'image/png', $2, 'admin', now(), now())",
     )
     .bind(artist_id)
+    .bind(&valid)
     .execute(&db.pool)
     .await;
     assert!(duplicate.is_err(), "one override per entity must hold");
@@ -1742,5 +1746,75 @@ async fn legacy_migration_schema_enforces_the_run_contract() {
     .await;
     assert!(result.is_err(), "unknown issue severity must be rejected");
 
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn all_six_legacy_file_owners_survive_an_interrupted_upgrade() {
+    use melodee_persistence::asset_files;
+    let db = TestDb::create_unmigrated("external_assets").await;
+    MIGRATOR
+        .run_to(53, &db.pool)
+        .await
+        .expect("original schema");
+    sqlx::raw_sql(sqlx::AssertSqlSafe(r#"
+        DO $$
+        DECLARE u uuid := uuidv7(); a uuid := uuidv7(); body bytea := convert_to('stored on disk','UTF8');
+        BEGIN
+          INSERT INTO native_users(id,public_api_id,username,normalized_username,email,normalized_email,
+            password_hash,password_hash_algorithm,stream_signing_key,image_mime_type,image_bytes,created_at,updated_at)
+            VALUES(u,uuidv7(),'test','TEST','t@test.invalid','T@TEST.INVALID','test','bcrypt','test','image/png',body,now(),now());
+          INSERT INTO artists(id,public_api_id,canonical_name,normalized_name,sort_name,artist_type,status,created_at,updated_at)
+            VALUES(a,uuidv7(),'Artist','artist','artist','person','verified',now(),now());
+          INSERT INTO native_user_avatars VALUES(u,'image/png',body,now());
+          INSERT INTO native_playlists(id,public_api_id,owner_user_id,name,image_mime_type,image_bytes,created_at,updated_at)
+            VALUES(uuidv7(),uuidv7(),u,'list','image/png',body,now(),now());
+          INSERT INTO native_theme_assets VALUES('light','theme.css','text/css',body);
+          INSERT INTO catalog_entity_images(entity_type,artist_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at)
+            VALUES('artist',a,'image/png',body,'test',now(),now());
+          INSERT INTO catalog_provider_images(id,entity_type,entity_id,provider,source_url,image_mime_type,image_bytes,confidence,observed_at)
+            VALUES(uuidv7(),'artist',a,'deezer','https://example.invalid/cover','image/png',body,9000,now());
+        END $$;
+    "#)).execute(&db.pool).await.expect("all six original owner types");
+    // An SQL-only upgrade without a verified receipt must roll back the table rewrites.
+    assert!(MIGRATOR.run(&db.pool).await.is_err());
+    assert_eq!(
+        sqlx::query_scalar::<_, Vec<u8>>("SELECT image FROM native_user_avatars")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        b"stored on disk"
+    );
+    migrate(&db.pool).await.expect("resume and verify files");
+    migrate(&db.pool).await.expect("repeat");
+    let keys: Vec<String> = sqlx::query_scalar("SELECT asset_key FROM native_users UNION ALL SELECT asset_key FROM native_user_avatars UNION ALL SELECT asset_key FROM native_playlists UNION ALL SELECT asset_key FROM native_theme_assets UNION ALL SELECT asset_key FROM catalog_entity_images UNION ALL SELECT asset_key FROM catalog_provider_images").fetch_all(&db.pool).await.unwrap();
+    assert_eq!(keys.len(), 6);
+    for key in &keys {
+        assert_eq!(
+            asset_files::read(key.clone()).await.unwrap(),
+            b"stored on disk"
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM asset_files")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let columns: Vec<String> = sqlx::query_scalar("SELECT table_name||'.'||column_name FROM information_schema.columns WHERE table_schema='public' AND udt_name IN ('bytea','_bytea','oid','lo') ORDER BY 1").fetch_all(&db.pool).await.unwrap();
+    assert_eq!(
+        columns,
+        [
+            "_sqlx_migrations.checksum",
+            "jellyfin_access_tokens.token_digest",
+            "jellyfin_access_tokens.token_salt",
+            "native_lastfm_links.session_key_ciphertext",
+            "native_lastfm_links.session_key_digest",
+            "native_password_reset_tokens.token_digest",
+            "native_rate_limit_counters.actor_key_digest",
+            "native_refresh_tokens.token_digest"
+        ]
+    );
     db.drop().await;
 }

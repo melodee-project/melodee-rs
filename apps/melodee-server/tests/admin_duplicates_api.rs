@@ -987,11 +987,15 @@ async fn release_batch_merge_folds_selected_releases_from_any_artist() {
     // The source owns artwork the target lacks: the merge adopts it.
     sqlx::query(
         "INSERT INTO catalog_entity_images (
-             entity_type,release_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at
+             entity_type,release_id,image_mime_type,asset_key,uploaded_by,created_at,updated_at
          ) VALUES ('release',$1,'image/png',$2,'curator',now(),now())",
     )
     .bind(first_internal)
-    .bind(vec![0x89_u8, 0x50, 0x4e, 0x47, 5])
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &[0x89_u8, 0x50, 0x4e, 0x47, 5])
+            .await
+            .expect("store fixture"),
+    )
     .execute(&db.pool)
     .await
     .expect("seed source operator image");

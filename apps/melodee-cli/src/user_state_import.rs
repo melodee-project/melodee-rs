@@ -1683,17 +1683,21 @@ async fn apply_users(
         }
         if let Some((mime, bytes, updated_at)) = &user.avatar {
             let written = sqlx::query(
-                "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
+                "INSERT INTO native_user_avatars (user_id, content_type, asset_key, updated_at)
                  VALUES ($1,$2,$3,$4)
                  ON CONFLICT (user_id) DO UPDATE SET
                     content_type = EXCLUDED.content_type,
-                    image = EXCLUDED.image,
+                    asset_key = EXCLUDED.asset_key,
                     updated_at = EXCLUDED.updated_at
                  WHERE native_user_avatars.updated_at <= EXCLUDED.updated_at",
             )
             .bind(user_id)
             .bind(mime)
-            .bind(bytes)
+            .bind(
+                melodee_persistence::asset_files::put(pool, bytes)
+                    .await
+                    .map_err(|e| format!("avatar file write failed: {e}"))?,
+            )
             .bind(updated_at)
             .execute(pool)
             .await

@@ -51,7 +51,7 @@ tracks** rank the same ledger by play count.
 **Database size** is the on-disk size of the database. **Connections** reports in-use connections
 against the server's `max_connections`. The panel also repeats the durable counters that matter for
 freshness — work items, play events, and search-outbox rows still waiting for the index — and
-**Largest tables** sizes the relations that dominate the database (a fixed, bounded list).
+**Largest tables** lists the 14 largest application tables by physical size, including indexes and out-of-line data. **Artwork, avatars and theme files** shows the bytes and count of distinct registered files on persistent storage. PostgreSQL size excludes these files.
 
 ## How the charts work
 

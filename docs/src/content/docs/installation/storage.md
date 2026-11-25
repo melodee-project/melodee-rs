@@ -7,7 +7,7 @@ sidebar:
 
 ## Storage lifecycle
 
-Melodee uses four separate storage roles. They are not interchangeable.
+Melodee uses separate locations for ingestion, publication and mutable artwork.
 
 | Role | Configuration | Lifecycle | Permission |
 | --- | --- | --- | --- |
@@ -15,8 +15,9 @@ Melodee uses four separate storage roles. They are not interchangeable.
 | Staging | `MELODEE__INGEST__STAGING_ROOT` | Durable Melodee-owned original source for processing, review, quarantine, and failed recovery. | Writable and persistent. |
 | Work area | `MELODEE__NORMALIZATION__WORK_AREA` | Disposable attempt-isolated generated output. | Writable; never staging. |
 | Canonical library | `MELODEE__STORAGE__ROOT` | Long-term immutable published Release bundles. | Writable for publication. |
+| Asset files | `MELODEE__STORAGE__ASSET_ROOT` | Provider artwork, editor uploads, avatars, playlist images and theme files. | Persistent, writable by the service account. |
 
-The staging root is required whenever inbound ingestion is configured. All four paths must be
+The staging root is required whenever inbound ingestion is configured. The ingestion and publication paths must be
 absolute, symlink-safe, and non-overlapping. `Staged` remains an ingestion state-machine name; it
 does not name this filesystem root.
 
@@ -24,6 +25,20 @@ When inbound and staging are on one filesystem, Melodee uses an atomic no-replac
 Across filesystems it copies under a hidden staging directory, verifies streamed BLAKE3 hashes,
 fsyncs, finalizes without replacement, records the receipt, then removes the matching inbound
 candidate. A crash converges from that receipt without reopening historical inbound paths.
+
+## Artwork, avatars and themes
+
+Set an existing absolute asset directory outside inbound, staging, work and the published library.
+Use a filesystem that supports hard links, file sync and directory sync. Compose provisions a
+dedicated named volume. Without an explicit setting, native installations use
+`$XDG_DATA_HOME/melodee/assets` or `$HOME/.local/share/melodee/assets`.
+
+The server writes each distinct file once and verifies its SHA-256 before recording a reference.
+Keep the hidden `.melodee-asset-store` identity marker with the files when copying or restoring
+the directory. Replaced images can still be required by a database backup. Keep the complete
+store, including unreferenced files. System statistics show the logical bytes and number of
+registered unique files separately from PostgreSQL disk usage.
+[Deployment configuration](./configuration/)
 
 ## Libraries are access scopes, not mutable path records
 

@@ -203,11 +203,15 @@ async fn batch_merge_adopts_missing_artwork_and_split_restores_it() {
 
     sqlx::query(
         "INSERT INTO catalog_entity_images (
-             entity_type,release_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at
+             entity_type,release_id,image_mime_type,asset_key,uploaded_by,created_at,updated_at
          ) VALUES ('release',$1,'image/png',$2,'merge-test',$3,$3)",
     )
     .bind(source.internal_id)
-    .bind(vec![0x89_u8, 0x50, 0x4e, 0x47, 1])
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &[0x89_u8, 0x50, 0x4e, 0x47, 1])
+            .await
+            .expect("store fixture"),
+    )
     .bind(now)
     .execute(&db.pool)
     .await
@@ -219,14 +223,18 @@ async fn batch_merge_adopts_missing_artwork_and_split_restores_it() {
         sqlx::query(
             "INSERT INTO catalog_provider_images (
                  id,entity_type,entity_id,provider,source_url,image_mime_type,
-                 image_bytes,confidence,observed_at
+                 asset_key,confidence,observed_at
              ) VALUES ($1,'release',$2,$3,$4,'image/png',$5,$6,$7)",
         )
         .bind(Uuid::now_v7())
         .bind(release_id)
         .bind(provider)
         .bind(format!("https://example.test/{provider}/{marker}"))
-        .bind(vec![0x89, 0x50, 0x4e, 0x47, marker])
+        .bind(
+            melodee_persistence::asset_files::put(&db.pool, &[0x89, 0x50, 0x4e, 0x47, marker])
+                .await
+                .expect("store fixture"),
+        )
         .bind(confidence)
         .bind(now)
         .execute(&db.pool)
@@ -314,11 +322,15 @@ async fn split_keeps_a_replaced_target_cover_after_an_adoption() {
     let now = OffsetDateTime::now_utc();
     sqlx::query(
         "INSERT INTO catalog_entity_images (
-             entity_type,release_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at
+             entity_type,release_id,image_mime_type,asset_key,uploaded_by,created_at,updated_at
          ) VALUES ('release',$1,'image/png',$2,'merge-test',$3,$3)",
     )
     .bind(source.internal_id)
-    .bind(vec![0x89_u8, 0x50, 0x4e, 0x47, 7])
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &[0x89_u8, 0x50, 0x4e, 0x47, 7])
+            .await
+            .expect("store fixture"),
+    )
     .bind(now)
     .execute(&db.pool)
     .await
@@ -332,11 +344,15 @@ async fn split_keeps_a_replaced_target_cover_after_an_adoption() {
 
     // An operator upload after the merge is newer curation and must win.
     sqlx::query(
-        "UPDATE catalog_entity_images SET image_bytes=$2, uploaded_by='operator', updated_at=$3
+        "UPDATE catalog_entity_images SET asset_key=$2, uploaded_by='operator', updated_at=$3
           WHERE entity_type='release' AND release_id=$1",
     )
     .bind(target.internal_id)
-    .bind(vec![0x89_u8, 0x50, 0x4e, 0x47, 9])
+    .bind(
+        melodee_persistence::asset_files::put(&db.pool, &[0x89_u8, 0x50, 0x4e, 0x47, 9])
+            .await
+            .expect("store fixture"),
+    )
     .bind(now + time::Duration::seconds(5))
     .execute(&db.pool)
     .await
