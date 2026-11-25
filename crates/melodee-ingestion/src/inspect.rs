@@ -47,6 +47,10 @@ pub async fn inspect_ready_once(
     let started = Instant::now();
     let mut claim_config = *work_config;
     claim_config.claim_batch_size = ingestion.inspection_concurrency;
+    store
+        .recover_expired_inspections(pool, &claim_config, now)
+        .await?;
+    let heartbeat_interval = crate::normalize::heartbeat_interval(work_config.lease_duration)?;
     let worker = WorkerId::new();
     let items = store.claim(pool, &worker, &claim_config, now).await?;
     let mut stats = InspectionStats {
@@ -62,19 +66,51 @@ pub async fn inspect_ready_once(
             work_item_id = %item.id,
             correlation_id = %item.correlation_id,
         );
-        match inspect_one(
+        // Hashing and media inspection can outlive one lease. Run renewal
+        // independently of synchronous filesystem reads. Dropping the pass
+        // (including shutdown) aborts its renewal task.
+        let id = item.id;
+        let mut heartbeat = tokio::task::JoinSet::new();
+        let renewal_pool = pool.clone();
+        let renewal_worker = worker.clone();
+        let lease_duration = work_config.lease_duration;
+        heartbeat.spawn(async move {
+            loop {
+                time::sleep(heartbeat_interval).await;
+                if let Err(error) = WorkItemStore
+                    .renew_lease(
+                        &renewal_pool,
+                        id,
+                        &renewal_worker,
+                        lease_duration,
+                        now + started.elapsed(),
+                    )
+                    .await
+                {
+                    return error;
+                }
+            }
+        });
+        let inspection = inspect_one(
             ingestion,
             store,
             pool,
             &worker,
             item,
             work_config,
-            now,
+            now + started.elapsed(),
             gate,
         )
-        .instrument(span)
-        .await
-        {
+        .instrument(span);
+        let outcome = tokio::select! {
+            biased;
+            result = inspection => result,
+            lost = heartbeat.join_next() => match lost {
+                Some(Ok(error)) => Err(error.into()),
+                _ => Err(IngestionError::InspectionTask("inspection lease renewal stopped".into())),
+            },
+        };
+        match outcome {
             Ok(InspectionOutcome::Published) => stats.completed += 1,
             Ok(InspectionOutcome::SourceChanged) => stats.source_changed += 1,
             Ok(InspectionOutcome::Invalid) => stats.structurally_invalid += 1,
@@ -119,6 +155,7 @@ async fn inspect_one(
     now: OffsetDateTime,
     gate: Option<&dyn DirectoryProcessingGate>,
 ) -> Result<InspectionOutcome> {
+    let started = Instant::now();
     store
         .transition(
             pool,
@@ -127,7 +164,7 @@ async fn inspect_one(
             melodee_domain::TransitionKind::Worker,
             IngestionState::Inspecting,
             Some("inspection-claimed"),
-            now,
+            now + started.elapsed(),
         )
         .await?;
 
@@ -141,7 +178,7 @@ async fn inspect_one(
         expected
             .as_ref()
             .map(|snapshot| snapshot.signature.as_str()),
-        now,
+        now + started.elapsed(),
     )
     .await
     {
@@ -153,7 +190,7 @@ async fn inspect_one(
                 worker,
                 item.id,
                 "source-changed-during-staging-acquisition",
-                now,
+                now + started.elapsed(),
             )
             .await
             .map(|_| InspectionOutcome::SourceChanged);
@@ -168,7 +205,7 @@ async fn inspect_one(
                 "inspection.staging_handoff_failed",
                 &error.to_string(),
                 FailureClass::Retryable,
-                now,
+                now + started.elapsed(),
             )
             .await
             .map(|_| InspectionOutcome::Failed);
@@ -184,7 +221,7 @@ async fn inspect_one(
             "inspection.staged_source_integrity",
             &error.to_string(),
             FailureClass::Permanent,
-            now,
+            now + started.elapsed(),
         )
         .await
         .map(|_| InspectionOutcome::Failed);
@@ -202,19 +239,12 @@ async fn inspect_one(
                 "inspection.staged_source_unreadable",
                 &error.to_string(),
                 FailureClass::Permanent,
-                now,
+                now + started.elapsed(),
             )
             .await
             .map(|_| InspectionOutcome::SourceChanged);
         }
     };
-    // Extend the lease immediately before entering the blocking media/tool
-    // boundary. Publication also re-checks ownership, so an inspection that
-    // outlives its lease can never publish stale authoritative state.
-    store
-        .renew_lease(pool, item.id, worker, work_config.lease_duration, now)
-        .await?;
-
     // `directoryProcessingStart` hook: the candidate is stable (the
     // snapshot signature was just re-verified) and about to enter media
     // inspection — the Rust pipeline point equivalent to the legacy
@@ -243,7 +273,7 @@ async fn inspect_one(
                     "inspection.script_denied",
                     &reason,
                     FailureClass::Retryable,
-                    now,
+                    now + started.elapsed(),
                 )
                 .await
                 .map(|_| InspectionOutcome::ScriptSkipped);
@@ -292,7 +322,7 @@ async fn inspect_one(
                 "inspection.staged_source_changed",
                 &error.to_string(),
                 FailureClass::Permanent,
-                now,
+                now + started.elapsed(),
             )
             .await
             .map(|_| InspectionOutcome::SourceChanged);
@@ -307,7 +337,7 @@ async fn inspect_one(
                 "inspection.execution_failed",
                 &error.to_string(),
                 FailureClass::Retryable,
-                now,
+                now + started.elapsed(),
             )
             .await
             .map(|_| InspectionOutcome::Failed);
@@ -326,7 +356,7 @@ async fn inspect_one(
                 "inspection.staged_source_unreadable",
                 &error.to_string(),
                 FailureClass::Permanent,
-                now,
+                now + started.elapsed(),
             )
             .await
             .map(|_| InspectionOutcome::SourceChanged);
@@ -343,7 +373,7 @@ async fn inspect_one(
             "inspection.staged_source_changed",
             "staged source changed during inspection",
             FailureClass::Permanent,
-            now,
+            now + started.elapsed(),
         )
         .await
         .map(|_| InspectionOutcome::SourceChanged);
@@ -374,7 +404,7 @@ async fn inspect_one(
             "inspection.structural_invalid",
             &reason,
             failure_class,
-            now,
+            now + started.elapsed(),
         )
         .await
         .map(|_| InspectionOutcome::Invalid);
@@ -395,7 +425,7 @@ async fn inspect_one(
             source_snapshot_id,
             source_signature.as_deref(),
             generation_duration_ms,
-            now,
+            now + started.elapsed(),
         )
         .await?;
     Ok(InspectionOutcome::Published)

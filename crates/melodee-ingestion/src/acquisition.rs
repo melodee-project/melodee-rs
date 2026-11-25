@@ -292,6 +292,7 @@ pub async fn acquire_owned_source(
     expected_snapshot_signature: Option<&str>,
     now: OffsetDateTime,
 ) -> Result<OwnedSource, AcquisitionError> {
+    let started = std::time::Instant::now();
     #[cfg(feature = "test-support")]
     let test_hook = config.acquisition_test_hook.clone();
     let source = find_source(config, item).ok_or(AcquisitionError::SourceNotConfigured)?;
@@ -339,7 +340,7 @@ pub async fn acquire_owned_source(
             &source.root,
             &handoff.source_generation,
             &tree_hash,
-            now,
+            now + started.elapsed(),
             #[cfg(feature = "test-support")]
             test_hook.as_ref(),
         )
@@ -358,34 +359,41 @@ pub async fn acquire_owned_source(
         )));
     }
 
-    // A final directory can exist after a crash between finalization and the
-    // durable receipt. Adopt it only when the still-present inbound occurrence
-    // proves the exact same tree; otherwise a deterministic-path conflict is
-    // never overwritten or misattributed.
-    if destination.is_dir() && inbound.exists() {
-        let inbound_hash = tree_hash(&inbound)?;
-        let staged_hash = tree_hash(&destination)?;
-        if inbound_hash != staged_hash {
-            return Err(AcquisitionError::IncompleteReceipt(format!(
-                "existing final staging tree conflicts with inbound occurrence at {}",
-                destination.display()
-            )));
-        }
-    }
-
-    let snapshot = snapshot_release_directory(&inbound, &config.ready_marker_name)
-        .map_err(|error| AcquisitionError::IncompleteReceipt(error.to_string()))?;
-    if expected_snapshot_signature.is_some_and(|expected| expected != snapshot.signature) {
-        return Err(AcquisitionError::SourceChanged);
-    }
-
     let inbound_for_task = inbound.clone();
     let destination_for_task = destination.clone();
     let staging_root_for_task = staging_root.clone();
     let work_item_id = item.id;
     #[cfg(feature = "test-support")]
     let hook_for_task = test_hook.clone();
+    let expected_snapshot = expected_snapshot_signature.map(str::to_owned);
+    let ready_marker = config.ready_marker_name.clone();
+    let generation = handoff.source_generation.clone();
     let staged = tokio::task::spawn_blocking(move || {
+        if destination_for_task
+            .try_exists()
+            .map_err(|e| io_error(&destination_for_task, e))?
+        {
+            return recover_finalized_tree(
+                &inbound_for_task,
+                &destination_for_task,
+                &generation,
+                expected_snapshot.as_deref(),
+                &ready_marker,
+            );
+        }
+        if source_generation(&inbound_for_task)? != generation {
+            return Err(AcquisitionError::IncompleteReceipt(
+                "inbound directory was replaced after handoff intent".to_owned(),
+            ));
+        }
+        let snapshot = snapshot_release_directory(&inbound_for_task, &ready_marker)
+            .map_err(|error| AcquisitionError::IncompleteReceipt(error.to_string()))?;
+        if expected_snapshot
+            .as_ref()
+            .is_some_and(|expected| *expected != snapshot.signature)
+        {
+            return Err(AcquisitionError::SourceChanged);
+        }
         stage_source(
             &inbound_for_task,
             &destination_for_task,
@@ -407,7 +415,14 @@ pub async fn acquire_owned_source(
         &destination,
     )?;
     store
-        .record_staging_receipt(pool, item.id, worker, staged.method, &staged.tree_hash, now)
+        .record_staging_receipt(
+            pool,
+            item.id,
+            worker,
+            staged.method,
+            &staged.tree_hash,
+            now + started.elapsed(),
+        )
         .await?;
     #[cfg(feature = "test-support")]
     inject_test_fault(
@@ -424,7 +439,7 @@ pub async fn acquire_owned_source(
         &source.root,
         &handoff.source_generation,
         &staged.tree_hash,
-        now,
+        now + started.elapsed(),
         #[cfg(feature = "test-support")]
         test_hook.as_ref(),
     )
@@ -487,7 +502,9 @@ pub fn verify_owned_source(source: &OwnedSource) -> Result<(), AcquisitionError>
 /// must never touch. All platforms additionally compare the complete tree
 /// hash before removal, so the fences are independent and both must pass.
 pub fn source_generation(path: &Path) -> Result<String, AcquisitionError> {
-    let metadata = fs::metadata(path).map_err(|error| io_error(path, error))?;
+    let metadata = open_directory(path)
+        .and_then(|dir| dir.metadata())
+        .map_err(|error| io_error(path, error))?;
     if !metadata.is_dir() {
         return Err(AcquisitionError::InvalidSourcePath(format!(
             "{} is not a directory",
@@ -510,6 +527,69 @@ struct StagedTree {
     tree_hash: String,
 }
 
+/// An intent can outlive the filesystem operation that finalized the tree.
+fn recover_finalized_tree(
+    inbound: &Path,
+    destination: &Path,
+    generation: &str,
+    expected_snapshot: Option<&str>,
+    ready_marker: &str,
+) -> Result<StagedTree, AcquisitionError> {
+    let destination_generation = source_generation(destination)?;
+    // A Unix directory keeps its device and inode across rename. Weaker
+    // platform generation markers cannot prove that a lone tree is the original.
+    let renamed = generation.starts_with("unix:") && destination_generation == generation;
+    let proof_root = if renamed { destination } else { inbound };
+    if source_generation(proof_root)? != generation {
+        return Err(AcquisitionError::IncompleteReceipt(
+            "final staging directory does not match the original inbound occurrence".to_owned(),
+        ));
+    }
+    let snapshot = snapshot_release_directory(proof_root, ready_marker)
+        .map_err(|error| AcquisitionError::IncompleteReceipt(error.to_string()))?;
+    if (renamed && expected_snapshot.is_none())
+        || expected_snapshot.is_some_and(|s| s != snapshot.signature)
+    {
+        return Err(AcquisitionError::IncompleteReceipt(
+            "final staging handoff conflicts with the settled source snapshot".to_owned(),
+        ));
+    }
+    let staged_hash = tree_hash(destination)?;
+    let method = if renamed {
+        let after = snapshot_release_directory(destination, ready_marker)
+            .map_err(|error| AcquisitionError::IncompleteReceipt(error.to_string()))?;
+        if after.signature != snapshot.signature {
+            return Err(AcquisitionError::IncompleteReceipt(
+                "renamed staging directory changed during verification".to_owned(),
+            ));
+        }
+        StagingHandoffMethod::Rename
+    } else if tree_hash(inbound)? == staged_hash {
+        StagingHandoffMethod::VerifiedCopy
+    } else {
+        return Err(AcquisitionError::IncompleteReceipt(format!(
+            "existing final staging tree conflicts with inbound occurrence at {}",
+            destination.display()
+        )));
+    };
+    if source_generation(destination)? != destination_generation {
+        return Err(AcquisitionError::IncompleteReceipt(
+            "staging directory replaced during verification".to_owned(),
+        ));
+    }
+    // A crash may have interrupted the directory syncs after the rename.
+    if let Some(parent) = destination.parent() {
+        sync_directory(parent)?;
+    }
+    if let Some(parent) = inbound.parent() {
+        sync_directory(parent)?;
+    }
+    Ok(StagedTree {
+        method,
+        tree_hash: staged_hash,
+    })
+}
+
 fn stage_source(
     inbound: &Path,
     destination: &Path,
@@ -521,13 +601,6 @@ fn stage_source(
         AcquisitionError::IncompleteReceipt("staging destination has no parent".to_owned())
     })?;
     create_directory_tree(parent).map_err(|error| io_error(parent, error))?;
-
-    if destination.is_dir() {
-        return Ok(StagedTree {
-            method: StagingHandoffMethod::VerifiedCopy,
-            tree_hash: tree_hash(destination)?,
-        });
-    }
 
     // A hidden partial from a crashed copy attempt of this same work item is
     // attempt scratch: the deterministic name can only belong to this item's
@@ -946,6 +1019,42 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn interrupted_rename_requires_the_original_directory_and_settled_snapshot() {
+        let root = temporary_root("rename-evidence");
+        let inbound = root.join("inbound");
+        let staged = root.join("staged");
+        fs::create_dir_all(&inbound).unwrap();
+        fs::write(inbound.join("track"), b"original").unwrap();
+        let generation = source_generation(&inbound).unwrap();
+        let original = snapshot_release_directory(&inbound, ".ready")
+            .unwrap()
+            .signature;
+        fs::rename(&inbound, &staged).unwrap();
+        assert!(recover_finalized_tree(&inbound, &staged, &generation, None, ".ready").is_err());
+        fs::write(staged.join("extra"), b"changed").unwrap();
+        assert!(
+            recover_finalized_tree(&inbound, &staged, &generation, Some(&original), ".ready")
+                .is_err()
+        );
+        fs::remove_file(staged.join("extra")).unwrap();
+        fs::rename(&staged, root.join("original")).unwrap();
+        fs::create_dir(&staged).unwrap();
+        assert!(
+            recover_finalized_tree(&inbound, &staged, &generation, Some(&original), ".ready")
+                .is_err()
+        );
+        fs::remove_dir(&staged).unwrap();
+        std::os::unix::fs::symlink(root.join("original"), &staged).unwrap();
+        assert!(
+            recover_finalized_tree(&inbound, &staged, &generation, Some(&original), ".ready")
+                .is_err()
+        );
+        assert_eq!(fs::read(root.join("original/track")).unwrap(), b"original");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -12,9 +12,9 @@ test-support = []
 
 [dependencies]
 blake3.workspace = true
-melodee-domain = { path = "../melodee-domain", version = "0.2.0" }
-melodee-persistence = { path = "../melodee-persistence", version = "0.2.0" }
-melodee-media = { path = "../melodee-media", version = "0.2.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.2.1" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.2.1" }
+melodee-media = { path = "../melodee-media", version = "0.2.1" }
 thiserror.workspace = true
 sqlx.workspace = true
 serde.workspace = true

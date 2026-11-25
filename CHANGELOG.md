@@ -7,6 +7,12 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+## 0.2.1 — 2026-11-24
+
+Interrupted Release inspections now recover automatically after their worker lease expires.
+The retry verifies the staged original, including a same-filesystem move interrupted before its
+receipt was saved. The upgrade uses the existing database schema and staging directories.
+
 ## 0.2.0 — 2026-11-24
 
 The Admin UI shows the running server version in the navigation footer. Artist and Release

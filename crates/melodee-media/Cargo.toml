@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 blake3.workspace = true
 lofty.workspace = true
-melodee-domain = { path = "../melodee-domain", version = "0.2.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.2.1" }
 quick-xml.workspace = true
 rustix.workspace = true
 serde_json.workspace = true

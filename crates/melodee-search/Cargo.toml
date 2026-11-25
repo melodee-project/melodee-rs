@@ -12,9 +12,9 @@ default = []
 test-support = []
 
 [dependencies]
-melodee-mql = { path = "../melodee-mql", version = "0.2.0" }
-melodee-domain = { path = "../melodee-domain", version = "0.2.0" }
-melodee-persistence = { path = "../melodee-persistence", version = "0.2.0" }
+melodee-mql = { path = "../melodee-mql", version = "0.2.1" }
+melodee-domain = { path = "../melodee-domain", version = "0.2.1" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.2.1" }
 tantivy = { workspace = true }
 sqlx = { workspace = true }
 uuid = { workspace = true }

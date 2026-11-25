@@ -2235,6 +2235,7 @@ impl WorkItemStore {
         // Select candidates with row locks (skipped when locked by rivals),
         // then update each within the same transaction. Two steps so the
         // pre-update state is known for the failed->ready requeue event.
+        // A continuous flow of fresh Ready work must not starve a recovered inspection.
         let candidates = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items
              WHERE (
@@ -2243,7 +2244,8 @@ impl WorkItemStore {
                          AND next_attempt_at <= $2 AND attempt_count < $4)
                    )
                AND (lease_expires_at IS NULL OR lease_expires_at <= $2)
-             ORDER BY next_attempt_at NULLS FIRST, created_at, id
+             ORDER BY CASE WHEN state = 'failed' AND last_error_code = 'lease.lost' THEN 0 ELSE 1 END,
+                      next_attempt_at NULLS FIRST, created_at, id
              LIMIT $3
              FOR UPDATE SKIP LOCKED",
         )
@@ -2809,6 +2811,27 @@ impl WorkItemStore {
         Ok(new_expiry)
     }
 
+    /// Requeue interrupted inspections through the normal retry policy. Other
+    /// stages own their recovery and a concurrent pass skips locked rows.
+    pub async fn recover_expired_inspections(
+        &self,
+        pool: &PgPool,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<Uuid>, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let rows = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items
+             WHERE state = 'inspecting' AND lease_expires_at <= $1
+             ORDER BY lease_expires_at, id LIMIT $2 FOR UPDATE SKIP LOCKED",
+        )
+        .bind(now)
+        .bind(i64::from(config.claim_batch_size))
+        .fetch_all(&mut *tx)
+        .await?;
+        Self::recover_locked_leases(tx, rows, &config.retry_policy, now).await
+    }
+
     /// Recovers items whose leases expired mid-processing: marks them failed
     /// with `lease.lost` and schedules retry per policy (crash-loop protection
     /// via attempt counting). Returns recovered ids.
@@ -2829,6 +2852,15 @@ impl WorkItemStore {
         .fetch_all(&mut *tx)
         .await?;
 
+        Self::recover_locked_leases(tx, rows, policy, now).await
+    }
+
+    async fn recover_locked_leases(
+        mut tx: Transaction<'_, Postgres>,
+        rows: Vec<WorkItemRow>,
+        policy: &RetryPolicy,
+        now: OffsetDateTime,
+    ) -> Result<Vec<Uuid>, WorkStoreError> {
         let mut recovered = Vec::with_capacity(rows.len());
         for row in rows {
             let item = ReleaseWorkItem::try_from(row)?;

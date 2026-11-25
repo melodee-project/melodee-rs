@@ -8,8 +8,8 @@ description = "Catalog authority and evidence-based artist/release identity reso
 publish = false
 
 [dependencies]
-melodee-domain = { path = "../melodee-domain", version = "0.2.0" }
-melodee-persistence = { path = "../melodee-persistence", version = "0.2.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.2.1" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.2.1" }
 sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true

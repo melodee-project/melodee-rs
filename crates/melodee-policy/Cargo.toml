@@ -8,8 +8,8 @@ description = "Explainable release classification, track novelty, and dispositio
 publish = false
 
 [dependencies]
-melodee-domain = { path = "../melodee-domain", version = "0.2.0" }
-melodee-persistence = { path = "../melodee-persistence", version = "0.2.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.2.1" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.2.1" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

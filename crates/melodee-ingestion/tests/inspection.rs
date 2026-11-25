@@ -108,6 +108,144 @@ async fn ready_release_gets_one_durable_manifest() {
     scenario.database.drop().await;
 }
 
+#[cfg(all(unix, feature = "test-support"))]
+#[tokio::test]
+async fn interrupted_inspections_resume_from_both_rename_boundaries() {
+    use melodee_domain::{TransitionKind, WorkEventType};
+    use melodee_ingestion::{AcquisitionFaultPoint, AcquisitionTestHook, acquire_owned_source};
+    use melodee_persistence::WorkerId;
+
+    let mut scenario = Scenario::new("inspection_restart").await;
+    scenario.config.inspection_concurrency = 1;
+    let engine = WorkEngineConfig {
+        claim_batch_size: 1,
+        ..WorkEngineConfig::default()
+    };
+    let start = common::T0 + Duration::seconds(2);
+    let worker = WorkerId::new();
+    let mut ids = Vec::new();
+    for (name, before_receipt) in [("receipted", false), ("renamed", true)] {
+        let item = scenario.settle(name).await;
+        assert_eq!(
+            WorkItemStore
+                .claim(&scenario.pool, &worker, &engine, start)
+                .await
+                .unwrap()[0]
+                .id,
+            item.id
+        );
+        WorkItemStore
+            .transition(
+                &scenario.pool,
+                item.id,
+                Some(&worker),
+                TransitionKind::Worker,
+                IngestionState::Inspecting,
+                None,
+                start,
+            )
+            .await
+            .unwrap();
+        let mut cfg = scenario.config.clone();
+        if before_receipt {
+            cfg.acquisition_test_hook = Some(
+                AcquisitionTestHook::new()
+                    .with_fault(AcquisitionFaultPoint::AfterFinalizationBeforeReceipt),
+            );
+        }
+        let snapshot = WorkItemStore
+            .latest_snapshot(&scenario.pool, item.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let outcome = acquire_owned_source(
+            &cfg,
+            &WorkItemStore,
+            &scenario.pool,
+            &worker,
+            &item,
+            Some(&snapshot.signature),
+            start,
+        )
+        .await;
+        assert_eq!(outcome.is_err(), before_receipt);
+        assert!(!scenario.root.join(name).exists());
+        ids.push(item.id);
+    }
+    let tick = |at| {
+        inspect_ready_once(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &engine,
+            at,
+            None,
+        )
+    };
+    assert_eq!(
+        tick(start + Duration::seconds(10)).await.unwrap().claimed,
+        0
+    );
+    let expired = start + engine.lease_duration;
+    assert_eq!(tick(expired).await.unwrap().claimed, 0);
+    assert_eq!(
+        WorkItemStore
+            .list(&scenario.pool, Some(IngestionState::Inspecting), 10, 0)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(tick(expired).await.unwrap().claimed, 0);
+    assert_eq!(tick(expired).await.unwrap().claimed, 0);
+    // A fresh delivery can reuse the historic inbound name before the old receipt is completed.
+    let replacement = scenario.root.join("renamed");
+    fs::create_dir(&replacement).unwrap();
+    fs::write(replacement.join("new.txt"), b"new delivery").unwrap();
+    let waiting = common::seed_ready_item(&WorkItemStore, &scenario.pool, "ordinary-backlog").await;
+    let due = expired + engine.retry_policy.base_delay;
+    let (a, b) = tokio::join!(tick(due), tick(due));
+    assert_eq!(a.unwrap().completed + b.unwrap().completed, 2);
+    assert_eq!(
+        WorkItemStore
+            .get(&scenario.pool, waiting)
+            .await
+            .unwrap()
+            .state,
+        IngestionState::Ready,
+        "eligible inspection retries make progress during a bulk import"
+    );
+    for id in ids {
+        assert_eq!(
+            WorkItemStore.get(&scenario.pool, id).await.unwrap().state,
+            IngestionState::Normalizing
+        );
+        let events = WorkItemStore.list_events(&scenario.pool, id).await.unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| e.event_type == WorkEventType::LeaseExpiredRecovered)
+                .count(),
+            1
+        );
+        let handoff = WorkItemStore
+            .staging_handoff(&scenario.pool, id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            handoff.method,
+            Some(melodee_persistence::StagingHandoffMethod::Rename)
+        );
+        assert!(handoff.tree_hash.is_some());
+    }
+    assert_eq!(
+        fs::read(replacement.join("new.txt")).unwrap(),
+        b"new delivery"
+    );
+    scenario.database.drop().await;
+}
+
 #[tokio::test]
 async fn source_change_before_inspection_returns_to_settling_without_manifest() {
     let scenario = Scenario::new("inspection-source-change").await;
@@ -138,6 +276,75 @@ async fn source_change_before_inspection_returns_to_settling_without_manifest() 
             .is_none()
     );
 
+    scenario.database.drop().await;
+}
+
+#[tokio::test]
+async fn an_active_slow_inspection_keeps_its_lease() {
+    struct SlowGate(tokio::sync::Notify, tokio::sync::Notify);
+    impl melodee_ingestion::DirectoryProcessingGate for SlowGate {
+        fn evaluate<'a>(
+            &'a self,
+            _: &'a std::path::Path,
+            _: &'a melodee_ingestion::CandidateSnapshot,
+        ) -> melodee_ingestion::DirectoryGateFuture<'a> {
+            Box::pin(async {
+                self.0.notify_one();
+                self.1.notified().await;
+                melodee_ingestion::DirectoryGateOutcome::Allow
+            })
+        }
+    }
+    let scenario = Scenario::new("inspection_heartbeat").await;
+    let item = scenario.settle("slow").await;
+    let engine = WorkEngineConfig {
+        lease_duration: Duration::seconds(2),
+        ..WorkEngineConfig::default()
+    };
+    let gate = SlowGate(Default::default(), Default::default());
+    let now = common::T0 + Duration::seconds(2);
+    let live = inspect_ready_once(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        &engine,
+        now,
+        Some(&gate),
+    );
+    let rival = async {
+        gate.0.notified().await;
+        // Wait for a real renewal, then exercise recovery just after the original expiry.
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            loop {
+                let row = WorkItemStore.get(&scenario.pool, item.id).await.unwrap();
+                if row.lease_expires_at.unwrap()
+                    > now + engine.lease_duration + Duration::milliseconds(250)
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            inspect_ready_once(
+                &scenario.config,
+                &WorkItemStore,
+                &scenario.pool,
+                &engine,
+                now + engine.lease_duration,
+                None
+            )
+            .await
+            .unwrap()
+            .claimed,
+            0
+        );
+        gate.1.notify_one();
+    };
+    let (result, ()) = tokio::join!(live, rival);
+    assert_eq!(result.unwrap().completed, 1);
     scenario.database.drop().await;
 }
 

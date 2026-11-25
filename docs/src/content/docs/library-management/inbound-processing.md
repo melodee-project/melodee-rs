@@ -107,6 +107,17 @@ extensions or names as identity by themselves.
 
 ## Inspection outcomes
 
+If the server stops during inspection, leave the Release in staging. Once the claim
+expires, the inspection worker records the interruption and schedules the same work
+item for retry under the configured retry policy. The item's event history shows
+the expired claim and the scheduled retry.
+
+On retry, Melodee checks the staged files against the saved checksum. On Unix, if
+the interruption occurred after a directory rename but before the checksum was
+saved, Melodee verifies the directory's device and inode and compares its contents'
+names, types, sizes, and modification times with the saved snapshot. It then hashes
+the files and records the receipt. A conflicting directory is retained for investigation.
+
 The manifest preserves observed tag values without resolving canonical Artist identities. Missing tags are
 recorded as metadata-poor observations; valid tagless audio is still inspectable. Corrupt or unsupported
 audio produces a durable failure instead of a partial manifest. A source change detected before or during
