@@ -22,7 +22,6 @@ import {
   TaskView,
   User,
   UserMultiple,
-  UserAvatar,
 } from '@carbon/icons-react';
 import {
   Content,
@@ -46,6 +45,7 @@ import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { getSystemInfo } from '../api/admin';
+import { SessionAvatar } from './SessionAvatar';
 import { useAuth } from '../auth/AuthContext';
 import { CULTURES, dirFor, isLocaleComplete } from '../i18n';
 import i18n from '../i18n';
@@ -361,13 +361,7 @@ export function AppShell() {
             onClick={() => togglePanel('user')}
           >
             <span className="melodee-shell__action-with-label">
-              {username ? (
-                <span className="melodee-shell__avatar" aria-hidden>
-                  {username.slice(0, 1).toUpperCase()}
-                </span>
-              ) : (
-                <UserAvatar size={20} aria-hidden />
-              )}
+              <SessionAvatar username={username} />
               {username ? <span className="melodee-shell__user-name">{username}</span> : null}
             </span>
           </HeaderGlobalAction>

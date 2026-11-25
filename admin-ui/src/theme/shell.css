@@ -186,6 +186,13 @@
   font-weight: 600;
 }
 
+.melodee-shell__avatar img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 .melodee-shell__user-name {
   max-inline-size: 10rem;
   overflow: hidden;

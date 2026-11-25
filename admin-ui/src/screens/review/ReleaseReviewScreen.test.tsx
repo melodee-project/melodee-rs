@@ -11,12 +11,15 @@ vi.mock('../../api/admin', async (importOriginal) => {
   return {
     ...original,
     getReviewDetail: vi.fn(),
+    reviewSources: vi.fn(),
+    searchReviewMatches: vi.fn(),
+    saveReviewCorrection: vi.fn(),
     postReviewDecision: vi.fn(),
     postReviewReprocess: vi.fn(),
   };
 });
 
-const { getReviewDetail, postReviewDecision, postReviewReprocess } = await import(
+const { getReviewDetail, postReviewDecision, postReviewReprocess, reviewSources, searchReviewMatches, saveReviewCorrection } = await import(
   '../../api/admin'
 );
 const mockGetReviewDetail = vi.mocked(getReviewDetail);
@@ -196,6 +199,51 @@ describe('ReleaseReviewScreen', () => {
       pendingExecution: false,
     });
     mockPostReviewReprocess.mockResolvedValue(makeDetail().workItem);
+  });
+
+  function unpublished() {
+    const fixture = makeDetail();
+    const manifest = fixture.manifest!;
+    mockGetReviewDetail.mockResolvedValue({
+      ...fixture, releaseId: null, decision: null, manifest: {
+        ...manifest, schemaVersion: 2,
+        tracks: manifest.tracks.map((track) => ({ ...track, disc: 1, number: null })),
+      },
+    });
+    vi.mocked(saveReviewCorrection).mockResolvedValue(undefined);
+  }
+
+  it('saves just the changed fields and requeues a validation review', async () => {
+    unpublished();
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', {name: 'Edit'}));
+    const dialog = within(screen.getByRole('dialog'));
+    fireEvent.change(dialog.getByLabelText('Release title'), {target: {value: 'Correct Release'}});
+    fireEvent.change(dialog.getAllByLabelText('Track number')[0], {target: {value: '3'}});
+    fireEvent.click(dialog.getByRole('button', {name: 'Save and reprocess'}));
+    await waitFor(() => expect(saveReviewCorrection).toHaveBeenCalledWith(WORK_ITEM_ID, expect.objectContaining({
+      expectedHash: 'abc123', title: 'Correct Release', selection: null,
+      tracks: [expect.objectContaining({index: 0, disc: 1, number: 3})],
+    })));
+    expect(await screen.findByText('Release returned to the processing queue.')).toBeInTheDocument();
+  });
+
+  it('requires selecting a provider result and submits its exact identity', async () => {
+    unpublished();
+    vi.mocked(reviewSources).mockResolvedValue([{id: 'melodee', name: 'Melodee'}]);
+    vi.mocked(searchReviewMatches).mockResolvedValue({cacheKey: null, matches: [
+      { externalId: 'chosen', title: 'Correct edition', artists: ['Selected artist'], date: '1985' },
+    ]});
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', {name: 'Identify'}));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByRole('button', {name: 'Identify'})).toBeDisabled();
+    fireEvent.click(dialog.getByRole('button', {name: 'Search'}));
+    fireEvent.click(await dialog.findByRole('radio', {name: /Correct edition/}));
+    fireEvent.click(dialog.getByRole('button', {name: 'Identify'}));
+    await waitFor(() => expect(saveReviewCorrection).toHaveBeenCalledWith(WORK_ITEM_ID, expect.objectContaining({
+      title: 'Correct edition', artists: ['Selected artist'], selection: {provider: 'melodee', externalId: 'chosen', cacheKey: null},
+    })));
   });
 
   it('renders the header, evidence, comparison, decision panel, policy, and timeline', async () => {

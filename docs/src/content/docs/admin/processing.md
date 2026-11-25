@@ -11,10 +11,8 @@ history, and a read-only inspector. A stalled or failed Release never blocks the
 ## Processing Queue screen
 
 Open **Processing → Processing Queue** (`/admin/processing`). The screen is a dense table backed
-by the server-side work-item listing: state filter pills show live counts per durable state
-(`discovered`, `settling`, `ready`, `inspecting`, `normalizing`, `needs_review`, `failed`, and so
-on), sorting is restricted to the backend whitelist (`addedAt`, `updatedAt`, `state`,
-`attemptCount`), and paging is envelope-driven with honest totals. Filter, search, sort, page, and
+by the server-side work-item listing. Filter pills show live counts by phase. Sortable fields
+include when the Release was added, its state, and its attempt count. Filter, search, sort, page, and
 selection state live in the URL, so a filtered view can be shared as a link.
 
 Each row shows the Release the work item belongs to (its title and billed Artist once the import
@@ -24,6 +22,7 @@ position in the lifecycle. **Waiting for publisher** (`staged`, 70%) means valid
 and the Release is queued. When a publisher claims it, the state becomes `publishing` (80%).
 **Added to queue** shows when Melodee discovered the Release. To see how long it has waited for
 publication, select the row and find the transition to `staged` in its event timeline.
+On a page left open, use **Refresh** to fetch the latest row states.
 The **Search Releases** box filters the queue server-side by
 Release title, billed Artist, or work-item path.
 

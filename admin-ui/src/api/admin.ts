@@ -1,3 +1,4 @@
+import type { ReviewCorrection, ReviewMatch } from './types';
 import { apiFetch, buildQuery } from './client';
 import type {
   AccessGroup,
@@ -1112,4 +1113,19 @@ export function revertReleaseMetadataTransform(
     `${ADMIN}/catalog/releases/${encodeURIComponent(releaseId)}/metadata-transforms/${encodeURIComponent(auditId)}/revert`,
     { method: 'POST' },
   );
+}
+
+export function reviewSources(id: string) {
+  return apiFetch<{ id: string; name: string }[]>(`${ADMIN}/review/${encodeURIComponent(id)}/sources`);
+}
+
+export function searchReviewMatches(id: string, provider: string, artist: string, title: string) {
+  const query = new URLSearchParams({ provider, artist, title });
+  return apiFetch<{ matches: ReviewMatch[]; cacheKey: string | null }>(
+    `${ADMIN}/review/${encodeURIComponent(id)}/matches?${query}`,
+  );
+}
+
+export function saveReviewCorrection(id: string, body: ReviewCorrection) {
+  return apiFetch<void>(`${ADMIN}/review/${encodeURIComponent(id)}/metadata`, { method: 'POST', body });
 }

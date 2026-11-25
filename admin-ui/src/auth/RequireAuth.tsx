@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { ErrorState } from '../components/ErrorState';
+import { SessionAvatar } from '../shell/SessionAvatar';
 import { useAuth } from './AuthContext';
 
 /**
@@ -33,7 +34,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <>
         <header className="melodee-editor-header">
           <Link to="/processing/review">{t('nav.reviewQueue')}</Link>
-          <Button kind="ghost" onClick={() => void signOut()}>{t('auth.signOut')}</Button>
+          <div className="melodee-shell__action-with-label">
+            <SessionAvatar username={session.username} />
+            <Button kind="ghost" onClick={() => void signOut()}>{t('auth.signOut')}</Button>
+          </div>
         </header>
         <main className="melodee-editor-content">
           <Suspense fallback={<Loading description={t('common.loading')} withOverlay={false} />}>

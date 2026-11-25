@@ -27,7 +27,7 @@ import {
   updateUser,
   uploadUserAvatar,
 } from '../../api/admin';
-import { ApiError } from '../../api/client';
+import { ApiError, USER_AVATAR_CHANGED_EVENT } from '../../api/client';
 import type { Page, SortParam, UserCreateRequest, UserSummary } from '../../api/types';
 import { CellInteractive } from '../../components/CellInteractive';
 import { EntityAvatar } from '../../components/EntityAvatar';
@@ -515,6 +515,7 @@ function EditUserModal({
 
   const purgeAvatarCache = () => {
     setAvatarVersion((version) => version + 1);
+    window.dispatchEvent(new Event(USER_AVATAR_CHANGED_EVENT));
   };
 
   const uploadAvatar = (file: File | null) => {

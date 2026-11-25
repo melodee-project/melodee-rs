@@ -12,6 +12,7 @@ import type { ApiErrorBody } from './types';
  */
 
 export const AUTH_EXPIRED_EVENT = 'melodee:auth-expired';
+export const USER_AVATAR_CHANGED_EVENT = 'melodee:user-avatar-changed';
 
 export class ApiError extends Error {
   readonly code: string;

@@ -466,6 +466,8 @@ export interface ReviewQueuePage extends Page<ReviewQueueItem> {
 
 /** One manifest track row as shown in review (ReviewTrackDto). */
 export interface ReviewTrack {
+  disc?: number | null;
+  number?: number | null;
   index: number;
   filePath: string;
   title: string | null;
@@ -1723,3 +1725,18 @@ export interface ConfigEntry {
 }
 
 export type ConfigChange = { action: 'set'; value: unknown } | { action: 'reset' };
+
+export interface ReviewMatch {
+  externalId: string;
+  title: string;
+  artists: string[];
+  date: string | null;
+}
+
+export interface ReviewCorrection {
+  expectedHash: string;
+  title: string;
+  artists: string[];
+  tracks: { index: number; title: string; disc: number | null; number: number | null }[];
+  selection: { provider: string; externalId: string; cacheKey: string | null } | null;
+}

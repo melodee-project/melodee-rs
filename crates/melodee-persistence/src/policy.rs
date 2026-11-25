@@ -1293,9 +1293,15 @@ impl PolicyStore {
             })),
         )
         .await?;
+        let item = crate::review_correction::apply_accepted_identification(
+            &mut tx,
+            ReleaseWorkItem::try_from(row)?,
+            request.now,
+        )
+        .await?;
         tx.commit().await?;
         Ok(PolicyCommitResult {
-            item: ReleaseWorkItem::try_from(row)?,
+            item,
             decision: stored,
             inserted,
             set_based_mutation_statement_count: if inserted { 8 } else { 3 },
@@ -1740,9 +1746,15 @@ impl PolicyStore {
             .await?;
         let (to, _) = policy_target(request.chosen_disposition);
         let row = route_operator_item_tx(&mut tx, &item, to, request.now).await?;
+        let item = crate::review_correction::apply_accepted_identification(
+            &mut tx,
+            ReleaseWorkItem::try_from(row)?,
+            request.now,
+        )
+        .await?;
         tx.commit().await?;
         Ok(PolicyCommitResult {
-            item: ReleaseWorkItem::try_from(row)?,
+            item,
             decision: stored,
             inserted: false,
             set_based_mutation_statement_count: 3,

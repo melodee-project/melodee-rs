@@ -737,6 +737,10 @@ export async function mockAdminApi(
       await json({ service: "melodee", version: "test", status: "ok" });
       return;
     }
+    if (pathname === "/api/admin/v1/session/avatar") {
+      await route.fulfill({ status: 200, body: "" });
+      return;
+    }
     if (pathname === "/api/admin/v1/dashboard") {
       await json(DASHBOARD);
       return;

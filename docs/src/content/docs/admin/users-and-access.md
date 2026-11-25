@@ -85,6 +85,10 @@ profile fields and avatar upload/remove. Those admin mutations are audited with 
 administrator as the actor; the Admin API endpoints are documented in
 [Admin API — Users](../api/admin-api/#users).
 
+The Admin UI header shows the signed-in administrator’s or editor’s profile picture.
+If you change or remove your own avatar under **System → Users → Edit**, the header
+updates immediately. Accounts without a profile picture use the default avatar.
+
 ### Browser password reset
 
 Password-reset completion is the one bounded anonymous security page served by Rust. When email

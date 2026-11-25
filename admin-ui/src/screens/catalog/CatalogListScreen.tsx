@@ -186,7 +186,7 @@ export function CatalogListScreen<T extends { id: string }>({
   );
 
   return (
-    <div className="melodee-queue-main">
+    <div className="melodee-queue-main melodee-catalog-list">
       <PageHeader title={t(titleKey)} subtitle={t(subtitleKey)} />
       {notice}
       {listError ? (

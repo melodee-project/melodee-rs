@@ -13,13 +13,15 @@
 //! roots, canonicalized, containment-checked, and opened with the no-follow
 //! `CanonicalAssetRoot` used by native streaming.
 
+mod metadata;
+
 use std::{path::Path, path::PathBuf, sync::Arc};
 
 use axum::{
     Json, Router,
     extract::{FromRequestParts, Path as AxumPath, Query, State},
     http::{HeaderMap, StatusCode, header, request::Parts},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use melodee_domain::{
@@ -87,6 +89,7 @@ pub struct AdminReviewState {
     pub admin: AdminAccessState,
     pub preview: Arc<ReviewPreview>,
     deletion: Arc<ReviewDeletion>,
+    providers: Arc<tokio::sync::OnceCell<crate::providers::ProviderRuntime>>,
 }
 
 #[derive(Debug)]
@@ -106,6 +109,7 @@ impl AdminReviewState {
         let staging_root = source_roots.first().map(|root| root.root.clone());
         Self {
             admin,
+            providers: Arc::default(),
             preview: Arc::new(ReviewPreview::new(source_roots, work_area_base)),
             deletion: Arc::new(ReviewDeletion {
                 staging_root,
@@ -145,6 +149,23 @@ impl FromRequestParts<AdminReviewState> for Reviewer {
 
 async fn review_access(user: Reviewer) -> Json<serde_json::Value> {
     Json(serde_json::json!({"role": if user.is_admin { "administrator" } else { "editor" }}))
+}
+
+#[derive(Deserialize)]
+struct AvatarQuery {
+    v: Option<u64>,
+}
+
+async fn session_avatar(user: Reviewer, Query(query): Query<AvatarQuery>) -> impl IntoResponse {
+    let mut path = format!("/images/user_{}/80", user.public_api_id);
+    if let Some(version) = query.v {
+        path.push_str(&format!("?v={version}"));
+    }
+    // The thumbnail has its own ETag, but the redirect belongs to this login only.
+    (
+        [(header::CACHE_CONTROL, "private, no-store")],
+        Redirect::temporary(&path),
+    )
 }
 
 /// Administrator-only review operations use the standard admin gate.
@@ -228,6 +249,8 @@ pub struct ReviewTrackDto {
     pub file_path: String,
     pub title: Option<String>,
     pub duration_ms: Option<u64>,
+    pub disc: Option<u32>,
+    pub number: Option<u32>,
     pub container: Option<String>,
     pub codec: Option<String>,
     pub mime_type: Option<String>,
@@ -425,7 +448,20 @@ impl ReviewAction {
 
 pub fn router() -> Router<AdminReviewState> {
     Router::new()
+        .route("/api/admin/v1/session/avatar", get(session_avatar))
         .route("/api/admin/v1/review/access", get(review_access))
+        .route(
+            "/api/admin/v1/review/{workItemId}/sources",
+            get(metadata::sources),
+        )
+        .route(
+            "/api/admin/v1/review/{workItemId}/matches",
+            get(metadata::search),
+        )
+        .route(
+            "/api/admin/v1/review/{workItemId}/metadata",
+            post(metadata::save),
+        )
         .route("/api/admin/v1/review/queue", get(review_queue))
         .route("/api/admin/v1/review/{workItemId}", get(review_detail))
         .route(
@@ -1340,6 +1376,8 @@ fn manifest_summary(
                 file_path: track.file_path.clone(),
                 title: track.track_title.clone(),
                 duration_ms: track.duration_ms,
+                disc: track.media_number,
+                number: track.track_number,
                 container: file.and_then(|file| {
                     file.audio
                         .as_ref()

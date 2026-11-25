@@ -1254,6 +1254,23 @@ fn parse_provider_release_candidates(
     provider: &str,
     payload: &serde_json::Value,
 ) -> Result<Vec<ProviderCandidate>, ProviderError> {
+    Ok(review_release_candidates(provider, payload)?
+        .into_iter()
+        .map(|row| row.candidate)
+        .collect())
+}
+
+pub(super) struct ReviewProviderRelease {
+    pub candidate: ProviderCandidate,
+    pub title: String,
+    pub artists: Vec<String>,
+    pub date: Option<String>,
+}
+
+pub(super) fn review_release_candidates(
+    provider: &str,
+    payload: &serde_json::Value,
+) -> Result<Vec<ReviewProviderRelease>, ProviderError> {
     let rows = match provider {
         "musicbrainz" => payload
             .get("releases")
@@ -1261,14 +1278,27 @@ fn parse_provider_release_candidates(
             .into_iter()
             .flatten()
             .filter_map(|row| {
-                release_candidate(
+                let mut result = release_candidate(
                     provider,
                     row.get("id").and_then(json_string),
                     row.get("title").and_then(json_string),
                     row.pointer("/artist-credit/0/name").and_then(json_string),
                     extract_json_image_url(row),
                     None,
-                )
+                )?;
+                if let Some(credits) = row["artist-credit"].as_array() {
+                    result.artists = credits
+                        .iter()
+                        .filter_map(|credit| {
+                            credit
+                                .get("name")
+                                .or_else(|| credit.pointer("/artist/name"))
+                                .and_then(json_string)
+                        })
+                        .collect();
+                }
+                result.date = row.get("date").and_then(json_string);
+                Some(result)
             })
             .collect(),
         "discogs" => payload
@@ -1277,14 +1307,20 @@ fn parse_provider_release_candidates(
             .into_iter()
             .flatten()
             .filter_map(|row| {
-                release_candidate(
+                let mut result = release_candidate(
                     provider,
                     row.get("id").and_then(json_string),
                     row.get("title").and_then(json_string),
                     None,
                     row.get("cover_image").and_then(json_string),
                     row.get("thumb").and_then(json_string),
-                )
+                )?;
+                if let Some((artist, title)) = result.title.split_once(" - ") {
+                    result.artists = vec![artist.to_owned()];
+                    result.title = title.to_owned();
+                }
+                result.date = row.get("year").and_then(json_string);
+                Some(result)
             })
             .collect(),
         "spotify" => payload
@@ -1293,14 +1329,27 @@ fn parse_provider_release_candidates(
             .into_iter()
             .flatten()
             .filter_map(|row| {
-                release_candidate(
+                let mut result = release_candidate(
                     provider,
                     row.get("id").and_then(json_string),
                     row.get("name").and_then(json_string),
                     row.pointer("/artists/0/name").and_then(json_string),
                     row.pointer("/images/0/url").and_then(json_string),
                     None,
-                )
+                )?;
+                if let Some(credits) = row["artists"].as_array() {
+                    result.artists = credits
+                        .iter()
+                        .filter_map(|credit| {
+                            credit
+                                .get("name")
+                                .or_else(|| credit.pointer("/artist/name"))
+                                .and_then(json_string)
+                        })
+                        .collect();
+                }
+                result.date = row.get("release_date").and_then(json_string);
+                Some(result)
             })
             .collect(),
         "itunes" => payload
@@ -1432,17 +1481,22 @@ fn release_candidate(
     artist: Option<String>,
     image_url: Option<String>,
     thumbnail_url: Option<String>,
-) -> Option<ProviderCandidate> {
+) -> Option<ReviewProviderRelease> {
     let external_id = external_id.filter(|value| !value.trim().is_empty())?;
     let name = name.filter(|value| !value.trim().is_empty())?;
-    Some(ProviderCandidate {
-        provider: provider.to_owned(),
-        local: false,
-        external_id,
-        name: artist.map_or(name.clone(), |artist| format!("{artist} — {name}")),
-        sort_name: None,
-        image_url,
-        thumbnail_url,
+    Some(ReviewProviderRelease {
+        title: name.clone(),
+        artists: artist.clone().into_iter().collect(),
+        date: None,
+        candidate: ProviderCandidate {
+            provider: provider.to_owned(),
+            local: false,
+            external_id,
+            name: artist.map_or(name.clone(), |artist| format!("{artist} — {name}")),
+            sort_name: None,
+            image_url,
+            thumbnail_url,
+        },
     })
 }
 

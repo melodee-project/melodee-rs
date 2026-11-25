@@ -2542,22 +2542,23 @@ impl WorkItemStore {
         // LEFT JOIN against three entity families would cause.
         let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
             "WITH candidates AS (
-                 SELECT w.id, w.correlation_id, ci.release_id, w.updated_at
+                 SELECT w.id, w.correlation_id, ci.release_id, COALESCE(s.target_release_id, ci.release_id) AS survivor, w.updated_at
                    FROM release_work_items w
                    JOIN catalog_imports ci ON ci.work_item_id = w.id
-                  WHERE w.state = 'indexing'
+                  LEFT JOIN release_review_identifications s ON s.work_item_id=w.id
+                  WHERE w.state = 'indexing' AND (s.work_item_id IS NULL OR s.applied_at IS NOT NULL)
                   ORDER BY w.updated_at, w.id
                   LIMIT $2
              ),
              pending AS (
                  SELECT DISTINCT c.id
                    FROM candidates c
-                   LEFT JOIN tracks t ON t.release_id = c.release_id
-                   LEFT JOIN release_artists ra ON ra.release_id = c.release_id
+                   LEFT JOIN tracks t ON t.release_id = c.survivor
+                   LEFT JOIN release_artists ra ON ra.release_id = c.survivor
                    JOIN catalog_projection_outbox o
                      ON o.processed_at IS NULL
                     AND (
-                           (o.entity_type = 'release' AND o.entity_id = c.release_id)
+                           (o.entity_type = 'release' AND o.entity_id IN (c.release_id,c.survivor))
                         OR (o.entity_type = 'track' AND o.entity_id = t.id)
                         OR (o.entity_type = 'artist' AND o.entity_id = ra.artist_id)
                     )
@@ -2568,7 +2569,7 @@ impl WorkItemStore {
                     completed_at = $3,
                     updated_at = $3
                FROM candidates c
-              WHERE w.id = c.id
+              WHERE w.id = c.id AND w.state='indexing'
                 AND c.id NOT IN (SELECT id FROM pending)
              RETURNING w.id, w.correlation_id",
         )

@@ -120,9 +120,17 @@ describe('ProcessingQueueScreen', () => {
     mockListWorkItems.mockResolvedValue({
       items: [
         makeWorkItem({ state: 'staged', phase: 'publishing', releaseTitle: 'Waiting Release' }),
-        makeWorkItem({ id: '22222222-2222-4222-8222-222222222222', state: 'publishing', phase: 'publishing', releaseTitle: 'Claimed Release' }),
+        makeWorkItem({
+          id: '22222222-2222-4222-8222-222222222222',
+          state: 'publishing',
+          phase: 'publishing',
+          releaseTitle: 'Claimed Release',
+          leaseOwner: 'publisher',
+        }),
       ],
-      total: 2, limit: 50, offset: 0,
+      total: 2,
+      limit: 50,
+      offset: 0,
     });
     renderScreen();
     const waiting = await screen.findByRole('row', { name: /Waiting Release/ });

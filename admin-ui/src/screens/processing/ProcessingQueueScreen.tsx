@@ -25,6 +25,7 @@ import type {
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { FilterPills } from '../../components/FilterPills';
 import { PageHeader } from '../../components/PageHeader';
+import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { ProgressBar } from '../../components/ProgressBar';
 import { StatusChip } from '../../components/StatusTag';
 import { Surface } from '../../components/Surface';
@@ -261,7 +262,6 @@ export function ProcessingQueueScreen() {
       (pageData?.items ?? []).map((item) => {
         const title = item.releaseTitle ?? workItemDisplayName(item);
         const phase = item.phase ?? phaseForState(item.state);
-        const waitingForPublisher = item.state === 'staged';
         return {
           id: item.id,
           cells: {
@@ -277,11 +277,11 @@ export function ProcessingQueueScreen() {
               <>
                 {/* The semantic label an operator triages on. "Active" means a
                     client can already see and play it. */}
-                <StatusChip
-                  kind={waitingForPublisher ? 'pending' : phaseStatusKind(phase)}
-                  label={waitingForPublisher ? t('queue.state.staged') : t(`phase.${phase}`)}
-                  description={waitingForPublisher ? t('queue.waitingForPublisherDescription') : undefined}
-                />
+                {item.state === 'staged' ? (
+                  <ProcessingStateTag state={item.state} />
+                ) : (
+                  <StatusChip kind={phaseStatusKind(phase)} label={t(`phase.${phase}`)} />
+                )}
                 <span className="melodee-cell-stack__secondary">{item.state}</span>
               </>
             ),

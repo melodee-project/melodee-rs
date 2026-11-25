@@ -2297,6 +2297,14 @@ fn validate_release_merge_batch(merges: &[ReleaseMerge]) -> Result<(), CatalogSt
 }
 
 /// One source merge inside the caller's transaction.
+pub(crate) async fn merge_review_selection(
+    tx: &mut Transaction<'_, Postgres>,
+    merge: &ReleaseMerge,
+) -> Result<Uuid, CatalogStoreError> {
+    let (event, _) = merge_release_in_transaction(tx, merge, &mut false).await?;
+    Ok(event)
+}
+
 async fn merge_release_in_transaction(
     tx: &mut Transaction<'_, Postgres>,
     merge: &ReleaseMerge,
@@ -3413,7 +3421,12 @@ fn release_artist_observations(manifest: &ReleaseManifest) -> Vec<String> {
     let source_labels = &manifest.release_observation.source_labels;
     let inspector_manifest = source_labels.get("observed_titles").is_some()
         || source_labels.get("release_artist_source").is_some();
-    if !inspector_manifest {
+    if !inspector_manifest
+        || source_labels
+            .get("reviewed_release_billing")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    {
         return manifest
             .release_observation
             .artists

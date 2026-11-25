@@ -23,7 +23,6 @@ const STATE_KINDS: Record<string, StatusKind> = {
   inspecting: 'info',
   normalizing: 'info',
   validating: 'info',
-  staged: 'info',
   publishing: 'info',
   published: 'success',
   cataloging: 'info',
@@ -53,6 +52,15 @@ const STATE_KINDS: Record<string, StatusKind> = {
 export function ProcessingStateTag({ state }: { state: string }) {
   const { t } = useTranslation();
   const normalized = state.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'staged') {
+    return (
+      <StatusTag
+        kind="pending"
+        label={t('queue.state.staged')}
+        description={t('queue.waitingForPublisherDescription')}
+      />
+    );
+  }
   const kind = STATE_KINDS[normalized] ?? 'neutral';
   // The state string is server data; it renders as the label while the
   // localized description anchors the semantic meaning.

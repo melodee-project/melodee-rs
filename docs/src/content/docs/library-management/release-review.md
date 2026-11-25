@@ -54,6 +54,17 @@ presents evidence first and choices last:
 
 ![The Release Review workspace](../admin/images/release-review-light.png)
 
+### Correct or identify an unpublished Release
+
+Open a Release held for validation, then choose **Edit** or **Identify** in **Decision Actions**. Editors and administrators can use both actions.
+
+- **Edit** shows the Release title, its artists, and each Track alongside its source filename. Correct titles or disc and Track numbers, then choose **Save and reprocess**. For a missing Track number, use the validation finding and filename to locate the affected Track. List each Release artist on a separate line to retain individual credits.
+- **Identify** searches Melodee or an enabled Release metadata provider. Enter the title and optionally the artist, choose **Search**, and select the intended edition. You can fix Track details in the same dialog. Choose **Identify** to save the selection and return the Release to validation.
+- A **Melodee** match keeps the selected catalog Release, including its title and Release artist. Once the incoming Release passes validation and policy accepts it, Melodee appends all incoming Tracks, including duplicates, to the selected Release. The catalog merge history records the operation.
+- An **external provider** match supplies the Release title and artist credits for import. If the result lacks an artist, enter the credit before saving. Melodee records the provider ID on the accepted Release.
+
+The worker revalidates the existing normalized audio and uses the corrected metadata for publication. Original files and their embedded tags remain intact. A remaining finding can return the Release to review. If another editor saves first or a provider result expires, reload the item and select the match again. If a chosen catalog target becomes unavailable during processing, reopen **Identify** to select a current Melodee Release.
+
 ### Deciding
 
 An administrator or editor can delete a Release marked **Needs review**, including one that

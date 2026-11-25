@@ -301,6 +301,7 @@ impl IngestionState {
                     | (Self::Cataloged, Self::Quarantined)
                     | (Self::Cataloged, Self::Ignored)
                     | (Self::Cataloged, Self::Indexing)
+                    | (Self::Indexing, Self::NeedsReview)
                     | (Self::Indexing, Self::Indexed)
                     | (Self::Inspecting, Self::Failed)
                     | (Self::Normalizing, Self::Failed)
@@ -312,7 +313,8 @@ impl IngestionState {
             ),
             TransitionKind::Operator => matches!(
                 (self, next),
-                (Self::NeedsReview, Self::Staged)
+                (Self::NeedsReview, Self::Validating)
+                    | (Self::NeedsReview, Self::Staged)
                     | (Self::NeedsReview, Self::Indexing)
                     | (Self::NeedsReview, Self::Quarantined)
                     | (Self::NeedsReview, Self::Ignored)

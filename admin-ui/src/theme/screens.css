@@ -263,6 +263,21 @@
 }
 
 @media (max-width: 671px) {
+  /* Give the catalog search and selection actions room to wrap above the table. */
+  .melodee-catalog-list .cds--table-toolbar,
+  .melodee-catalog-list .cds--toolbar-content {
+    block-size: auto;
+  }
+
+  .melodee-catalog-list .cds--toolbar-content {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .melodee-catalog-list .cds--toolbar-content > .cds--search {
+    flex-basis: 100%;
+  }
+
   .melodee-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -337,4 +352,21 @@
   .melodee-release-overview > .melodee-transform-panel {
     order: -1;
   }
+}
+
+.melodee-review-metadata, .melodee-review-metadata fieldset {
+  display: grid;
+  gap: var(--melodee-space-3);
+}
+.melodee-review-metadata-actions, .melodee-match-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  margin-block-end: var(--melodee-space-3);
+}
+.melodee-review-track-fields { grid-template-columns: minmax(0, 3fr) repeat(2, minmax(0, 1fr)); }
+.melodee-review-track-fields legend, .melodee-match-option { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .melodee-review-track-fields { grid-template-columns: 1fr; }
 }

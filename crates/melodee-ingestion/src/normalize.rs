@@ -502,8 +502,7 @@ pub fn start_normalization_loop(
     work_config: WorkEngineConfig,
 ) -> crate::SchedulerHandle {
     let stop = StopToken::new();
-    let notifier = stop.signal.clone();
-    let stop_for_task = stop.clone();
+    let stop_requested = stop.signal.clone().notified_owned();
     let handle = tokio::spawn(async move {
         if !ingestion.enabled() {
             return Vec::new();
@@ -513,7 +512,6 @@ pub fn start_normalization_loop(
         let claim_batch_size = u64::from(ingestion.normalization_concurrency);
         let mut ticker = time::interval(interval);
         let mut results = Vec::new();
-        let stop_requested = notifier.notified();
         tokio::pin!(stop_requested);
         loop {
             let should_run = tokio::select! {
@@ -577,7 +575,7 @@ pub fn start_normalization_loop(
         }
         results
     });
-    crate::SchedulerHandle::from_parts(handle, stop_for_task)
+    crate::SchedulerHandle::from_parts(handle, stop)
 }
 
 #[cfg(test)]

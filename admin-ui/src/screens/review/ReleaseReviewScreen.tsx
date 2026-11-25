@@ -24,6 +24,7 @@ import {
   postReviewReprocess,
   reviewTrackPreviewUrl,
 } from '../../api/admin';
+import { ReviewMetadataDialog } from './ReviewMetadataDialog';
 import { ApiError } from '../../api/client';
 import type { ReviewDetail, ReviewTrack } from '../../api/types';
 import { AudioPreview } from '../../components/AudioPreview';
@@ -162,6 +163,8 @@ export function ReleaseReviewScreen() {
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<ReviewAction | null>(null);
+  const [editMode, setEditMode] = useState<{id: string; mode: 'edit' | 'identify'} | null>(null);
+  const [queuedId, setQueuedId] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reprocessOpen, setReprocessOpen] = useState(false);
   const [reprocessReason, setReprocessReason] = useState('');
@@ -325,7 +328,12 @@ export function ReleaseReviewScreen() {
       .finally(() => setBusy(false));
   };
 
+  const retarget = detail?.workItem.stateReason === 'review.merge_target_unavailable';
+  const editable = state === 'needs_review' && !detail?.releaseId && manifest?.schemaVersion === 2;
   const reprocessable = !editorOnly && (state === 'failed' || state === 'quarantined');
+  if (queuedId === workItemId) return <Surface title={t('review.metadata.queued')}>
+    <Link as={RouterLink} to="/processing/review">{t('review.workspace.back')}</Link>
+  </Surface>;
   const decisionAffected = manifest
     ? {
         affectedReleases: 1,
@@ -555,7 +563,22 @@ export function ReleaseReviewScreen() {
                     style={{ marginBlockEnd: 'var(--melodee-space-2)' }}
                   />
                 ) : null}
-                {state === 'needs_review' ? (
+                {editMode?.id === workItemId && manifest && detail && detail.workItem.id === workItemId && (
+                  <ReviewMetadataDialog key={workItemId} id={workItemId} manifest={manifest} timeline={detail.timeline} mode={editMode.mode} retarget={retarget}
+                    onClose={() => setEditMode(null)} onSaved={() => {
+                      setEditMode(null);
+                      if (editorOnly) setQueuedId(workItemId);
+                      else {
+                        setNotice({ kind: 'success', text: t('review.metadata.queued') });
+                        void fetchDetail({ cancelled: false });
+                      }
+                    }} />
+                )}
+                {(editable || retarget) && <div className="melodee-review-metadata-actions">
+                  <Button disabled={busy} onClick={() => setEditMode({id: workItemId, mode: 'identify'})}>{t('review.metadata.identify')}</Button>
+                  {editable && <Button kind="tertiary" disabled={busy} onClick={() => setEditMode({id: workItemId, mode: 'edit'})}>{t('review.metadata.edit')}</Button>}
+                </div>}
+                {state === 'needs_review' && !retarget ? (
                   <DecisionPanel choices={choices} onSelect={onSelectAction} />
                 ) : (
                   <>

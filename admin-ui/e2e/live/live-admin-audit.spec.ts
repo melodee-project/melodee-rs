@@ -26,7 +26,7 @@ import { expect, test, type Page } from '@playwright/test';
  * unaffected.
  */
 
-import { apiGet, HAVE_CREDENTIALS, LIVE_API, LIVE_URL as BASE_URL, signIn } from './session';
+import { apiGet, HAVE_CREDENTIALS, LIVE_API, LIVE_URL as BASE_URL, LIVE_USERNAME, signIn } from './session';
 
 /** Screens every operator can reach; each must render cleanly. */
 const SCREENS: ReadonlyArray<{ path: string; ready: RegExp }> = [
@@ -71,6 +71,23 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('live admin UI', () => {
   test.skip(!HAVE_CREDENTIALS, 'set MELODEE_LIVE_USERNAME / MELODEE_LIVE_PASSWORD to run');
+
+  test('the header loads the signed-in account’s thumbnail on a restored session', async ({ page, context, request }) => {
+    const cookie = await signIn(context, request);
+    const users = await apiGet<{ items: { id: string; username: string }[] }>(
+      request, cookie, `${LIVE_API}/api/admin/v1/users?query=${encodeURIComponent(LIVE_USERNAME)}`,
+    );
+    const account = users.items.find((user) => user.username.toLowerCase() === LIVE_USERNAME.toLowerCase());
+    expect(account).toBeDefined();
+    const thumbnail = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/images/user_${account?.id}/80`
+      && response.request().resourceType() === 'image');
+    await page.goto(BASE_URL + '/');
+    expect((await thumbnail).ok()).toBe(true);
+    const image = page.locator('header .melodee-shell__avatar img');
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  });
 
   test('every canonical screen loads with no console error and no failed request', async ({ page, context, request }) => {
     await signIn(context, request);

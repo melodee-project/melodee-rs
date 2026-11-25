@@ -17,7 +17,7 @@ ingestion, diagnosing failures, and curating the catalog. It is **not** a compat
 Every `/api/admin/v1` route requires a valid native access token
 (`Authorization: Bearer …`) or valid browser session cookie (`Cookie: melodee_auth=…`) for an
 enabled, unlocked account. General administration requires administrator rights. Editors can
-access the Release review operations described below. Missing or invalid credentials return
+retrieve their session avatar and access the Release review operations described below. Missing or invalid credentials return
 `401`, and insufficient privileges return `403`. Both use the stable
 [error envelope](#error-behavior). The infrastructure probes `/healthz` and `/readyz` are
 separate routes and remain anonymous.
@@ -253,6 +253,10 @@ removes it (`404` when no avatar is stored). Both mutations are audit-logged wit
 administrator. The shared `/images/user_{publicId}/{size}` endpoint continues to serve the stored
 avatar (or the generated fallback when none is set).
 
+`GET /api/admin/v1/session/avatar` redirects a signed-in administrator or editor to their
+80-pixel user thumbnail. The redirect is private and uncached. An optional numeric `v`
+query parameter refreshes the thumbnail after an avatar change.
+
 `POST …/{id}/password` sets a new password from `{"password": "…"}` (8–1024 characters) and
 answers `204`. The credential revision is bumped and **all** of the account's refresh sessions are
 revoked immediately, exactly as when an account is disabled or locked — the user must sign in
@@ -445,6 +449,24 @@ count — never the raw payload blob), the persisted classification with its evi
 comparison (Known/New/Alternate/Uncertain aggregates grouped from the per-Track novelty
 categories plus the durable counts), the durable policy decision (matched rules, evidence
 summary, override reason), and the append-only timeline.
+
+### Edit or identify a Release in validation review
+
+Editors and administrators can use the following routes for a work item in review.
+
+```http
+GET /api/admin/v1/review/{workItemId}/sources
+GET /api/admin/v1/review/{workItemId}/matches?provider=melodee&artist=Gary%20Numan&title=The%20Fury
+POST /api/admin/v1/review/{workItemId}/metadata
+```
+
+Search returns up to 25 matches with an external ID, Release title, artist credits and available date. The response includes a cache key for external results. Submit the current manifest hash, title, artist list, and only the Track rows that changed. Track indices are the zero-based indices from review detail. For example:
+
+```json
+{"expectedHash":"<current manifest hash>","title":"The Fury","artists":["Gary Numan"],"tracks":[{"index":2,"title":"Your Fascination","disc":1,"number":3}],"selection":null}
+```
+
+For Identify, send `selection` with `provider`, `externalId` and the returned `cacheKey` (null for Melodee). The server resolves the selected names. A successful save returns 204 and enqueues validation. A stale or expired selection returns 409. Once publication is authorized, the manifest is sealed. Reselecting a stale local merge target resumes indexing using the existing published files.
 
 ### Apply a review decision
 

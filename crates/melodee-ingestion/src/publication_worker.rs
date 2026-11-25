@@ -853,8 +853,7 @@ fn start_stage_loop(
     validation: bool,
 ) -> SchedulerHandle {
     let stop = StopToken::new();
-    let notifier = stop.signal.clone();
-    let stop_for_task = stop.clone();
+    let stop_requested = stop.signal.clone().notified_owned();
     let handle = tokio::spawn(async move {
         if !ingestion.publication_enabled() {
             return Vec::new();
@@ -874,7 +873,6 @@ fn start_stage_loop(
             TokioDuration::try_from(work_config.retry_policy.max_delay).unwrap_or(retry_base);
         let mut retry_delay = retry_base;
         let mut results = Vec::new();
-        let stop_requested = notifier.notified();
         tokio::pin!(stop_requested);
         loop {
             let should_run = tokio::select! {
@@ -994,5 +992,5 @@ fn start_stage_loop(
         }
         results
     });
-    SchedulerHandle::from_parts(handle, stop_for_task)
+    SchedulerHandle::from_parts(handle, stop)
 }

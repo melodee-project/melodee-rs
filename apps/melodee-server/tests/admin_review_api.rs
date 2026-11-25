@@ -281,6 +281,60 @@ async fn seed_failed_item(db: &TestDb, source_path: &str) -> Uuid {
 }
 
 #[tokio::test]
+async fn session_avatar_resolves_each_operators_cookie_and_keeps_the_redirect_private() {
+    let db = TestDb::create("session_avatar").await;
+    let users = seed_users(&db).await;
+    let work = tempfile::tempdir().expect("work area");
+    let app = build_app(db.pool.clone(), vec![], work.path());
+    let path = "/api/admin/v1/session/avatar";
+
+    assert_eq!(
+        call(app.clone(), "GET", path, None, None, &[]).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let listener = token_for(users.plain_public, "wp12-plain");
+    assert_eq!(
+        call(app.clone(), "GET", path, None, Some(&listener), &[])
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    sqlx::query("UPDATE native_users SET is_editor = true WHERE public_api_id = $1")
+        .bind(users.plain_public)
+        .execute(&db.pool)
+        .await
+        .expect("grant editor role");
+    for (id, revision) in [(users.admin_public, ""), (users.plain_public, "?v=2")] {
+        let iat = OffsetDateTime::now_utc().unix_timestamp();
+        let token = melodee_auth::issue_cookie_session(
+            &SecretString::new(JWT_KEY.to_owned()),
+            &melodee_auth::NativeCookieClaims {
+                public_api_id: id,
+                iat,
+                exp: iat + 900,
+            },
+        )
+        .expect("session cookie");
+        let response = call(
+            app.clone(),
+            "GET",
+            &format!("{path}{revision}"),
+            None,
+            None,
+            &[("cookie", &format!("melodee_auth={token}"))],
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(
+            response.headers[header::LOCATION],
+            format!("/images/user_{id}/80{revision}")
+        );
+        assert_eq!(response.headers[header::CACHE_CONTROL], "private, no-store");
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn review_routes_reject_anonymous_and_listener_requests() {
     let db = TestDb::create("wp12_review_gate").await;
     let fixture = seed_users(&db).await;
@@ -1028,5 +1082,398 @@ async fn confirmed_pre_catalog_delete_scopes_files_roles_and_retries() {
     .await
     .unwrap();
     assert_eq!(audit, (users.plain_public, "editor".to_owned(), None, true));
+    db.drop().await;
+}
+
+/// Start with a normalized, unsealed review on the same manifest shape as
+/// the catalog fixture. The target remains a separate, published Release.
+#[tokio::test]
+async fn editor_corrects_ordering_and_identifies_a_specific_release() {
+    let db = TestDb::create("review_identify").await;
+    let users = seed_users(&db).await;
+    let editor = token_for(users.plain_public, "editor");
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        43,
+        CatalogFixturePresentation {
+            release_artist: "Gary Numan",
+            release_title: "The Fury",
+            ..Default::default()
+        },
+    )
+    .await;
+    let target = fixture.release_id().into_uuid();
+    let id = seed_ready_item(&WorkItemStore, &db.pool, "review-inbound").await;
+    let mut manifest = fixture.published.manifest.clone();
+    manifest.schema_version = 2;
+    manifest.work_item_id = id;
+    manifest.publication = None;
+    manifest.release_observation.title = Some("Unidentified".into());
+    manifest.tracks[0].track_number = None;
+    let hash = melodee_media::hash_manifest(&manifest).unwrap();
+    sqlx::query("UPDATE release_work_items SET state='needs_review',state_reason='validation.needs_review', manifest_hash=$2 WHERE id=$1")
+        .bind(id).bind(&hash).execute(&db.pool).await.unwrap();
+    sqlx::query("INSERT INTO release_work_item_manifests(work_item_id,schema_version,manifest_hash,manifest_payload,source_stable,generation_duration_ms,generated_at)
+        VALUES ($1,2,$2,$3,true,0,now())").bind(id).bind(&hash).bind(sqlx::types::Json(&manifest)).execute(&db.pool).await.unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let app = build_app(db.pool.clone(), vec![], work.path());
+    let base = format!("/api/admin/v1/review/{id}");
+    let search = format!("{base}/matches?provider=melodee&artist=Gary&title=Fury");
+    assert_eq!(
+        call(app.clone(), "GET", &search, None, Some(&editor), &[])
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    sqlx::query("UPDATE native_users SET is_editor=true WHERE public_api_id=$1")
+        .bind(users.plain_public)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let response = call(app.clone(), "GET", &search, None, Some(&editor), &[]).await;
+    assert_eq!(response.status, StatusCode::OK, "{}", response.body);
+    let result = &response.body["matches"][0];
+    assert_eq!(result["artists"][0], "Gary Numan");
+    let update = serde_json::json!({"title":"The Fury","artists":["Gary Numan"],"tracks":[{"index":0,"title":"Your Fascination","disc":1,"number":3}],
+        "expectedHash":hash,"selection": {"provider":"melodee","externalId":result["externalId"]}});
+    let url = format!("{base}/metadata");
+    let mut stale = update.clone();
+    stale["expectedHash"] = "older".into();
+    assert_eq!(
+        call(app.clone(), "POST", &url, Some(stale), Some(&editor), &[])
+            .await
+            .status,
+        StatusCode::CONFLICT
+    );
+    let saved = call(
+        app.clone(),
+        "POST",
+        &url,
+        Some(update.clone()),
+        Some(&editor),
+        &[],
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::NO_CONTENT, "{}", saved.body);
+    assert_eq!(
+        call(app.clone(), "POST", &url, Some(update), Some(&editor), &[])
+            .await
+            .status,
+        StatusCode::CONFLICT
+    );
+    let stored = WorkItemStore
+        .get_manifest(&db.pool, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(stored.manifest_hash, hash);
+    assert_eq!(stored.payload["tracks"][0]["track_number"], 3);
+    assert_eq!(
+        stored.payload["tracks"][0]["track_title"],
+        "Your Fascination"
+    );
+    assert_eq!(stored.payload["release_observation"]["title"], "The Fury");
+    assert_eq!(
+        stored.payload["normalization"],
+        serde_json::to_value(manifest.normalization).unwrap()
+    );
+    let item = WorkItemStore.get(&db.pool, id).await.unwrap();
+    assert_eq!(item.state, IngestionState::Validating);
+    assert_eq!(item.manifest_hash.as_ref(), Some(&stored.manifest_hash));
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT target_release_id FROM release_review_identifications WHERE work_item_id=$1"
+        )
+        .bind(id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap(),
+        target
+    );
+    let events = WorkItemStore.list_events(&db.pool, id).await.unwrap();
+    assert!(events.iter().any(
+        |event| event.reason_code.as_deref() == Some("review.identified")
+            && event.metadata.as_ref().unwrap()["actor"] == users.plain_public.to_string()
+    ));
+    // A second validation hold can be edited independently, preserving the
+    // chosen target and original file tags even if the Release billing changes.
+    sqlx::query("UPDATE release_work_items SET state='needs_review' WHERE id=$1")
+        .bind(id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let body = serde_json::json!({"expectedHash":stored.manifest_hash,"title":"Corrected","artists":["New Artist"],"tracks":[]});
+    assert_eq!(
+        call(app, "POST", &url, Some(body), Some(&editor), &[])
+            .await
+            .status,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT target_release_id FROM release_review_identifications WHERE work_item_id=$1"
+        )
+        .bind(id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap(),
+        target
+    );
+    // Re-identify with a cached external match. The server supplies both
+    // names from the provider, even when the submitted strings disagree.
+    sqlx::query("UPDATE release_work_items SET state='needs_review' WHERE id=$1")
+        .bind(id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let stored = WorkItemStore
+        .get_manifest(&db.pool, id)
+        .await
+        .unwrap()
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        let fixture=axum::Router::new().route("/release",axum::routing::get(|axum::extract::Query(params):axum::extract::Query<std::collections::BTreeMap<String,String>>|async move{
+            assert_eq!(params["query"],r#"release:"Verified edition" AND artist:"First""#);
+            axum::Json(serde_json::json!({"releases":[{"id":"chosen-mbid","title":"Verified edition",
+                "artist-credit":[{"name":"First"},{"name":"Second"}]}]}))
+        }));
+        axum::serve(listener, fixture).await.unwrap();
+    });
+    for (key, value) in [
+        (
+            "searchEngine.musicbrainz.baseUrl",
+            serde_json::json!(format!("http://{address}")),
+        ),
+        ("searchEngine.musicbrainz.enabled", true.into()),
+    ] {
+        melodee_persistence::SettingsStore::new()
+            .set(&db.pool, key, &value, None, OffsetDateTime::now_utc())
+            .await
+            .unwrap();
+    }
+    let app = build_app(db.pool.clone(), vec![], work.path());
+    let sources = call(
+        app.clone(),
+        "GET",
+        &format!("{base}/sources"),
+        None,
+        Some(&editor),
+        &[],
+    )
+    .await;
+    assert!(
+        sources
+            .body
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == "musicbrainz")
+    );
+    let search =
+        format!("{base}/matches?provider=musicbrainz&title=Verified%20edition&artist=First");
+    let response = call(app.clone(), "GET", &search, None, Some(&editor), &[]).await;
+    assert_eq!(response.status, StatusCode::OK, "{}", response.body);
+    assert_eq!(
+        response.body["matches"][0]["artists"],
+        serde_json::json!(["First", "Second"])
+    );
+    let cache_key = &response.body["cacheKey"];
+    provider.abort();
+    let cached = call(app.clone(), "GET", &search, None, Some(&editor), &[]).await;
+    assert_eq!(
+        cached.body, response.body,
+        "cached search preserves individual artist credits"
+    );
+    let mut external = serde_json::json!({"expectedHash":stored.manifest_hash,"title":"wrong","artists":["wrong"],"tracks":[],
+        "selection":{"provider":"musicbrainz","cacheKey":cache_key,"externalId":"other"}});
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &url,
+            Some(external.clone()),
+            Some(&editor),
+            &[]
+        )
+        .await
+        .status,
+        StatusCode::CONFLICT
+    );
+    external["selection"]["externalId"] = "chosen-mbid".into();
+    assert_eq!(
+        call(app, "POST", &url, Some(external), Some(&editor), &[])
+            .await
+            .status,
+        StatusCode::NO_CONTENT
+    );
+    let stored = WorkItemStore
+        .get_manifest(&db.pool, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        stored.payload["release_observation"]["title"],
+        "Verified edition"
+    );
+    assert_eq!(
+        stored.payload["release_observation"]["artists"],
+        serde_json::json!(["First", "Second"])
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<Uuid>>(
+            "SELECT target_release_id FROM release_review_identifications WHERE work_item_id=$1"
+        )
+        .bind(id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap(),
+        None
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn acceptance_applies_operator_identifications_once_and_parks_a_stale_target() {
+    let db = TestDb::create("review_merge").await;
+    let source = seed_pending_review(&db, 71).await;
+    let target = phase5_common::seed_cataloged_release(
+        &db,
+        72,
+        CatalogFixturePresentation {
+            release_title: "Chosen edition",
+            release_artist: "Chosen artist",
+            ..Default::default()
+        },
+    )
+    .await;
+    let id = source.work_item_id();
+    let target_id = target.release_id().into_uuid();
+    let actor = Uuid::now_v7();
+    sqlx::query("INSERT INTO release_review_identifications(work_item_id,provider,external_id,target_release_id,actor) VALUES($1,'melodee',$2,$3,$4)")
+        .bind(id).bind(target_id.to_string()).bind(target_id).bind(actor).execute(&db.pool).await.unwrap();
+    sqlx::query("UPDATE releases SET status='deprecated' WHERE id=$1")
+        .bind(target_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let now = OffsetDateTime::now_utc();
+    let users = seed_users(&db).await;
+    let admin = token_for(users.admin_public, "wp12-admin");
+    let work = tempfile::tempdir().unwrap();
+    let app = build_app(db.pool.clone(), vec![], work.path());
+    let accepted = call(
+        app.clone(),
+        "POST",
+        &format!("/api/admin/v1/review/{id}/decision"),
+        Some(serde_json::json!({"action":"accept","reason":"verified"})),
+        Some(&admin),
+        &[],
+    )
+    .await;
+    assert_eq!(accepted.status, StatusCode::OK, "{}", accepted.body);
+    assert_eq!(
+        WorkItemStore.get(&db.pool, id).await.unwrap().state,
+        IngestionState::NeedsReview
+    );
+    sqlx::query("UPDATE releases SET status='active' WHERE id=$1")
+        .bind(target_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let hash = WorkItemStore
+        .get_manifest(&db.pool, id)
+        .await
+        .unwrap()
+        .unwrap()
+        .manifest_hash;
+    let public: Uuid = sqlx::query_scalar("SELECT public_api_id FROM releases WHERE id=$1")
+        .bind(target_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    let request = serde_json::json!({"title":"Chosen edition","artists":["Chosen artist"],"expectedHash":hash,"tracks":[],"selection":{"provider":"melodee","externalId":public}});
+    let res = call(
+        app,
+        "POST",
+        &format!("/api/admin/v1/review/{id}/metadata"),
+        Some(request),
+        Some(&admin),
+        &[],
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::NO_CONTENT, "{}", res.body);
+    for _ in 0..2 {
+        WorkItemStore
+            .complete_indexed(&db.pool, now, 8, "test.indexed")
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tracks WHERE release_id=$1")
+            .bind(target_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM release_merge_events")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT merged_into_release_id FROM releases WHERE id=$1")
+            .bind(source.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        target_id
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn accepting_a_provider_identification_records_its_identity_on_the_release() {
+    let db = TestDb::create("review_external").await;
+    let users = seed_users(&db).await;
+    let fixture = seed_pending_review(&db, 73).await;
+    let id = fixture.work_item_id();
+    sqlx::query(
+        "INSERT INTO release_review_identifications (work_item_id,provider,external_id,actor)
+         VALUES ($1,'itunes','review-selected-edition',$2)",
+    )
+    .bind(id)
+    .bind(users.admin_public)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let admin = token_for(users.admin_public, "wp12-admin");
+    let response = call(
+        build_app(db.pool.clone(), vec![], root.path()),
+        "POST",
+        &format!("/api/admin/v1/review/{id}/decision"),
+        Some(serde_json::json!({"action":"accept","reason":"Verified the release"})),
+        Some(&admin),
+        &[],
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::OK, "{}", response.body);
+    let identities: Vec<(String, String, bool)> = sqlx::query_as(
+        "SELECT provider, external_id, is_locked FROM release_external_identities
+         WHERE release_id=$1 AND evidence_source='operator.review'",
+    )
+    .bind(fixture.release_id().into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        identities,
+        vec![("itunes".into(), "review-selected-edition".into(), true)]
+    );
     db.drop().await;
 }

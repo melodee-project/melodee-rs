@@ -6,6 +6,9 @@ use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum WorkStoreError {
+    #[error("review identification merge failed")]
+    ReviewMerge(#[source] Box<crate::CatalogStoreError>),
+
     #[error("work item not found: {0}")]
     NotFound(Uuid),
 
