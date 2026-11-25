@@ -916,36 +916,51 @@ the surviving Release, because newer curation wins.
 
 ### Catalog deletion
 
+Administrators and editors can hard-delete catalog Artists, Releases, and Tracks (ADR-0211).
+The confirmation dialog is the only operator step; the reason is optional.
+
 ```http
 POST /api/admin/v1/catalog/artists/delete/preview
 POST /api/admin/v1/catalog/artists/delete
 POST /api/admin/v1/catalog/releases/delete/preview
 POST /api/admin/v1/catalog/releases/delete
+POST /api/admin/v1/catalog/tracks/delete/preview
+POST /api/admin/v1/catalog/tracks/delete
 ```
 
-Preview body: `{"artistIds": ["…"]}` or `{"releaseIds": ["…"]}` (1–100 distinct entries). It
-returns the affected entries, `impact` (`releases`, `tracks`, `mediaFiles`, `mediaBytes`,
-`releaseCredits`, `trackCredits`, `contributions`, `userStates`; Artist previews also report
-`retainedSharedReleases`), `storageReadyReleases`, `storageConfigured`, and `warnings`. Preview
-never mutates data.
+Preview body: `{"artistIds": ["…"]}`, `{"releaseIds": ["…"]}`, or `{"trackIds": ["…"]}`
+(1–100 distinct entries). It returns the affected entries, `impact` (`artists`, `releases`,
+`tracks`, `mediaFiles`, `mediaBytes`, `releaseCredits`, `trackCredits`, `contributions`,
+`userStates`, `images`; Artist previews also report `retainedSharedReleases`),
+`storageConfigured`, and `warnings`. Preview never mutates data.
 
-Delete body: `{"artistIds"|"releaseIds": ["…"], "mode": "catalogOnly" | "releasesAndFiles",
-"reason": "…"}`. The reason is mandatory and recorded with the acting administrator.
+Delete body: `{"artistIds"|"releaseIds"|"trackIds": ["…"], "reason": "…"}`. `reason` is optional;
+when omitted or blank the server records a fixed audit note. The response lists the deleted
+public ids.
 
-- `catalogOnly` retires the catalog records and keeps every media file.
-- `releasesAndFiles` additionally removes the affected Releases' canonical and staged storage,
-  resolved only from durable publication and staging-handoff evidence, then retires the records.
-  An Artist selection affects only Releases the Artist bills as primary with no other primary
-  Artist; a Release also billed to another primary Artist is kept and reported. The call fails
-  closed with `503 delete_storage_unavailable` when canonical storage is not configured and with
-  `409 storage_evidence_missing` when an affected Release has no storage evidence — in both cases
-  nothing is changed.
+Deletion is a hard delete of the selected rows and every file they own:
 
-Deletion never row-deletes evidence: the Artist/Release becomes a tombstone that keeps its public
-ids, Tracks, credits, observations, provider evidence, per-user state, and audit history.
-`merged` or already-deleted entries are rejected with `409 not_deletable` (split a merged Release
-first). The Artist list bulk action and the Release list bulk action in the Admin UI expose both
-scopes beside merge.
+- a Release removes its Tracks, credits, observations, classification/novelty/policy evidence,
+  provider evidence, per-user state, playlist/playback rows, projection entries, merge/split
+  history, and its originating processing work item;
+- a Track removes its own rows and media file; the surviving Release and its other Tracks remain,
+  and the Release aggregate is recomputed;
+- an Artist removes its identities, aliases, credits, relationships, provider evidence, and every
+  Release it owns alone. A Release also billed as primary by another Artist is kept; only the
+  selected Artist's rows are removed from it and the preview reports the retained count.
+
+Files are removed before the database commit from durable publication, staging-handoff, or media
+asset paths below configured roots. If canonical storage is not configured while files would be
+removed, or a no-follow removal fails, the call fails closed with
+`503 delete_storage_unavailable` or `500 delete_execution_failed` and changes no catalog row.
+Artwork is content-addressed and is unlinked after the commit only when no other row references
+its asset key.
+
+The same routes are used by the Artist, Release, and Track list bulk actions and detail screens.
+Editors can read these catalog pages and delete from them; metadata editing, artwork upload,
+merge, and identity operations remain administrator-only. There is no undo: the surviving record
+is one `catalog_audit_events` row per deleted entity (`artist_hard_deleted`,
+`release_hard_deleted`, `track_hard_deleted`).
 
 ### Catalog artwork overrides
 

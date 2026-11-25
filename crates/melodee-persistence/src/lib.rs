@@ -11,7 +11,7 @@ pub mod asset_files;
 mod auth;
 mod catalog;
 mod catalog_browse;
-mod catalog_delete;
+mod catalog_hard_delete;
 mod catalog_identity;
 mod catalog_images;
 mod catalog_mutations;
@@ -74,11 +74,11 @@ pub use catalog_browse::{
     MediaAssetRow, ReleaseCatalogDetail, ReleaseExternalIdentityRow, ReleaseMergeEventRow,
     ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail, contains_pattern,
 };
-pub use catalog_delete::{
-    ArtistDelete, ArtistDeleteImpact, ArtistDeleteMode, ArtistDeleteOutcome, ArtistDeletePreview,
-    ArtistDeletePreviewArtist, ArtistDeleteReleaseStorage, MAX_ARTIST_DELETE_SOURCES,
-    MAX_RELEASE_DELETE_SOURCES, ReleaseDelete, ReleaseDeleteImpact, ReleaseDeleteMode,
-    ReleaseDeleteOutcome, ReleaseDeletePreview, ReleaseDeletePreviewRelease, ReleaseDeleteStorage,
+pub use catalog_hard_delete::{
+    ArtistHardDeleteStorage, HardDeleteArtistPreview, HardDeleteArtistPreviewArtist,
+    HardDeleteImpact, HardDeleteOutcome, HardDeleteReleasePreview, HardDeleteReleasePreviewRelease,
+    HardDeleteTrackPreview, HardDeleteTrackPreviewTrack, MAX_HARD_DELETE_SOURCES,
+    ReleaseHardDeleteStorage, TrackHardDeleteStorage,
 };
 pub use catalog_identity::{
     ArtistMergeImpact, ArtistMergePreview, ArtistMergePreviewArtist, MAX_ARTIST_MERGE_SOURCES,

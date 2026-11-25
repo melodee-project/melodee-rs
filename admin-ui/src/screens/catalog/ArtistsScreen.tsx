@@ -18,6 +18,7 @@ import {
   previewArtistMerge,
 } from '../../api/admin';
 import type { ArtistMergePreview, CatalogArtistListItem } from '../../api/types';
+import { useSessionRole } from '../../auth/AuthContext';
 import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { ArtistLink } from '../../components/EntityLink';
 import type { EntityColumn } from '../../components/EntityTable';
@@ -214,6 +215,8 @@ function MergeArtistsModal({ artists, onClose, onCompleted }: MergeArtistsModalP
 
 export function ArtistsScreen() {
   const { t } = useTranslation();
+  const role = useSessionRole();
+  const isAdmin = role === 'admin';
   const [items, setItems] = useState<CatalogArtistListItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -295,7 +298,7 @@ export function ArtistsScreen() {
         selection={{ selectedIds, onChange: setSelectedIds }}
         toolbarActions={
           <>
-            <Button
+            {isAdmin ? <Button
               kind="secondary"
               size="sm"
               disabled={selectedIds.length < 2}
@@ -305,7 +308,7 @@ export function ArtistsScreen() {
               }}
             >
               {t('catalog.artists.merge.selectedAction', { count: selectedIds.length })}
-            </Button>
+            </Button> : null}
             <Button
               kind="danger--tertiary"
               size="sm"
@@ -356,8 +359,8 @@ export function ArtistsScreen() {
           kind="artist"
           count={selectedIds.length}
           preview={async () => artistDeletePreviewView(await previewArtistDelete(selectedIds))}
-          onSubmit={async (mode, reason) => {
-            const result = await deleteArtists({ artistIds: selectedIds, mode, reason });
+          onSubmit={async () => {
+            const result = await deleteArtists({ artistIds: selectedIds });
             setDeleteOpen(false);
             setNoticeDeleteCount(result.deletedArtistIds.length);
             setNotice('delete');

@@ -102,6 +102,35 @@ impl FromRequestParts<AdminCatalogState> for AdminPrincipal {
     }
 }
 
+/// Administrator or editor identity for catalog list/detail reads. Editors
+/// can inspect the catalog and hard-delete entries; all catalog mutations
+/// remain administrator-only.
+#[derive(Debug, Clone, Copy)]
+pub struct CatalogReader {
+    pub public_api_id: Uuid,
+}
+
+impl FromRequestParts<AdminCatalogState> for CatalogReader {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AdminCatalogState,
+    ) -> Result<Self, Self::Rejection> {
+        let user = crate::admin_access::authenticated_operator_user(parts, &state.admin).await?;
+        if !user.is_admin && !user.is_editor {
+            return Err(catalog_error(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "catalog access requires an administrator or editor",
+            ));
+        }
+        Ok(Self {
+            public_api_id: user.public_api_id,
+        })
+    }
+}
+
 const fn default_list_limit() -> u32 {
     50
 }
@@ -901,7 +930,7 @@ pub fn router() -> Router<AdminCatalogState> {
 /// GET /api/admin/v1/catalog/artists — server-side Artist browsing.
 async fn list_artists(
     State(state): State<AdminCatalogState>,
-    _admin: AdminPrincipal,
+    _reader: CatalogReader,
     Query(params): Query<ArtistListParams>,
 ) -> Response {
     if let Err(message) = validate_list_offset(params.offset) {
@@ -968,7 +997,7 @@ async fn list_artists(
 /// GET /api/admin/v1/catalog/releases — server-side Release browsing.
 async fn list_releases(
     State(state): State<AdminCatalogState>,
-    _admin: AdminPrincipal,
+    _reader: CatalogReader,
     Query(params): Query<ReleaseListParams>,
 ) -> Response {
     if let Err(message) = validate_list_offset(params.offset) {
@@ -1039,7 +1068,7 @@ async fn list_releases(
 /// GET /api/admin/v1/catalog/tracks — server-side Track browsing.
 async fn list_tracks(
     State(state): State<AdminCatalogState>,
-    _admin: AdminPrincipal,
+    _reader: CatalogReader,
     Query(params): Query<TrackListParams>,
 ) -> Response {
     if let Err(message) = validate_list_offset(params.offset) {
@@ -1107,7 +1136,7 @@ async fn list_tracks(
 /// GET /api/admin/v1/catalog/artists/{id} — Artist detail tabs read.
 async fn artist_detail(
     State(state): State<AdminCatalogState>,
-    _admin: AdminPrincipal,
+    _reader: CatalogReader,
     Path(id): Path<Uuid>,
 ) -> Response {
     let detail = match CatalogStore
@@ -1260,7 +1289,7 @@ fn artist_detail_dto(
 /// resolves and the acting administrator is stream-authorized (PRD-UI-007).
 async fn release_detail(
     State(state): State<AdminCatalogState>,
-    admin: AdminPrincipal,
+    reader: CatalogReader,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
@@ -1302,7 +1331,7 @@ async fn release_detail(
         .collect::<Vec<_>>();
     let signed = state
         .stream_url_signer
-        .stream_urls_partial(playable_ids.clone(), admin.public_api_id, &binding)
+        .stream_urls_partial(playable_ids.clone(), reader.public_api_id, &binding)
         .await
         .ok()
         .filter(|urls| urls.len() == playable_ids.len())
@@ -1398,7 +1427,7 @@ fn release_detail_dto(
 /// acting administrator is stream-authorized (PRD-UI-007).
 async fn track_detail(
     State(state): State<AdminCatalogState>,
-    admin: AdminPrincipal,
+    reader: CatalogReader,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
@@ -1424,7 +1453,7 @@ async fn track_detail(
     let stream_url = if has_playable {
         state
             .stream_url_signer
-            .stream_urls_partial(vec![detail.public_api_id], admin.public_api_id, &binding)
+            .stream_urls_partial(vec![detail.public_api_id], reader.public_api_id, &binding)
             .await
             .ok()
             .and_then(|mut urls| (urls.len() == 1).then(|| urls.pop().flatten()))

@@ -1,5 +1,6 @@
 import {
   ActionableNotification,
+  Button,
   Link,
   Loading,
   Table,
@@ -13,12 +14,18 @@ import {
 } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
-import { getCatalogRelease } from '../../api/admin';
-import { updateReleaseMetadata } from '../../api/admin';
+import {
+  deleteReleases,
+  getCatalogRelease,
+  previewReleaseDelete,
+  updateReleaseMetadata,
+} from '../../api/admin';
 import type { ReleaseDetail } from '../../api/types';
+import { useSessionRole } from '../../auth/AuthContext';
 import { AudioPreview } from '../../components/AudioPreview';
+import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { AuditTimeline } from '../../components/AuditTimeline';
 import { EmptyState } from '../../components/EmptyState';
 import { ArtistLink, TrackLink } from '../../components/EntityLink';
@@ -34,6 +41,7 @@ import {
   formatDuration,
   formatNumber,
 } from '../../i18n/format';
+import { releaseDeletePreviewView } from './catalogDelete';
 import {
   catalogStatusKind,
   releaseStatusPresentation,
@@ -121,8 +129,12 @@ function ReleaseFacts({ detail }: { detail: ReleaseDetail }) {
 
 export function ReleaseDetailScreen() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const role = useSessionRole();
+  const isAdmin = role === 'admin';
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [tab, setTab] = useState('overview');
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogRelease, id);
 
@@ -137,7 +149,15 @@ export function ReleaseDetailScreen() {
 
   return (
     <div>
-      <PageHeader title={t('catalog.release.detailTitle')} subtitle={t('catalog.release.detailSubtitle')} />
+      <PageHeader
+        title={t('catalog.release.detailTitle')}
+        subtitle={t('catalog.release.detailSubtitle')}
+        actions={
+          <Button kind="danger--tertiary" size="sm" onClick={() => setDeleteOpen(true)}>
+            {t('catalog.delete.action')}
+          </Button>
+        }
+      />
       <p>
         <Link as={RouterLink} to="/catalog/releases">
           {t('catalog.release.back')}
@@ -170,12 +190,14 @@ export function ReleaseDetailScreen() {
               />
             ) : null;
           })()}
-          <p>
-            <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
-              {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
-            </Link>
-          </p>
-          {editing ? (
+          {isAdmin ? (
+            <p>
+              <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
+                {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
+              </Link>
+            </p>
+          ) : null}
+          {isAdmin && editing ? (
             <EditPanel
               title={t('catalog.release.edit.title')}
               fields={[
@@ -298,7 +320,7 @@ export function ReleaseDetailScreen() {
                     />
                   </Surface>
                 </div>
-                <MetadataTransformPanel releaseId={id} refresh={retry} />
+                {isAdmin ? <MetadataTransformPanel releaseId={id} refresh={retry} /> : null}
             </div>
           ) : null}
           {tab === 'tracks' ? (
@@ -594,14 +616,18 @@ export function ReleaseDetailScreen() {
                 <p className="melodee-panel__subtitle">
                   {t('catalog.release.images.description')}
                 </p>
-                <ArtworkManager
-                  entity="releases"
-                  entityId={detail.id}
-                  imageId={detail.imageId}
-                  imageUpdatedAt={detail.imageUpdatedAt}
-                  name={detail.title}
-                  onChanged={retry}
-                />
+                {isAdmin ? (
+                  <ArtworkManager
+                    entity="releases"
+                    entityId={detail.id}
+                    imageId={detail.imageId}
+                    imageUpdatedAt={detail.imageUpdatedAt}
+                    name={detail.title}
+                    onChanged={retry}
+                  />
+                ) : (
+                  <p>{t('catalog.delete.editorReadOnly')}</p>
+                )}
                 </Surface>
           ) : null}
           {tab === 'history' ? (
@@ -611,6 +637,19 @@ export function ReleaseDetailScreen() {
                 </Surface>
           ) : null}
         </>
+      ) : null}
+      {deleteOpen ? (
+        <CatalogDeleteDialog
+          kind="release"
+          count={1}
+          preview={async () => releaseDeletePreviewView(await previewReleaseDelete([id]))}
+          onSubmit={async () => {
+            await deleteReleases({ releaseIds: [id] });
+            setDeleteOpen(false);
+            void navigate('/catalog/releases');
+          }}
+          onClose={() => setDeleteOpen(false)}
+        />
       ) : null}
     </div>
   );

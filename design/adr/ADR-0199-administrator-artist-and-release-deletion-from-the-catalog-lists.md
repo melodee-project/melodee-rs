@@ -1,10 +1,10 @@
 # ADR-0199: Administrator Artist and Release deletion from the catalog lists
 
 - **Date:** 2026-11-15
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** Catalog curation, Admin API, Admin UI
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0211
 - **Related requirements:** PRD-API-ADMIN-002, PRD-CATALOG-001, PRD-POLICY-007,
   PRD-UI-005
 

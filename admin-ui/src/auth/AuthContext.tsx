@@ -153,6 +153,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * Returns the current operator role for display gating. Outside an auth
+ * provider (unit tests) it defaults to administrator; the server still
+ * enforces every mutation.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSessionRole(): 'admin' | 'editor' {
+  const context = useContext(AuthContext);
+  return context?.session.kind === 'editor' ? 'editor' : 'admin';
+}
+
 // The context hook is intentionally colocated with its provider: consumers
 // import one module, and the hook is the only non-component export here. The
 // react-refresh rule is an HMR fast-refresh optimization, not a correctness

@@ -1,9 +1,8 @@
-//! Administrative Artist and Release deletion API (ADR-0199).
+//! Administrator and editor hard-deletion API (ADR-0211).
 //!
-//! The two catalog list bulk actions share one destructive surface: a read-only
-//! impact preview, then an audited tombstone commit with either catalog-only or
-//! releases-and-files scope. Artists that another Artist also bills as primary
-//! are never retired by an Artist deletion.
+//! The confirmation dialog is the only step: a confirmed request removes the
+//! selected rows, their dependent evidence, the originating work item, and the
+//! files derived from durable paths. No reason, scope, or workflow is required.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
@@ -34,16 +33,19 @@ const JWT_KEY: &str = "test-admin-catalog-delete-key-32";
 
 struct Fixture {
     admin_public: Uuid,
+    editor_public: Uuid,
     plain_public: Uuid,
 }
 
 async fn seed_users(db: &TestDb) -> Fixture {
     let now = OffsetDateTime::now_utc();
     let admin_public = Uuid::now_v7();
+    let editor_public = Uuid::now_v7();
     let plain_public = Uuid::now_v7();
-    for (username, is_admin, public_id) in [
-        ("del-admin", true, admin_public),
-        ("del-plain", false, plain_public),
+    for (username, is_admin, is_editor, public_id) in [
+        ("del-admin", true, false, admin_public),
+        ("del-editor", false, true, editor_public),
+        ("del-plain", false, false, plain_public),
     ] {
         let email = format!("{username}@example.test");
         AuthStore::new()
@@ -60,7 +62,7 @@ async fn seed_users(db: &TestDb) -> Fixture {
                     password_hash_algorithm: PasswordHashAlgorithm::Bcrypt,
                     stream_signing_key: "test-stream-signing-key",
                     is_admin,
-                    is_editor: false,
+                    is_editor,
                     enabled: true,
                     locked: false,
                     blacklisted: false,
@@ -77,6 +79,7 @@ async fn seed_users(db: &TestDb) -> Fixture {
     }
     Fixture {
         admin_public,
+        editor_public,
         plain_public,
     }
 }
@@ -169,14 +172,23 @@ async fn artist_public_id(db: &TestDb, canonical_name: &str) -> Uuid {
         .expect("read Artist public id")
 }
 
+async fn release_public_id(db: &TestDb, internal: Uuid) -> Uuid {
+    sqlx::query_scalar("SELECT public_api_id FROM releases WHERE id=$1")
+        .bind(internal)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read Release public id")
+}
+
 #[tokio::test]
-async fn deletion_routes_require_an_administrator() {
+async fn deletion_routes_reject_a_non_operator_and_allow_an_editor() {
     let db = TestDb::create("catalog_delete_gate").await;
     let fixture = seed_users(&db).await;
     let plain = token_for(fixture.plain_public, "del-plain");
-    let app = app(db.pool.clone(), None);
+    let editor = token_for(fixture.editor_public, "del-editor");
+    let router = app(db.pool.clone(), None);
     let (status, body) = call(
-        app,
+        router.clone(),
         "POST",
         "/api/admin/v1/catalog/artists/delete/preview",
         Some(serde_json::json!({ "artistIds": [] })),
@@ -184,54 +196,83 @@ async fn deletion_routes_require_an_administrator() {
     )
     .await;
     assert_eq!(StatusCode::FORBIDDEN, status, "{body}");
+
+    let (status, body) = call(
+        router,
+        "POST",
+        "/api/admin/v1/catalog/artists/delete/preview",
+        Some(serde_json::json!({ "artistIds": [] })),
+        Some(&editor),
+    )
+    .await;
+    assert_eq!(StatusCode::BAD_REQUEST, status, "{body}");
     db.drop().await;
 }
 
 #[tokio::test]
-async fn artist_delete_preview_and_catalog_only_scope() {
+async fn artist_delete_needs_no_reason_and_fails_closed_without_storage() {
     let db = TestDb::create("catalog_delete_artist_api").await;
     let fixture = seed_users(&db).await;
-    let admin = token_for(fixture.admin_public, "del-admin");
+    let editor = token_for(fixture.editor_public, "del-editor");
     let release = phase5_common::seed_cataloged_release(
         &db,
         401,
         CatalogFixturePresentation {
             release_title: "Deletable Artist Release",
             release_artist: "Deletable Artist",
-            track_title: "Kept Track",
+            track_title: "Deleted Track",
             track_artist: "Deletable Artist",
             release_date: "2001-01-01",
         },
     )
     .await;
     let artist = artist_public_id(&db, "Deletable Artist").await;
-    let app = app(db.pool.clone(), None);
+    let router = app(db.pool.clone(), None);
 
     let (status, preview) = call(
-        app.clone(),
+        router.clone(),
         "POST",
         "/api/admin/v1/catalog/artists/delete/preview",
         Some(serde_json::json!({ "artistIds": [artist] })),
-        Some(&admin),
+        Some(&editor),
     )
     .await;
     assert_eq!(StatusCode::OK, status, "{preview}");
+    assert_eq!(1, preview["impact"]["artists"]);
     assert_eq!(1, preview["impact"]["releases"]);
     assert_eq!(1, preview["impact"]["tracks"]);
     assert_eq!(1, preview["impact"]["mediaFiles"]);
-    assert_eq!(0, preview["impact"]["retainedSharedReleases"]);
     assert_eq!(false, preview["storageConfigured"]);
 
-    let (status, deleted) = call(
-        app.clone(),
+    // The owned media cannot be removed without a configured canonical root;
+    // nothing is changed.
+    let (status, error) = call(
+        router,
         "POST",
         "/api/admin/v1/catalog/artists/delete",
-        Some(serde_json::json!({
-            "artistIds": [artist],
-            "mode": "catalogOnly",
-            "reason": "duplicate Artist identity created by an import",
-        })),
-        Some(&admin),
+        Some(serde_json::json!({ "artistIds": [artist] })),
+        Some(&editor),
+    )
+    .await;
+    assert_eq!(StatusCode::SERVICE_UNAVAILABLE, status, "{error}");
+    assert_eq!("delete_storage_unavailable", error["code"]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artists WHERE public_api_id=$1")
+            .bind(artist)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count Artist"),
+        1
+    );
+
+    let root = tempfile::tempdir().expect("canonical root");
+    let configured = app(db.pool.clone(), Some(root.path().to_path_buf()));
+    let (status, deleted) = call(
+        configured,
+        "POST",
+        "/api/admin/v1/catalog/artists/delete",
+        Some(serde_json::json!({ "artistIds": [artist] })),
+        Some(&editor),
     )
     .await;
     assert_eq!(StatusCode::OK, status, "{deleted}");
@@ -240,144 +281,38 @@ async fn artist_delete_preview_and_catalog_only_scope() {
         deleted["deletedArtistIds"].as_array().expect("ids").len()
     );
     assert_eq!(
-        0,
-        deleted["deletedReleaseIds"]
-            .as_array()
-            .expect("release ids")
-            .len()
-    );
-    let artist_status: String =
-        sqlx::query_scalar("SELECT status FROM artists WHERE public_api_id=$1")
-            .bind(artist)
-            .fetch_one(&db.pool)
-            .await
-            .expect("read Artist status");
-    assert_eq!(artist_status, "deleted");
-    let release_status: String = sqlx::query_scalar("SELECT status FROM releases WHERE id=$1")
-        .bind(release.release_id().into_uuid())
-        .fetch_one(&db.pool)
-        .await
-        .expect("read Release status");
-    assert_eq!(release_status, "active");
-
-    let (status, error) = call(
-        app.clone(),
-        "POST",
-        "/api/admin/v1/catalog/artists/delete",
-        Some(serde_json::json!({
-            "artistIds": [artist],
-            "mode": "catalogOnly",
-            "reason": " ",
-        })),
-        Some(&admin),
-    )
-    .await;
-    assert_eq!(StatusCode::BAD_REQUEST, status);
-    assert_eq!("invalid_reason", error["code"]);
-    let (status, error) = call(
-        app.clone(),
-        "POST",
-        "/api/admin/v1/catalog/artists/delete",
-        Some(serde_json::json!({
-            "artistIds": [artist],
-            "mode": "everything",
-            "reason": "invalid mode",
-        })),
-        Some(&admin),
-    )
-    .await;
-    assert_eq!(StatusCode::BAD_REQUEST, status);
-    assert_eq!("invalid_mode", error["code"]);
-
-    db.drop().await;
-}
-
-#[tokio::test]
-async fn artist_delete_with_files_requires_storage_and_retires_owned_releases() {
-    let db = TestDb::create("catalog_delete_artist_files").await;
-    let fixture = seed_users(&db).await;
-    let admin = token_for(fixture.admin_public, "del-admin");
-    let release = phase5_common::seed_cataloged_release(
-        &db,
-        411,
-        CatalogFixturePresentation {
-            release_title: "Files Release",
-            release_artist: "Files Artist",
-            track_title: "Files Track",
-            track_artist: "Files Artist",
-            release_date: "2002-02-02",
-        },
-    )
-    .await;
-    let artist = artist_public_id(&db, "Files Artist").await;
-
-    // Without canonical storage the file-removing scope fails closed.
-    let unsupported = app(db.pool.clone(), None);
-    let (status, error) = call(
-        unsupported,
-        "POST",
-        "/api/admin/v1/catalog/artists/delete",
-        Some(serde_json::json!({
-            "artistIds": [artist],
-            "mode": "releasesAndFiles",
-            "reason": "remove Artist and owned media",
-        })),
-        Some(&admin),
-    )
-    .await;
-    assert_eq!(StatusCode::SERVICE_UNAVAILABLE, status, "{error}");
-    assert_eq!("delete_storage_unavailable", error["code"]);
-
-    let root = tempfile::tempdir().expect("canonical root");
-    let configured = app(db.pool.clone(), Some(root.path().to_path_buf()));
-    let (status, preview) = call(
-        configured.clone(),
-        "POST",
-        "/api/admin/v1/catalog/artists/delete/preview",
-        Some(serde_json::json!({ "artistIds": [artist] })),
-        Some(&admin),
-    )
-    .await;
-    assert_eq!(StatusCode::OK, status, "{preview}");
-    assert_eq!(true, preview["storageConfigured"]);
-    assert_eq!(1, preview["storageReadyReleases"]);
-
-    let (status, deleted) = call(
-        configured,
-        "POST",
-        "/api/admin/v1/catalog/artists/delete",
-        Some(serde_json::json!({
-            "artistIds": [artist],
-            "mode": "releasesAndFiles",
-            "reason": "remove Artist and owned media",
-        })),
-        Some(&admin),
-    )
-    .await;
-    assert_eq!(StatusCode::OK, status, "{deleted}");
-    assert_eq!(
         1,
         deleted["deletedReleaseIds"].as_array().expect("ids").len()
     );
-    let release_status: String = sqlx::query_scalar("SELECT status FROM releases WHERE id=$1")
-        .bind(release.release_id().into_uuid())
-        .fetch_one(&db.pool)
-        .await
-        .expect("read Release status");
-    assert_eq!(release_status, "deleted");
-    let retained_tracks: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM tracks WHERE release_id=$1")
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artists WHERE public_api_id=$1")
+            .bind(artist)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count Artist"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM releases WHERE id=$1")
             .bind(release.release_id().into_uuid())
             .fetch_one(&db.pool)
             .await
-            .expect("count retained Tracks");
-    assert_eq!(retained_tracks, 1);
-
+            .expect("count Release"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tracks WHERE release_id=$1")
+            .bind(release.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("count Tracks"),
+        0
+    );
     db.drop().await;
 }
 
 #[tokio::test]
-async fn release_bulk_delete_preview_and_apply() {
+async fn release_bulk_delete_removes_the_selection_and_keeps_the_rest() {
     let db = TestDb::create("catalog_delete_release_api").await;
     let fixture = seed_users(&db).await;
     let admin = token_for(fixture.admin_public, "del-admin");
@@ -417,20 +352,11 @@ async fn release_bulk_delete_preview_and_apply() {
         },
     )
     .await;
-    let public_id = |internal: Uuid| {
-        let pool = db.pool.clone();
-        async move {
-            sqlx::query_scalar::<_, Uuid>("SELECT public_api_id FROM releases WHERE id=$1")
-                .bind(internal)
-                .fetch_one(&pool)
-                .await
-                .expect("read Release public id")
-        }
-    };
-    let first_public = public_id(first.release_id().into_uuid()).await;
-    let second_public = public_id(second.release_id().into_uuid()).await;
-    let kept_public = public_id(kept.release_id().into_uuid()).await;
-    let app = app(db.pool.clone(), None);
+    let first_public = release_public_id(&db, first.release_id().into_uuid()).await;
+    let second_public = release_public_id(&db, second.release_id().into_uuid()).await;
+    let kept_public = release_public_id(&db, kept.release_id().into_uuid()).await;
+    let root = tempfile::tempdir().expect("canonical root");
+    let app = app(db.pool.clone(), Some(root.path().to_path_buf()));
 
     let (status, preview) = call(
         app.clone(),
@@ -444,17 +370,12 @@ async fn release_bulk_delete_preview_and_apply() {
     assert_eq!(2, preview["impact"]["releases"]);
     assert_eq!(2, preview["impact"]["tracks"]);
     assert_eq!(2, preview["impact"]["mediaFiles"]);
-    assert_eq!(2, preview["releases"].as_array().expect("releases").len());
 
     let (status, deleted) = call(
         app.clone(),
         "POST",
         "/api/admin/v1/catalog/releases/delete",
-        Some(serde_json::json!({
-            "releaseIds": [first_public, second_public],
-            "mode": "catalogOnly",
-            "reason": "administrator removed duplicate imports",
-        })),
+        Some(serde_json::json!({ "releaseIds": [first_public, second_public] })),
         Some(&admin),
     )
     .await;
@@ -463,53 +384,111 @@ async fn release_bulk_delete_preview_and_apply() {
         2,
         deleted["deletedReleaseIds"].as_array().expect("ids").len()
     );
-    let statuses: (String, String, String) = sqlx::query_as(
-        "SELECT
-            (SELECT status FROM releases WHERE id=$1),
-            (SELECT status FROM releases WHERE id=$2),
-            (SELECT status FROM releases WHERE id=$3)",
-    )
-    .bind(first.release_id().into_uuid())
-    .bind(second.release_id().into_uuid())
-    .bind(kept.release_id().into_uuid())
-    .fetch_one(&db.pool)
-    .await
-    .expect("read Release statuses");
     assert_eq!(
-        statuses,
-        (
-            "deleted".to_owned(),
-            "deleted".to_owned(),
-            "active".to_owned()
-        )
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM releases WHERE public_api_id = ANY($1)")
+            .bind([first_public, second_public])
+            .fetch_one(&db.pool)
+            .await
+            .expect("count deleted Releases"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM releases WHERE public_api_id=$1")
+            .bind(kept_public)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count kept Release"),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM release_work_items WHERE id IN ($1,$2)")
+            .bind(first.work_item_id())
+            .bind(second.work_item_id())
+            .fetch_one(&db.pool)
+            .await
+            .expect("count deleted work items"),
+        0
     );
 
-    // Deleting an already deleted Release is rejected, and the untouched one
-    // is still selectable.
+    // Repeating the same selection is a clean not-found, not a tombstone.
     let (status, error) = call(
-        app.clone(),
+        app,
         "POST",
         "/api/admin/v1/catalog/releases/delete",
-        Some(serde_json::json!({
-            "releaseIds": [first_public],
-            "mode": "catalogOnly",
-            "reason": "repeat",
-        })),
+        Some(serde_json::json!({ "releaseIds": [first_public] })),
         Some(&admin),
     )
     .await;
-    assert_eq!(StatusCode::CONFLICT, status);
-    assert_eq!("not_deletable", error["code"]);
+    assert_eq!(StatusCode::NOT_FOUND, status);
+    assert_eq!("not_found", error["code"]);
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn track_delete_removes_the_track_and_its_file_but_keeps_the_release() {
+    let db = TestDb::create("catalog_delete_track_api").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "del-admin");
+    let release = phase5_common::seed_cataloged_release(
+        &db,
+        431,
+        CatalogFixturePresentation {
+            release_title: "Track Keep Release",
+            release_artist: "Track Keep Artist",
+            track_title: "Deleted Track",
+            track_artist: "Track Keep Artist",
+            release_date: "2006-06-06",
+        },
+    )
+    .await;
+    let track_public: Uuid = sqlx::query_scalar(
+        "SELECT public_api_id FROM tracks WHERE release_id=$1 ORDER BY ordinal LIMIT 1",
+    )
+    .bind(release.release_id().into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read Track public id");
+    let root = tempfile::tempdir().expect("canonical root");
+    let app = app(db.pool.clone(), Some(root.path().to_path_buf()));
+
     let (status, preview) = call(
-        app,
+        app.clone(),
         "POST",
-        "/api/admin/v1/catalog/releases/delete/preview",
-        Some(serde_json::json!({ "releaseIds": [kept_public] })),
+        "/api/admin/v1/catalog/tracks/delete/preview",
+        Some(serde_json::json!({ "trackIds": [track_public] })),
         Some(&admin),
     )
     .await;
     assert_eq!(StatusCode::OK, status, "{preview}");
-    assert_eq!(1, preview["impact"]["releases"]);
+    assert_eq!(1, preview["impact"]["tracks"]);
+    assert_eq!(1, preview["impact"]["mediaFiles"]);
 
+    let (status, deleted) = call(
+        app,
+        "POST",
+        "/api/admin/v1/catalog/tracks/delete",
+        Some(serde_json::json!({ "trackIds": [track_public] })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(StatusCode::OK, status, "{deleted}");
+    assert_eq!(1, deleted["deletedTrackIds"].as_array().expect("ids").len());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tracks WHERE public_api_id=$1")
+            .bind(track_public)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count Track"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM releases WHERE id=$1")
+            .bind(release.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("count Release"),
+        1
+    );
     db.drop().await;
 }

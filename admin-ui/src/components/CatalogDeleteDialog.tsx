@@ -1,27 +1,23 @@
-import { InlineNotification, Loading, Modal, RadioButton, RadioButtonGroup } from '@carbon/react';
+import { InlineNotification, Loading, Modal } from '@carbon/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type {
-  CatalogDeleteMode,
-  CatalogDeletePreview,
-} from '../screens/catalog/catalogDelete';
-import { DestructiveActionDialog } from './DestructiveActionDialog';
+import { formatBytes, formatNumber } from '../i18n/format';
+import type { CatalogDeletePreview } from '../screens/catalog/catalogDelete';
 
 export interface CatalogDeleteDialogProps {
-  /** Entity noun used for the mode help and warning wording. */
-  kind: 'artist' | 'release';
+  kind: 'artist' | 'release' | 'track';
   count: number;
   preview: () => Promise<CatalogDeletePreview>;
-  onSubmit: (mode: CatalogDeleteMode, reason: string) => Promise<void>;
+  onSubmit: () => Promise<void>;
   onClose: () => void;
 }
 
 /**
- * Two-step destructive catalog deletion (ADR-0199) shared by the Artist and
- * Release list bulk actions. The impact preview is scope-aware: the
- * catalog-only scope never deletes releases, tracks, or files, so those counts
- * are shown as zero until the operator selects the file-removing scope.
+ * Confirmation-only hard-deletion dialog (ADR-0211). The operator sees the
+ * exact impact and confirms; there is no reason field, scope choice, typed
+ * phrase, workflow stage, or second dialog. Every selected catalog row and
+ * every file it owns is removed.
  */
 export function CatalogDeleteDialog({
   kind,
@@ -31,7 +27,6 @@ export function CatalogDeleteDialog({
   onClose,
 }: CatalogDeleteDialogProps) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<CatalogDeleteMode>('catalogOnly');
   const [data, setData] = useState<CatalogDeletePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,124 +50,104 @@ export function CatalogDeleteDialog({
     };
   }, [preview]);
 
-  if (error) {
-    return (
-      <Modal
-        open
-        danger
-        modalHeading={t(`catalog.${kind}.delete.title`)}
-        primaryButtonText={t('actions.close')}
-        onRequestClose={onClose}
-        onRequestSubmit={onClose}
-      >
-        <InlineNotification
-          kind="error"
-          lowContrast
-          hideCloseButton
-          title={t(`catalog.${kind}.delete.previewError`)}
-          subtitle={error}
-        />
-      </Modal>
-    );
-  }
-
-  if (!data) {
-    return (
-      <Modal
-        open
-        passiveModal
-        modalHeading={t(`catalog.${kind}.delete.title`)}
-        onRequestClose={onClose}
-      >
-        <Loading description={t(`catalog.${kind}.delete.loadingPreview`)} withOverlay={false} />
-      </Modal>
-    );
-  }
-
-  const removesContent = mode === 'releasesAndFiles';
-  const submit = async (reason: string) => {
+  const submit = async () => {
     setBusy(true);
     setSubmitError(null);
     try {
-      await onSubmit(mode, reason);
+      await onSubmit();
     } catch (cause) {
       setSubmitError(cause instanceof Error ? cause.message : String(cause));
       setBusy(false);
     }
   };
 
+  const title = t(`catalog.${kind}.delete.title`);
+  const mediaBlocked =
+    data !== null &&
+    data.impact.mediaFiles > 0 &&
+    !data.storageConfigured;
+
   return (
-    <DestructiveActionDialog
+    <Modal
       open
-      title={t(`catalog.${kind}.delete.title`)}
-      actionLabel={busy ? t('common.deleting') : t(`catalog.${kind}.delete.action`)}
-      deleteClass
-      affectedReleases={removesContent ? data.impact.releases : 0}
-      affectedTracks={removesContent ? data.impact.tracks : 0}
-      affectedFiles={removesContent ? data.impact.files : 0}
-      storageImpactBytes={removesContent ? data.impact.bytes : 0}
-      hideAlternativeNote
-      onClose={onClose}
-      onConfirm={(reason) => void submit(reason)}
+      danger
+      modalHeading={title}
+      primaryButtonText={busy ? t('common.deleting') : t('catalog.delete.confirmAction')}
+      secondaryButtonText={t('actions.cancel')}
+      primaryButtonDisabled={busy || data === null || mediaBlocked || error !== null}
+      onRequestClose={onClose}
+      onRequestSubmit={() => void submit()}
     >
-      <p>{t(`catalog.${kind}.delete.description`, { count })}</p>
-      <RadioButtonGroup
-        legendText={t(`catalog.${kind}.delete.modeLabel`)}
-        name={`catalog-${kind}-delete-mode`}
-        orientation="vertical"
-        valueSelected={mode}
-        onChange={(value) => setMode(value as CatalogDeleteMode)}
-      >
-        <RadioButton
-          id={`catalog-${kind}-delete-catalog`}
-          value="catalogOnly"
-          labelText={t(`catalog.${kind}.delete.modeCatalogOnly`)}
-        />
-        <RadioButton
-          id={`catalog-${kind}-delete-content`}
-          value="releasesAndFiles"
-          labelText={t(`catalog.${kind}.delete.modeReleasesAndFiles`)}
-          disabled={!data.storageConfigured}
-        />
-      </RadioButtonGroup>
-      <p style={{ marginBlockEnd: '0.5rem', color: 'var(--cds-text-secondary)' }}>
-        {mode === 'catalogOnly'
-          ? t(`catalog.${kind}.delete.modeCatalogOnlyHelp`)
-          : data.storageConfigured
-            ? t(`catalog.${kind}.delete.modeReleasesAndFilesHelp`, { files: data.impact.files })
-            : t(`catalog.${kind}.delete.modeReleasesAndFilesUnavailable`)}
-      </p>
-      {removesContent && data.storageReadyReleases !== data.impact.releases ? (
+      <p>{t('catalog.delete.confirmBody', { count, kind: t(`catalog.delete.kind.${kind}`) })}</p>
+      {error ? (
         <InlineNotification
-          kind="warning"
+          kind="error"
           lowContrast
           hideCloseButton
-          title={t(`catalog.${kind}.delete.storageEvidenceMissing`, {
-            ready: data.storageReadyReleases,
-            total: data.impact.releases,
-          })}
+          title={t('catalog.delete.previewError')}
+          subtitle={error}
         />
       ) : null}
-      {data.impact.retainedSharedReleases ? (
-        <InlineNotification
-          kind="info"
-          lowContrast
-          hideCloseButton
-          title={t(`catalog.${kind}.delete.retainedShared`, {
-            count: data.impact.retainedSharedReleases,
-          })}
-        />
+      {!data && !error ? (
+        <Loading description={t('catalog.delete.loadingImpact')} withOverlay={false} />
       ) : null}
-      {data.warnings.length > 0 ? (
-        <ul>
-          {data.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
+      {data ? (
+        <section aria-label={t('catalog.delete.impactTitle')}>
+          <h3>{t('catalog.delete.impactTitle')}</h3>
+          <dl className="melodee-definition-list">
+            <div>
+              <dt>{t('catalog.delete.affectedReleases')}</dt>
+              <dd>{formatNumber(data.impact.releases)}</dd>
+            </div>
+            <div>
+              <dt>{t('catalog.delete.affectedTracks')}</dt>
+              <dd>{formatNumber(data.impact.tracks)}</dd>
+            </div>
+            <div>
+              <dt>{t('catalog.delete.affectedFiles')}</dt>
+              <dd>{formatNumber(data.impact.mediaFiles)}</dd>
+            </div>
+            <div>
+              <dt>{t('catalog.delete.storageImpact')}</dt>
+              <dd>{formatBytes(data.impact.mediaBytes)}</dd>
+            </div>
+            {data.impact.images > 0 ? (
+              <div>
+                <dt>{t('catalog.delete.affectedImages')}</dt>
+                <dd>{formatNumber(data.impact.images)}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {mediaBlocked ? (
+            <InlineNotification
+              kind="error"
+              lowContrast
+              hideCloseButton
+              title={t('catalog.delete.storageUnavailable')}
+            />
+          ) : null}
+          {data.impact.retainedSharedReleases > 0 ? (
+            <InlineNotification
+              kind="info"
+              lowContrast
+              hideCloseButton
+              title={t('catalog.delete.retainedShared', {
+                count: data.impact.retainedSharedReleases,
+              })}
+            />
+          ) : null}
+          {data.warnings.length > 0 ? (
+            <ul>
+              {data.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
       ) : null}
       {submitError ? (
         <InlineNotification kind="error" lowContrast hideCloseButton title={submitError} />
       ) : null}
-    </DestructiveActionDialog>
+    </Modal>
   );
 }

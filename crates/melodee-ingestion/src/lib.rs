@@ -39,7 +39,8 @@ pub use config::{
     PublicationRoots, StorageRoots,
 };
 pub use deletion::{
-    DeletedReleasePaths, ReleaseDeletionError, delete_release_storage, delete_unpublished_storage,
+    DeletedReleasePaths, ReleaseDeletionError, delete_release_storage, delete_storage_files,
+    delete_unpublished_storage,
 };
 
 pub use error::{IngestionError, Result};

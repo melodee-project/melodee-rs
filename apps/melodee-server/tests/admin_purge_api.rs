@@ -107,6 +107,16 @@ fn app(
     staging_root: std::path::PathBuf,
     work_root: std::path::PathBuf,
 ) -> axum::Router {
+    app_with_canonical(pool, source_root, staging_root, work_root, None)
+}
+
+fn app_with_canonical(
+    pool: sqlx::PgPool,
+    source_root: std::path::PathBuf,
+    staging_root: std::path::PathBuf,
+    work_root: std::path::PathBuf,
+    canonical_root: Option<std::path::PathBuf>,
+) -> axum::Router {
     router().with_state(AdminPurgeState::new(
         AdminAccessState {
             notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
@@ -127,7 +137,7 @@ fn app(
         }],
         Some(staging_root),
         work_root,
-        None,
+        canonical_root,
     ))
 }
 
@@ -321,7 +331,7 @@ async fn purge_removes_failed_storage_event_log_and_keeps_an_audit_row() {
 }
 
 #[tokio::test]
-async fn purge_refuses_a_non_failed_item_and_reports_it_per_item() {
+async fn purge_accepts_a_non_failed_pre_catalog_item() {
     let db = TestDb::create("admin_purge_state").await;
     let fixture = seed_users(&db).await;
     let admin = token_for(fixture.admin_public, "purge-admin");
@@ -355,8 +365,14 @@ async fn purge_refuses_a_non_failed_item_and_reports_it_per_item() {
     )
     .await;
     assert_eq!(StatusCode::OK, status, "{body}");
-    assert_eq!(body["deleted"], json!([]));
-    assert_eq!(body["failed"][0]["code"], "invalid_state");
+    assert_eq!(body["deleted"][0]["id"], json!(id));
+    assert_eq!(body["failed"], json!([]));
+    let survives: i64 = sqlx::query_scalar("SELECT count(*) FROM release_work_items WHERE id=$1")
+        .bind(id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count work item");
+    assert_eq!(survives, 0);
     db.drop().await;
 }
 
@@ -395,6 +411,69 @@ async fn purge_removes_inbound_source_when_no_staging_handoff_exists() {
     .await
     .expect("purge audit reason");
     assert!(audit_reason.contains("administrator confirmed bulk purge"));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn processing_queue_delete_hard_deletes_a_cataloged_release() {
+    let db = TestDb::create("admin_delete_cataloged").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "purge-admin");
+    let root = tempfile::tempdir().expect("temp root");
+    let cataloged = phase5_common::seed_cataloged_release(
+        &db,
+        8,
+        CatalogFixturePresentation {
+            release_title: "Queue Deleted Fixture",
+            release_artist: "Queue Deleted Artist",
+            track_title: "Queue Deleted Track",
+            track_artist: "Queue Deleted Artist",
+            release_date: "2021-01-01",
+        },
+    )
+    .await;
+    let work_item_id = cataloged.work_item_id();
+    let release_internal = cataloged.release_id().into_uuid();
+    let app = app_with_canonical(
+        db.pool.clone(),
+        root.path().join("inbound"),
+        root.path().join("staging"),
+        root.path().join("work"),
+        Some(root.path().join("canonical")),
+    );
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/admin/v1/ingest/work-items/delete",
+        Some(json!({"workItemIds": [work_item_id], "confirm": true})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(StatusCode::OK, status, "{body}");
+    assert_eq!(body["deleted"][0]["id"], json!(work_item_id));
+    assert_eq!(body["failed"], json!([]));
+    for (table, sql) in [
+        (
+            "work item",
+            "SELECT count(*) FROM release_work_items WHERE id=$1",
+        ),
+        ("release", "SELECT count(*) FROM releases WHERE id=$1"),
+        ("track", "SELECT count(*) FROM tracks WHERE release_id=$1"),
+    ] {
+        let remaining: i64 = match table {
+            "work item" => sqlx::query_scalar(sql)
+                .bind(work_item_id)
+                .fetch_one(&db.pool)
+                .await
+                .expect("count work item"),
+            _ => sqlx::query_scalar(sql)
+                .bind(release_internal)
+                .fetch_one(&db.pool)
+                .await
+                .expect("count release"),
+        };
+        assert_eq!(remaining, 0, "{table} must be hard-deleted");
+    }
     db.drop().await;
 }
 

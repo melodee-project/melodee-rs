@@ -27,13 +27,19 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return <ErrorState kind="forbidden" />;
   }
   if (session.kind === 'editor') {
-    if (!/^\/processing\/review(?:\/[^/]+)?\/?$/.test(location.pathname)) {
+    // Editors can review Releases and inspect/delete catalog entities at any
+    // time (ADR-0211); every other administration surface stays admin-only.
+    if (
+      !/^\/processing\/review(?:\/[^/]+)?\/?$/.test(location.pathname) &&
+      !/^\/catalog\/(?:artists|releases|tracks)(?:\/[^/]+)?\/?$/.test(location.pathname)
+    ) {
       return <Navigate to="/processing/review" replace />;
     }
     return (
       <>
         <header className="melodee-editor-header">
           <Link to="/processing/review">{t('nav.reviewQueue')}</Link>
+          <Link to="/catalog/releases">{t('nav.releases')}</Link>
           <div className="melodee-shell__action-with-label">
             <SessionAvatar username={session.username} />
             <Button kind="ghost" onClick={() => void signOut()}>{t('auth.signOut')}</Button>

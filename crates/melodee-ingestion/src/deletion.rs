@@ -75,6 +75,44 @@ pub async fn delete_release_storage(
     })
 }
 
+/// Removes individual media files below a configured root after validating
+/// every relative path. Missing files are idempotent success. Only regular
+/// file leaves are unlinked; symlinks and special files fail closed.
+pub async fn delete_storage_files(
+    root: &Path,
+    relative_paths: &[String],
+) -> Result<Vec<String>, ReleaseDeletionError> {
+    let mut owned = Vec::with_capacity(relative_paths.len());
+    for relative in relative_paths {
+        owned.push((relative.clone(), owned_path(root, relative, "media")?));
+    }
+    if owned.is_empty() {
+        return Ok(Vec::new());
+    }
+    let paths = owned
+        .iter()
+        .map(|(_, path)| path.clone())
+        .collect::<Vec<_>>();
+    tokio::task::spawn_blocking(move || {
+        for path in paths {
+            match crate::secure_fs::unlink_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(source) => {
+                    return Err(ReleaseDeletionError::Remove {
+                        kind: "media",
+                        path,
+                        source,
+                    });
+                }
+            }
+        }
+        Ok(())
+    })
+    .await??;
+    Ok(owned.into_iter().map(|(relative, _)| relative).collect())
+}
+
 /// Remove only the directories pinned by a pre-catalog authorization and this work item's scratch.
 pub async fn delete_unpublished_storage(
     id: uuid::Uuid,
@@ -187,6 +225,35 @@ mod tests {
         assert!(!staged.exists());
         assert!(canonical_root.exists());
         assert!(staging_root.exists());
+    }
+
+    #[tokio::test]
+    async fn removes_individual_media_files_and_rejects_traversal() {
+        let root = tempfile::tempdir().expect("root");
+        let canonical_root = root.path().join("library");
+        let media = canonical_root.join("releases/aa/bb/rel_test/01.flac");
+        std::fs::create_dir_all(media.parent().expect("media parent")).expect("media tree");
+        std::fs::write(&media, b"audio").expect("media file");
+        let outside = root.path().join("outside.flac");
+        std::fs::write(&outside, b"keep").expect("outside file");
+
+        delete_storage_files(
+            &canonical_root,
+            &[
+                "releases/aa/bb/rel_test/01.flac".to_owned(),
+                "releases/aa/bb/rel_test/missing.flac".to_owned(),
+            ],
+        )
+        .await
+        .expect("idempotent media deletion");
+        assert!(!media.exists());
+
+        let result = delete_storage_files(&canonical_root, &["../outside.flac".to_owned()]).await;
+        assert!(matches!(
+            result,
+            Err(ReleaseDeletionError::InvalidPath { .. })
+        ));
+        assert!(outside.exists());
     }
 
     #[tokio::test]

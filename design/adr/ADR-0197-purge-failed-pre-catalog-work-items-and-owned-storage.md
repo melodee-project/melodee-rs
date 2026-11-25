@@ -1,10 +1,10 @@
 # ADR-0197: Purge failed pre-catalog work items and their owned storage
 
 - **Date:** 2026-11-14
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** Ingestion operations, Admin API
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0211
 - **Related requirements:** PRD-API-ADMIN-002, PRD-INGEST-010
 
 ## Context

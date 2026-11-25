@@ -13,12 +13,19 @@ import {
 } from '@carbon/react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Fragment, useState } from 'react';
 
-import { getCatalogArtist, updateArtistMetadata } from '../../api/admin';
+import {
+  deleteArtists,
+  getCatalogArtist,
+  previewArtistDelete,
+  updateArtistMetadata,
+} from '../../api/admin';
 import type { ArtistContribution, ArtistDetail } from '../../api/types';
+import { useSessionRole } from '../../auth/AuthContext';
 import { AuditTimeline } from '../../components/AuditTimeline';
+import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { EmptyState } from '../../components/EmptyState';
 import { EntityAvatar } from '../../components/EntityAvatar';
 import { ArtistLink, ReleaseLink, TrackLink } from '../../components/EntityLink';
@@ -29,6 +36,7 @@ import { StatusChip, StatusTag } from '../../components/StatusTag';
 import { Surface } from '../../components/Surface';
 import { TabNav } from '../../components/TabNav';
 import { formatDate, formatDateTime, formatNumber } from '../../i18n/format';
+import { artistDeletePreviewView } from './catalogDelete';
 import {
   catalogStatusKind,
   groupProviderCandidates,
@@ -189,8 +197,12 @@ const ARTIST_TABS = [
 
 export function ArtistDetailScreen() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const role = useSessionRole();
+  const isAdmin = role === 'admin';
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [expandedProviders, setExpandedProviders] = useState<string[]>([]);
   // The URL owns selection so same-screen statistic links and browser history
   // update the visible tab just as an initial deep link does.
@@ -231,7 +243,15 @@ export function ArtistDetailScreen() {
 
   return (
     <div>
-      <PageHeader title={t('catalog.artist.detailTitle')} subtitle={t('catalog.artist.detailSubtitle')} />
+      <PageHeader
+        title={t('catalog.artist.detailTitle')}
+        subtitle={t('catalog.artist.detailSubtitle')}
+        actions={
+          <Button kind="danger--tertiary" size="sm" onClick={() => setDeleteOpen(true)}>
+            {t('catalog.delete.action')}
+          </Button>
+        }
+      />
       <p>
         <Link as={RouterLink} to="/catalog/artists">
           {t('catalog.artist.back')}
@@ -251,12 +271,14 @@ export function ArtistDetailScreen() {
       ) : null}
       {detail ? (
         <>
-          <p>
-            <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
-              {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
-            </Link>
-          </p>
-          {editing ? (
+          {isAdmin ? (
+            <p>
+              <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
+                {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
+              </Link>
+            </p>
+          ) : null}
+          {isAdmin && editing ? (
             <EditPanel
               title={t('catalog.artist.edit.title')}
               fields={[
@@ -872,14 +894,18 @@ export function ArtistDetailScreen() {
           {tab === 'images' ? (
                 <Surface title={t('catalog.artist.images.title')} variant="flush">
                 <p className="melodee-panel__subtitle">{t('catalog.artist.images.description')}</p>
-                <ArtworkManager
-                  entity="artists"
-                  entityId={detail.id}
-                  imageId={detail.imageId}
-                  imageUpdatedAt={detail.imageUpdatedAt}
-                  name={detail.name}
-                  onChanged={retry}
-                />
+                {isAdmin ? (
+                  <ArtworkManager
+                    entity="artists"
+                    entityId={detail.id}
+                    imageId={detail.imageId}
+                    imageUpdatedAt={detail.imageUpdatedAt}
+                    name={detail.name}
+                    onChanged={retry}
+                  />
+                ) : (
+                  <p>{t('catalog.delete.editorReadOnly')}</p>
+                )}
                 </Surface>
           ) : null}
           {tab === 'history' ? (
@@ -889,6 +915,19 @@ export function ArtistDetailScreen() {
                 </Surface>
           ) : null}
         </>
+      ) : null}
+      {deleteOpen ? (
+        <CatalogDeleteDialog
+          kind="artist"
+          count={1}
+          preview={async () => artistDeletePreviewView(await previewArtistDelete([id]))}
+          onSubmit={async () => {
+            await deleteArtists({ artistIds: [id] });
+            setDeleteOpen(false);
+            void navigate('/catalog/artists');
+          }}
+          onClose={() => setDeleteOpen(false)}
+        />
       ) : null}
     </div>
   );

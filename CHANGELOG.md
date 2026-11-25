@@ -7,6 +7,15 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+Artists, Releases and Tracks can now be hard-deleted by an administrator or editor at any
+lifecycle state. Delete on the Artist, Release or Track detail screen — or the catalog and
+Processing Queue bulk actions — opens one confirmation dialog and then removes the catalog rows,
+the originating processing work item, catalog evidence, and every owned media/artwork file.
+There is no reason, scope choice, typed phrase, or additional workflow step. This has no undo:
+back up PostgreSQL and media storage before bulk cleanup. Migration 0056 lets the authorized
+deletion transaction remove append-only catalog evidence while keeping every other path
+append-only. See [ADR-0211](design/adr/ADR-0211-hard-delete-catalog-entities-and-files-on-operator-confirmation.md).
+
 Artwork, avatars, playlist images and theme files now use persistent file storage.
 Configure `MELODEE__STORAGE__ASSET_ROOT` for every service and importing CLI. Upgrades
 verify and migrate all existing payloads. Back up the asset directory alongside PostgreSQL.

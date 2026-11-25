@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { getProcessingStages, getWorkItemCounts, listWorkItems, purgeWorkItems } from '../../api/admin';
+import { deleteWorkItems, getProcessingStages, getWorkItemCounts, listWorkItems } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type {
   IngestionPhase,
@@ -382,11 +382,6 @@ export function ProcessingQueueScreen() {
       </div>
     );
 
-  const selectedItems = (pageData?.items ?? []).filter((item) =>
-    bulkSelected.includes(item.id),
-  );
-  const allSelectedFailed =
-    selectedItems.length > 0 && selectedItems.every((item) => item.state === 'failed');
   const canConfirmPurge = !deleting;
 
   const closeDelete = () => {
@@ -399,7 +394,7 @@ export function ProcessingQueueScreen() {
     setDeleting(true);
     setPurgeError(null);
     try {
-      const result: PurgeWorkItemsResult = await purgeWorkItems(bulkSelected);
+      const result: PurgeWorkItemsResult = await deleteWorkItems(bulkSelected);
       const deleted = result.deleted.length;
       const failed = result.failed.length;
       setBulkSelected([]);
@@ -516,27 +511,21 @@ export function ProcessingQueueScreen() {
       primaryButtonText={t('queue.bulk.deleteSelected')}
       secondaryButtonText={t('actions.cancel')}
       danger
-      primaryButtonDisabled={!allSelectedFailed}
       onRequestClose={() => setBulkOpen(false)}
       onRequestSubmit={() => {
-        if (!allSelectedFailed) return;
         setBulkOpen(false);
         setPurgeError(null);
         setDeleteOpen(true);
       }}
     >
       <p>{t('queue.bulk.selected', { count: bulkSelected.length })}</p>
-      <p>
-        {allSelectedFailed
-          ? t('queue.bulk.deleteHelp')
-          : t('queue.bulk.onlyFailed')}
-      </p>
+      <p>{t('queue.bulk.deleteHelp')}</p>
     </Modal>
     <Modal
       open={deleteOpen}
       danger
       modalHeading={t('queue.bulk.confirmTitle')}
-      primaryButtonText={deleting ? t('common.deleting') : t('common.yes')}
+      primaryButtonText={deleting ? t('common.deleting') : t('queue.bulk.deleteSelected')}
       secondaryButtonText={t('common.no')}
       primaryButtonDisabled={!canConfirmPurge}
       onRequestClose={closeDelete}

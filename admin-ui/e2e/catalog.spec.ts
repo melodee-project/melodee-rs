@@ -371,6 +371,7 @@ async function mockAdminApi(
       await json({
         artists: [{ id: body.artistIds[0], canonicalName: ARTIST_ROW.name, status: 'active', ownedReleases: 1 }],
         impact: {
+          artists: 1,
           releases: 1,
           tracks: 1,
           mediaFiles: 1,
@@ -379,9 +380,9 @@ async function mockAdminApi(
           trackCredits: 1,
           contributions: 0,
           userStates: 0,
+          images: 0,
           retainedSharedReleases: 0,
         },
-        storageReadyReleases: 1,
         storageConfigured: true,
         warnings: [],
       });
@@ -390,16 +391,14 @@ async function mockAdminApi(
     if (pathname === '/api/admin/v1/catalog/artists/delete') {
       const body = JSON.parse(route.request().postData() ?? 'null') as {
         artistIds: string[];
-        mode: string;
       };
       deleteRequests.push({ pathname, body: { ...body } });
       const removed = new Set(body.artistIds);
       artistRows = artistRows.filter((row) => !removed.has(row.id));
       await json({
         deletedArtistIds: body.artistIds,
-        deletedReleaseIds: body.mode === 'releasesAndFiles' ? [RELEASE_ID] : [],
-        retainedSharedReleases: 0,
-        mode: body.mode,
+        deletedReleaseIds: [RELEASE_ID],
+        deletedTrackIds: [],
       });
       return;
     }
@@ -416,6 +415,7 @@ async function mockAdminApi(
           },
         ],
         impact: {
+          artists: 0,
           releases: body.releaseIds.length,
           tracks: body.releaseIds.length,
           mediaFiles: body.releaseIds.length,
@@ -424,9 +424,9 @@ async function mockAdminApi(
           trackCredits: body.releaseIds.length,
           contributions: 0,
           userStates: 0,
+          images: 0,
           retainedSharedReleases: 0,
         },
-        storageReadyReleases: body.releaseIds.length,
         storageConfigured: true,
         warnings: [],
       });
@@ -435,12 +435,15 @@ async function mockAdminApi(
     if (pathname === '/api/admin/v1/catalog/releases/delete') {
       const body = JSON.parse(route.request().postData() ?? 'null') as {
         releaseIds: string[];
-        mode: string;
       };
       deleteRequests.push({ pathname, body: { ...body } });
       const removed = new Set(body.releaseIds);
       releaseRows = releaseRows.filter((row) => !removed.has(row.id));
-      await json({ deletedReleaseIds: body.releaseIds, mode: body.mode });
+      await json({
+        deletedArtistIds: [],
+        deletedReleaseIds: body.releaseIds,
+        deletedTrackIds: [],
+      });
       return;
     }
     if (pathname === '/api/admin/v1/catalog/releases/merge/preview') {
@@ -689,10 +692,9 @@ test('artists list deletes selected Artists through the destructive dialog', asy
   await page.getByRole('button', { name: 'Delete 1 selected Artist' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Delete Artists' });
-  await expect(dialog.getByText('Delete catalog records only (keep media files)')).toBeVisible();
-  await dialog.getByLabel('Reason').fill('Duplicate identity');
-  await dialog.getByLabel('Type DELETE to confirm.').fill('DELETE');
-  await dialog.getByRole('button', { name: 'Delete Artists' }).click();
+  await expect(dialog.getByText(/Delete 1 selected Artist/)).toBeVisible();
+  await expect(dialog.getByLabel('Reason')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Delete permanently' }).click();
 
   await expect(page.getByText('1 Artist deleted.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'The Nomads' })).toHaveCount(1);
@@ -713,18 +715,16 @@ test('releases list deletes selected Releases with or without media files', asyn
   await page.getByRole('button', { name: 'Delete 2 selected Releases' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Delete Releases' });
-  await dialog.getByLabel('Delete catalog records and media files').check({ force: true });
-  await expect(dialog.getByText(/Also removes 2 canonical and staged media file/)).toBeVisible();
-  await dialog.getByLabel('Reason').fill('Duplicate imports');
-  await dialog.getByLabel('Type DELETE to confirm.').fill('DELETE');
-  await dialog.getByRole('button', { name: 'Delete Releases' }).click();
+  await expect(dialog.getByText(/Delete 2 selected Release/)).toBeVisible();
+  await expect(dialog.getByLabel('Reason')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Delete permanently' }).click();
 
   await expect(page.getByText('2 Releases deleted.')).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Select row' })).toHaveCount(0);
   const request = api.deleteRequests.find((entry) =>
     entry.pathname.endsWith('/releases/delete'),
   );
-  expect(request?.body).toMatchObject({ mode: 'releasesAndFiles' });
+  expect(request?.body).toEqual({ releaseIds: [RELEASE_ID, DUPLICATE_RELEASE_ID] });
 });
 
 test('releases list merges several Releases from any Artist into one', async ({ page }) => {

@@ -16,8 +16,9 @@ import type {
   BatchMergeReleasesResult,
   ArtistDeletePreview,
   ArtistDeleteResult,
-  CatalogDeleteMode,
   ReleaseDeletePreview,
+  TrackDeletePreview,
+  TrackDeleteResult,
   ReleaseDeleteResult,
   ConfigChange,
   ConfigEntry,
@@ -424,7 +425,7 @@ export function batchMergeArtists(request: {
   });
 }
 
-/** Artist deletion impact preview (ADR-0199); read-only. */
+/** Artist hard-deletion impact preview (ADR-0211); read-only. */
 export function previewArtistDelete(artistIds: string[]): Promise<ArtistDeletePreview> {
   return apiFetch<ArtistDeletePreview>(`${ADMIN}/catalog/artists/delete/preview`, {
     method: 'POST',
@@ -432,10 +433,10 @@ export function previewArtistDelete(artistIds: string[]): Promise<ArtistDeletePr
   });
 }
 
+/** Hard-deletes Artists, owned Releases, and their files. Reason is optional. */
 export function deleteArtists(request: {
   artistIds: string[];
-  mode: CatalogDeleteMode;
-  reason: string;
+  reason?: string;
 }): Promise<ArtistDeleteResult> {
   return apiFetch<ArtistDeleteResult>(`${ADMIN}/catalog/artists/delete`, {
     method: 'POST',
@@ -443,7 +444,7 @@ export function deleteArtists(request: {
   });
 }
 
-/** Release deletion impact preview (ADR-0199); read-only. */
+/** Release hard-deletion impact preview (ADR-0211); read-only. */
 export function previewReleaseDelete(releaseIds: string[]): Promise<ReleaseDeletePreview> {
   return apiFetch<ReleaseDeletePreview>(`${ADMIN}/catalog/releases/delete/preview`, {
     method: 'POST',
@@ -451,12 +452,31 @@ export function previewReleaseDelete(releaseIds: string[]): Promise<ReleaseDelet
   });
 }
 
+/** Hard-deletes Releases and their files. Reason is optional. */
 export function deleteReleases(request: {
   releaseIds: string[];
-  mode: CatalogDeleteMode;
-  reason: string;
+  reason?: string;
 }): Promise<ReleaseDeleteResult> {
   return apiFetch<ReleaseDeleteResult>(`${ADMIN}/catalog/releases/delete`, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/** Track hard-deletion impact preview (ADR-0211); read-only. */
+export function previewTrackDelete(trackIds: string[]): Promise<TrackDeletePreview> {
+  return apiFetch<TrackDeletePreview>(`${ADMIN}/catalog/tracks/delete/preview`, {
+    method: 'POST',
+    body: { trackIds },
+  });
+}
+
+/** Hard-deletes Tracks and their files. Reason is optional. */
+export function deleteTracks(request: {
+  trackIds: string[];
+  reason?: string;
+}): Promise<TrackDeleteResult> {
+  return apiFetch<TrackDeleteResult>(`${ADMIN}/catalog/tracks/delete`, {
     method: 'POST',
     body: request,
   });
@@ -747,6 +767,18 @@ export function setUserPassword(id: string, password: string): Promise<void> {
  */
 export function purgeWorkItems(workItemIds: string[]): Promise<PurgeWorkItemsResult> {
   return apiFetch<PurgeWorkItemsResult>(`${ADMIN}/ingest/work-items/purge`, {
+    method: 'POST',
+    body: { workItemIds, confirm: true },
+  });
+}
+
+/**
+ * Hard-deletes selected work items from the Processing Queue. Cataloged items
+ * are routed through Release hard deletion; pre-catalog items are purged at
+ * any lifecycle state. The server needs only the confirmation flag.
+ */
+export function deleteWorkItems(workItemIds: string[]): Promise<PurgeWorkItemsResult> {
+  return apiFetch<PurgeWorkItemsResult>(`${ADMIN}/ingest/work-items/delete`, {
     method: 'POST',
     body: { workItemIds, confirm: true },
   });

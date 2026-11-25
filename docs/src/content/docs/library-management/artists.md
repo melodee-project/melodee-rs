@@ -163,25 +163,22 @@ explicitly selected assignments to a new Artist.
 
 ## Deleting Artists
 
-From **Catalog → Artists**, select one or more Artists on the current page and choose
-**Delete selected Artists**. The confirmation dialog shows the exact impact, requires an audit
-reason, and asks you to type `DELETE`.
+A selected Artist can be deleted from its detail screen or from **Catalog → Artists** by selecting
+one or more Artists and choosing **Delete selected Artists**. The confirmation dialog shows the
+exact impact and one **Delete permanently** button; no reason, scope, or typed phrase is required.
 
-Two scopes are available:
+Deletion is a hard delete. The Artist's aliases, external identities, credits, contributions,
+relationships, memberships, provider evidence, per-user state, and artwork are removed. Every
+Release the Artist owns alone (primary billing with no other primary Artist) is deleted with its
+Tracks, catalog evidence, processing work item, and files. A Release also billed as primary by
+another Artist is kept; only the selected Artist's rows are removed from it, and the dialog
+reports how many Releases are retained. If canonical storage is not configured while files would
+be removed, the action fails closed and nothing is deleted.
 
-- **Delete catalog records only (keep media files)** — the default. The Artist disappears from the
-  catalog and every Release, Track, credit, and media file stays untouched. Use this for a
-  duplicate identity or an import artifact whose content belongs elsewhere.
-- **Delete catalog records and media files** — also retires every Release this Artist owns alone
-  (no other Artist is billed as its primary Release artist) and removes that Release's canonical
-  and staged media from configured storage. Releases billed as primary together with another
-  Artist are kept, and the dialog says how many.
-
-Nothing is erased from the evidence graph: the deleted Artist and its Releases become tombstones
-that keep their public ids, credits, contributions, provider evidence, per-user state, and audit
-history. Deleted entries no longer appear in any catalog list, search result, or resolver
-candidate. Deletion is terminal — an Artist that was merged into another cannot be deleted, and
-split the Release first if you need to remove a merged one.
+An administrator or editor can delete any Artist at any time, including one that is merged,
+deprecated, or already tombstoned. There is no undo: the only surviving record is the
+`artist_hard_deleted` audit event. Take a coordinated database and media backup before bulk
+cleanup.
 
 The same operations are available over
 [Admin API — Catalog deletion](../api/admin-api/#catalog-deletion) for scripting and automation.

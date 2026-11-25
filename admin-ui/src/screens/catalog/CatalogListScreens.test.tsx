@@ -174,6 +174,7 @@ const ARTIST_DELETE_PREVIEW: ArtistDeletePreview = {
     },
   ],
   impact: {
+    artists: 1,
     releases: 2,
     tracks: 18,
     mediaFiles: 18,
@@ -182,9 +183,9 @@ const ARTIST_DELETE_PREVIEW: ArtistDeletePreview = {
     trackCredits: 18,
     contributions: 3,
     userStates: 1,
+    images: 0,
     retainedSharedReleases: 0,
   },
-  storageReadyReleases: 2,
   storageConfigured: true,
   warnings: [],
 };
@@ -200,6 +201,7 @@ const RELEASE_DELETE_PREVIEW: ReleaseDeletePreview = {
     },
   ],
   impact: {
+    artists: 0,
     releases: 1,
     tracks: 12,
     mediaFiles: 12,
@@ -208,9 +210,9 @@ const RELEASE_DELETE_PREVIEW: ReleaseDeletePreview = {
     trackCredits: 12,
     contributions: 2,
     userStates: 0,
+    images: 0,
     retainedSharedReleases: 0,
   },
-  storageReadyReleases: 1,
   storageConfigured: true,
   warnings: [],
 };
@@ -305,13 +307,13 @@ beforeEach(() => {
   mockDeleteArtists.mockResolvedValue({
     deletedArtistIds: [DUPLICATE_ARTIST.id],
     deletedReleaseIds: [],
-    retainedSharedReleases: 0,
-    mode: 'catalogOnly',
+    deletedTrackIds: [],
   });
   mockPreviewReleaseDelete.mockResolvedValue(RELEASE_DELETE_PREVIEW);
   mockDeleteReleases.mockResolvedValue({
+    deletedArtistIds: [],
     deletedReleaseIds: [DUPLICATE_RELEASE.id],
-    mode: 'catalogOnly',
+    deletedTrackIds: [],
   });
   mockBatchMergeReleases.mockResolvedValue({
     mergeEvents: [
@@ -475,30 +477,20 @@ describe('ArtistsScreen', () => {
     fireEvent.click(screen.getAllByRole('checkbox')[2]);
     fireEvent.click(screen.getByRole('button', { name: 'Delete 2 selected Artists' }));
 
-    await screen.findByLabelText('Reason');
     expect(
       within(screen.getByRole('dialog')).getByRole('heading', { name: 'Delete Artists' }),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(mockPreviewArtistDelete).toHaveBeenCalledWith([ARTIST.id, DUPLICATE_ARTIST.id]);
     });
-    // The default catalog-only scope deletes no Releases, Tracks, or files.
-    expect(screen.getByText('Affected Releases')).toBeInTheDocument();
     expect(mockDeleteArtists).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Reason'), {
-      target: { value: 'Duplicate identity' },
-    });
-    fireEvent.change(screen.getByLabelText('Type DELETE to confirm.'), {
-      target: { value: 'DELETE' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Artists' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }));
 
     await waitFor(() => {
       expect(mockDeleteArtists).toHaveBeenCalledWith({
         artistIds: [ARTIST.id, DUPLICATE_ARTIST.id],
-        mode: 'catalogOnly',
-        reason: 'Duplicate identity',
       });
     });
     expect(await screen.findByText('1 Artist deleted.')).toBeInTheDocument();
@@ -627,27 +619,18 @@ describe('ReleasesScreen', () => {
     fireEvent.click(screen.getAllByRole('checkbox')[2]);
     fireEvent.click(screen.getByRole('button', { name: 'Delete 2 selected Releases' }));
 
-    await screen.findByLabelText('Reason');
     expect(
       within(screen.getByRole('dialog')).getByRole('heading', { name: 'Delete Releases' }),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(mockPreviewReleaseDelete).toHaveBeenCalledWith([RELEASE.id, DUPLICATE_RELEASE.id]);
     });
-    fireEvent.click(screen.getByLabelText('Delete catalog records and media files'));
-    fireEvent.change(screen.getByLabelText('Reason'), {
-      target: { value: 'Duplicate imports' },
-    });
-    fireEvent.change(screen.getByLabelText('Type DELETE to confirm.'), {
-      target: { value: 'DELETE' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Releases' }));
+    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }));
 
     await waitFor(() => {
       expect(mockDeleteReleases).toHaveBeenCalledWith({
         releaseIds: [RELEASE.id, DUPLICATE_RELEASE.id],
-        mode: 'releasesAndFiles',
-        reason: 'Duplicate imports',
       });
     });
     expect(await screen.findByText('1 Release deleted.')).toBeInTheDocument();

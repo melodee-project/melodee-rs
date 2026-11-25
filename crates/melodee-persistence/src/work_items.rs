@@ -2086,12 +2086,13 @@ impl WorkItemStore {
             tx.rollback().await?;
             return Err(WorkStoreError::NotFound(work_item_id));
         };
-        let state = IngestionState::parse(&state)
+        // ADR-0211: an operator may hard-delete a pre-catalog work item at any
+        // lifecycle state. Parsing still fails closed on a corrupt state
+        // value; the row lock above fences a concurrent transition, and the
+        // catalog binding check below still refuses to remove a Release's
+        // processing record through this path.
+        let _state = IngestionState::parse(&state)
             .ok_or_else(|| WorkStoreError::CorruptState(state.clone()))?;
-        if state != IngestionState::Failed {
-            tx.rollback().await?;
-            return Err(WorkStoreError::InvalidState(work_item_id, state));
-        }
         let cataloged = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM catalog_imports WHERE work_item_id = $1)",
         )

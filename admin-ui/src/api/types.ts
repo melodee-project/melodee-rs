@@ -141,7 +141,7 @@ export interface PurgeWorkItemFailure {
 }
 
 export interface PurgeWorkItemsResult {
-  deleted: { id: string; paths: Record<string, string> }[];
+  deleted: { id: string; paths: Record<string, unknown> }[];
   failed: PurgeWorkItemFailure[];
 }
 
@@ -821,10 +821,9 @@ export interface BatchMergeReleasesResult {
   mergeCount: number;
 }
 
-/** Deletion scope shared by the Artist and Release bulk delete actions (ADR-0199). */
-export type CatalogDeleteMode = 'catalogOnly' | 'releasesAndFiles';
-
+/** Hard-deletion impact shared by Artist, Release, and Track confirmation dialogs. */
 export interface CatalogDeleteImpact {
+  artists: number;
   releases: number;
   tracks: number;
   mediaFiles: number;
@@ -833,6 +832,7 @@ export interface CatalogDeleteImpact {
   trackCredits: number;
   contributions: number;
   userStates: number;
+  images: number;
   /** Releases also billed by another primary Artist: kept, never deleted. */
   retainedSharedReleases: number;
 }
@@ -847,7 +847,6 @@ export interface ArtistDeletePreviewArtist {
 export interface ArtistDeletePreview {
   artists: ArtistDeletePreviewArtist[];
   impact: CatalogDeleteImpact;
-  storageReadyReleases: number;
   storageConfigured: boolean;
   warnings: string[];
 }
@@ -855,8 +854,7 @@ export interface ArtistDeletePreview {
 export interface ArtistDeleteResult {
   deletedArtistIds: string[];
   deletedReleaseIds: string[];
-  retainedSharedReleases: number;
-  mode: CatalogDeleteMode;
+  deletedTrackIds: string[];
 }
 
 export interface ReleaseDeletePreviewRelease {
@@ -870,14 +868,34 @@ export interface ReleaseDeletePreviewRelease {
 export interface ReleaseDeletePreview {
   releases: ReleaseDeletePreviewRelease[];
   impact: CatalogDeleteImpact;
-  storageReadyReleases: number;
   storageConfigured: boolean;
   warnings: string[];
 }
 
 export interface ReleaseDeleteResult {
+  deletedArtistIds: string[];
   deletedReleaseIds: string[];
-  mode: CatalogDeleteMode;
+  deletedTrackIds: string[];
+}
+
+export interface TrackDeletePreviewTrack {
+  id: string;
+  title: string;
+  releaseId: string;
+  releaseTitle: string;
+}
+
+export interface TrackDeletePreview {
+  tracks: TrackDeletePreviewTrack[];
+  impact: CatalogDeleteImpact;
+  storageConfigured: boolean;
+  warnings: string[];
+}
+
+export interface TrackDeleteResult {
+  deletedArtistIds: string[];
+  deletedReleaseIds: string[];
+  deletedTrackIds: string[];
 }
 
 /** Split assignment kinds accepted by the backend (SplitAssignment). */

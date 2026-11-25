@@ -1,12 +1,15 @@
-import { useCallback, useMemo } from 'react';
+import { Button, InlineNotification } from '@carbon/react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { listCatalogTracks } from '../../api/admin';
+import { deleteTracks, listCatalogTracks, previewTrackDelete } from '../../api/admin';
 import type { CatalogTrackListItem } from '../../api/types';
+import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { ReleaseLink, TrackLink } from '../../components/EntityLink';
 import type { EntityColumn } from '../../components/EntityTable';
 import { formatDateTime, formatDuration, formatNumber, formatRelativeTime } from '../../i18n/format';
 import { trackOrdinalLabel } from './catalog';
+import { trackDeletePreviewView } from './catalogDelete';
 import { CatalogListScreen, CellInteractive } from './CatalogListScreen';
 
 /**
@@ -20,6 +23,10 @@ const SORT_KEYS = ['title', 'durationMs', 'createdAt'];
 
 export function TracksScreen() {
   const { t } = useTranslation();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [noticeDeleteCount, setNoticeDeleteCount] = useState(0);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const columns: EntityColumn[] = useMemo(
     () => [
@@ -58,19 +65,64 @@ export function TracksScreen() {
     [t],
   );
 
+  const onItemsChange = useCallback((nextItems: CatalogTrackListItem[]) => {
+    const visible = new Set(nextItems.map((item) => item.id));
+    setSelectedIds((current) => current.filter((id) => visible.has(id)));
+  }, []);
+
   return (
-    <CatalogListScreen
-      titleKey="catalog.tracks.title"
-      subtitleKey="catalog.tracks.subtitle"
-      captionKey="catalog.tracks.tableCaption"
-      searchLabelKey="catalog.tracks.searchLabel"
-      emptyTitleKey="catalog.tracks.emptyTitle"
-      emptyDescriptionKey="catalog.tracks.emptyDescription"
-      sortKeys={SORT_KEYS}
-      fetchPage={listCatalogTracks}
-      columns={columns}
-      toRow={toRow}
-      detailPath={(item) => `/catalog/tracks/${encodeURIComponent(item.id)}`}
-    />
+    <>
+      <CatalogListScreen
+        titleKey="catalog.tracks.title"
+        subtitleKey="catalog.tracks.subtitle"
+        captionKey="catalog.tracks.tableCaption"
+        searchLabelKey="catalog.tracks.searchLabel"
+        emptyTitleKey="catalog.tracks.emptyTitle"
+        emptyDescriptionKey="catalog.tracks.emptyDescription"
+        sortKeys={SORT_KEYS}
+        fetchPage={listCatalogTracks}
+        columns={columns}
+        toRow={toRow}
+        detailPath={(item) => `/catalog/tracks/${encodeURIComponent(item.id)}`}
+        selection={{ selectedIds, onChange: setSelectedIds }}
+        toolbarActions={
+          <Button
+            kind="danger--tertiary"
+            size="sm"
+            disabled={selectedIds.length < 1}
+            onClick={() => setDeleteOpen(true)}
+          >
+            {t('catalog.tracks.delete.selectedAction', { count: selectedIds.length })}
+          </Button>
+        }
+        notice={
+          noticeDeleteCount > 0 ? (
+            <InlineNotification
+              kind="success"
+              lowContrast
+              hideCloseButton
+              title={t('catalog.tracks.delete.success', { count: noticeDeleteCount })}
+            />
+          ) : undefined
+        }
+        refreshToken={refreshToken}
+        onItemsChange={onItemsChange}
+      />
+      {deleteOpen ? (
+        <CatalogDeleteDialog
+          kind="track"
+          count={selectedIds.length}
+          preview={async () => trackDeletePreviewView(await previewTrackDelete(selectedIds))}
+          onSubmit={async () => {
+            const result = await deleteTracks({ trackIds: selectedIds });
+            setDeleteOpen(false);
+            setNoticeDeleteCount(result.deletedTrackIds.length);
+            setSelectedIds([]);
+            setRefreshToken((current) => current + 1);
+          }}
+          onClose={() => setDeleteOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }

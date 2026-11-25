@@ -72,28 +72,29 @@ melodee-cli ingest bulk-report SUBMISSION_UUID
 
 The report starts at the first bulk directory Melodee discovers and ends when every registered entry has its first automatic outcome. Discovery follows inbound polling. If measuring from the start of a physical transfer, also record its start time. **Playable** means policy accepted the Release and activated it for listeners. The report includes ordinary arrivals discovered within the same window, including any that finish later. Each group shows the full denominator, the number playable within 30 minutes, mean, p95, slowest playable Release, failures, manual holds, exclusions and pending work. The report also shows the fraction of all ordinary arrivals playable within 30 minutes and how many bulk Releases were playable within 10 hours of the first discovery. A missing registered directory keeps the report open. Record the host uptime and array status alongside a production qualification run.
 
-### Bulk purge of failed items
+### Bulk delete
 
-Select one or more rows on the **Failed** phase, choose **Bulk actions → Delete selected**, then
-answer **Continue to delete?** with **Yes**. The purge removes the selected work items, their
-append-only processing event log, their manifests and staging handoffs, and every owned directory
-for the item: the inbound candidate (when no staging handoff exists), durable staging tree,
-normalization work area, and any published canonical bundle. The item disappears from the queue as
-if it had never been processed.
+Select any rows on **Processing → Processing Queue**, choose **Bulk actions → Delete**, then
+confirm **Delete** in the dialog that shows the selected count. There is no failed-only
+restriction and no additional stage.
 
-This action is intentionally restricted:
+A selected work item bound to a catalog Release is hard-deleted with that Release: its catalog
+rows, catalog evidence, media, custom artwork, processing event log, manifests, staging handoff,
+and the Release and Track identities are removed. A pre-catalog work item is deleted at any
+lifecycle state, including `needs_review`, `quarantined`, or `failed`, together with its
+append-only processing event log, manifests, staging handoffs, and every owned directory: the
+inbound candidate (when no staging handoff exists), durable staging tree, normalization work area,
+and any published canonical bundle. The item disappears from the queue.
 
-- only items in the `failed` state are accepted;
-- an item already bound to a catalog Release is refused (`cataloged`) — use
-  [Release Review](../library-management/release-review/) deletion so catalog identity and
-  tombstone rules apply;
-- paths are derived from durable evidence and must remain below the configured roots; a symlink,
-  traversal, or ambiguous inbound root fails closed and leaves the item recoverable;
-- a single independent `catalog_audit_events` row records who purged what and why, so operator
-  accountability outlives the deleted processing history.
+Paths are derived from durable evidence and must remain below the configured roots; a symlink,
+traversal, or ambiguous inbound root fails closed and leaves the item recoverable. A single
+independent `catalog_audit_events` row records who deleted what and why, so operator
+accountability outlives the deleted processing history.
 
 Partial batches are reported per item: successful items are deleted, refused items remain in the
 queue with their failure code, and the dialog closes so you can refresh and retry.
+
+**There is no undo.** Take a coordinated database and media backup before bulk cleanup.
 
 ## Phases, states, and what "playable" means
 

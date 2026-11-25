@@ -10,11 +10,16 @@ vi.mock('../../api/admin', async (importOriginal) => {
   return {
     ...original,
     getCatalogRelease: vi.fn(),
+    previewReleaseDelete: vi.fn(),
+    deleteReleases: vi.fn(),
   };
 });
 
-const { getCatalogRelease } = await import('../../api/admin');
+const { getCatalogRelease, previewReleaseDelete, deleteReleases } =
+  await import('../../api/admin');
 const mockGetRelease = vi.mocked(getCatalogRelease);
+const mockPreviewReleaseDelete = vi.mocked(previewReleaseDelete);
+const mockDeleteReleases = vi.mocked(deleteReleases);
 
 const RELEASE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ARTIST_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -131,9 +136,56 @@ function renderScreen(detail: ReleaseDetail) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockPreviewReleaseDelete.mockResolvedValue({
+    releases: [
+      {
+        id: RELEASE_ID,
+        title: 'Into the Night',
+        displayArtist: 'The Nomads',
+        status: 'active',
+        trackCount: 1,
+      },
+    ],
+    impact: {
+      artists: 0,
+      releases: 1,
+      tracks: 1,
+      mediaFiles: 1,
+      mediaBytes: 33_554_432,
+      releaseCredits: 1,
+      trackCredits: 1,
+      contributions: 0,
+      userStates: 0,
+      images: 0,
+      retainedSharedReleases: 0,
+    },
+    storageConfigured: true,
+    warnings: [],
+  });
+  mockDeleteReleases.mockResolvedValue({
+    deletedArtistIds: [],
+    deletedReleaseIds: [RELEASE_ID],
+    deletedTrackIds: [],
+  });
 });
 
 describe('ReleaseDetailScreen', () => {
+  it('hard-deletes the Release after one confirmation', async () => {
+    renderScreen(makeDetail());
+    await screen.findByRole('heading', { name: 'Into the Night' });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Delete Releases' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+
+    await vi.waitFor(() => {
+      expect(mockDeleteReleases).toHaveBeenCalledWith({ releaseIds: [RELEASE_ID] });
+    });
+  });
+
   it('renders the header stats strip, tracks table, artists, files, and provenance', async () => {
     renderScreen(makeDetail());
     expect(await screen.findByRole('heading', { name: 'Into the Night' })).toBeInTheDocument();

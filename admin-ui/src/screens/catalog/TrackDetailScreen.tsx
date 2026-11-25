@@ -1,5 +1,6 @@
 import {
   ActionableNotification,
+  Button,
   Heading,
   Link,
   Loading,
@@ -12,16 +13,24 @@ import {
   TableRow,
 } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useState } from 'react';
 
-import { getCatalogTrack, updateTrackMetadata } from '../../api/admin';
+import {
+  deleteTracks,
+  getCatalogTrack,
+  previewTrackDelete,
+  updateTrackMetadata,
+} from '../../api/admin';
+import { useSessionRole } from '../../auth/AuthContext';
 import { AudioPreview } from '../../components/AudioPreview';
+import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { EmptyState } from '../../components/EmptyState';
 import { ArtistLink, ReleaseLink } from '../../components/EntityLink';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusTag } from '../../components/StatusTag';
 import { formatBytes, formatDateTime, formatDuration, formatNumber } from '../../i18n/format';
+import { trackDeletePreviewView } from './catalogDelete';
 import { catalogStatusKind, trackOrdinalLabel, useCatalogDetail } from './catalog';
 import { CatalogArtwork } from './CatalogArtwork';
 import { EditPanel } from './EditPanel';
@@ -34,8 +43,12 @@ import { EditPanel } from './EditPanel';
  */
 export function TrackDetailScreen() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const role = useSessionRole();
+  const isAdmin = role === 'admin';
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogTrack, id);
 
   if (loading && detail === null) {
@@ -49,7 +62,15 @@ export function TrackDetailScreen() {
 
   return (
     <div>
-      <PageHeader title={t('catalog.track.detailTitle')} subtitle={t('catalog.track.detailSubtitle')} />
+      <PageHeader
+        title={t('catalog.track.detailTitle')}
+        subtitle={t('catalog.track.detailSubtitle')}
+        actions={
+          <Button kind="danger--tertiary" size="sm" onClick={() => setDeleteOpen(true)}>
+            {t('catalog.delete.action')}
+          </Button>
+        }
+      />
       <p>
         <Link as={RouterLink} to="/catalog/tracks">
           {t('catalog.track.back')}
@@ -69,12 +90,14 @@ export function TrackDetailScreen() {
       ) : null}
       {detail ? (
         <>
-          <p>
-            <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
-              {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
-            </Link>
-          </p>
-          {editing ? (
+          {isAdmin ? (
+            <p>
+              <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
+                {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
+              </Link>
+            </p>
+          ) : null}
+          {isAdmin && editing ? (
             <EditPanel
               title={t('catalog.track.edit.title')}
               fields={[
@@ -278,6 +301,19 @@ export function TrackDetailScreen() {
             )}
           </div>
         </>
+      ) : null}
+      {deleteOpen ? (
+        <CatalogDeleteDialog
+          kind="track"
+          count={1}
+          preview={async () => trackDeletePreviewView(await previewTrackDelete([id]))}
+          onSubmit={async () => {
+            await deleteTracks({ trackIds: [id] });
+            setDeleteOpen(false);
+            void navigate('/catalog/tracks');
+          }}
+          onClose={() => setDeleteOpen(false)}
+        />
       ) : null}
     </div>
   );

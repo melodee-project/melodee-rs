@@ -25,5 +25,20 @@ if it lands last; the other editor sees the current values on refresh. Edits cha
 metadata only; they never rewrite media files or tags. Deeper curation decisions are made at
 the Release level in [Release Review](./release-review/).
 
+## Deleting Tracks
+
+Delete a Track from its detail screen or select Tracks in **Catalog → Tracks** and choose
+**Delete selected Tracks**. The confirmation dialog shows the exact impact and one
+**Delete permanently** button; no reason, scope, or typed phrase is required.
+
+Deletion is a hard delete of the Track, its credits, contributions, observations, novelty
+evidence, playlist/playback rows, and its media file when no other Track references that file.
+The Release and its other Tracks remain, and the Release aggregate is recomputed. Artwork belongs
+to the Release and is not removed by a Track deletion. If canonical storage is not configured
+while a file would be removed, the action fails closed and nothing is deleted.
+
+An administrator or editor can delete any Track at any time. There is no undo: the surviving
+record is the `track_hard_deleted` audit event.
+
 The same routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).

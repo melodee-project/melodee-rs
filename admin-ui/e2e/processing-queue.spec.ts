@@ -186,10 +186,10 @@ test('keyboard: arrows move between rows and Enter opens the inspector', async (
   expect(page.url()).toContain(`item=${ITEM_TWO.id}`);
 });
 
-test('bulk delete purges failed items after the Yes confirmation', async ({ page }) => {
-  let purgeBody: unknown;
-  await page.route('**/api/admin/v1/ingest/work-items/purge', async (route) => {
-    purgeBody = route.request().postDataJSON();
+test('bulk delete removes any selected items after one confirmation', async ({ page }) => {
+  let deleteBody: unknown;
+  await page.route('**/api/admin/v1/ingest/work-items/delete', async (route) => {
+    deleteBody = route.request().postDataJSON();
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -204,14 +204,14 @@ test('bulk delete purges failed items after the Yes confirmation', async ({ page
   await expect(table.getByText('Road to Freedom')).toBeVisible();
   await table.getByRole('checkbox', { name: 'Select row' }).first().check({ force: true });
   await page.getByRole('button', { name: 'Bulk actions' }).click();
-  await page.getByRole('dialog', { name: 'Bulk actions' }).getByRole('button', { name: 'Delete selected' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Continue to delete?' });
-  await confirm.getByRole('button', { name: 'Yes' }).click();
-  await expect.poll(() => purgeBody).toEqual({
+  await page.getByRole('dialog', { name: 'Bulk actions' }).getByRole('button', { name: 'Delete' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete selected items?' });
+  await confirm.getByRole('button', { name: 'Delete' }).click();
+  await expect.poll(() => deleteBody).toEqual({
     workItemIds: [ITEM_TWO.id],
     confirm: true,
   });
-  await expect(page.getByText('Deleted 1 processing items.')).toBeVisible();
+  await expect(page.getByText('Deleted 1 processing items and their Releases.')).toBeVisible();
 });
 
 test('rtl smoke: ar-SA renders the queue with dir=rtl', async ({ page }) => {

@@ -210,6 +210,25 @@ pub async fn put_on(conn: &mut PgConnection, bytes: &[u8]) -> Result<String, sql
     Ok(key)
 }
 
+/// Removes one content-addressed file whose database references have already
+/// been deleted. The key is validated before any path is constructed, the
+/// shard must not be a symlink, and a missing object is idempotent success.
+pub async fn remove(key: String) -> Result<(), sqlx::Error> {
+    blocking(move || {
+        let root_path = root()?;
+        let (path, _) = object_path(&root_path, &key)?;
+        if path.parent().is_none_or(|shard| shard.is_symlink()) {
+            return Err(invalid("invalid asset shard"));
+        }
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
+    })
+    .await
+}
+
 /// Fail startup before allowing work when a previously bound volume is missing or replaced.
 pub(crate) async fn check_binding(conn: &mut PgConnection) -> Result<(), sqlx::Error> {
     if let Some(id) =

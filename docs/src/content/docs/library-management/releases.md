@@ -88,18 +88,26 @@ review suggestion, never an automatic merge.
 
 ## Deleting Releases
 
-The same list offers **Delete selected Releases** beside merge. The confirmation dialog shows the
-exact impact, requires an audit reason, and asks you to type `DELETE`, with two scopes:
+A Release can be deleted from its detail screen or from **Catalog → Releases** by selecting
+Releases and choosing **Delete selected Releases**. The confirmation dialog shows the exact
+impact and one **Delete permanently** button. There is no reason field, scope choice, or typed
+phrase, and no further workflow.
 
-- **Delete catalog records only (keep media files)** — the Releases disappear from the catalog;
-  their Tracks, credits, and media files stay on disk and remain auditable.
-- **Delete catalog records and media files** — also removes the selected Releases' canonical and
-  staged media from configured storage, using only durable publication evidence. If any selected
-  Release lacks that evidence, or canonical storage is not configured, nothing is changed.
+Deletion is a hard delete. The Release, its Tracks, credits, observations, classification,
+novelty and policy evidence, provider evidence, per-user state, playlist/playback rows, merge/split
+history, projection entries, and originating processing work item are removed from PostgreSQL.
+Its canonical bundle, retained staging tree, media files, and custom artwork are removed from
+configured storage. If canonical storage is not configured while files would be removed, the
+action fails closed and nothing is deleted.
 
-Deleted Releases become non-browsable tombstones that keep their public ids, Tracks, credits,
-observations, policy evidence, per-user state, and audit history. A merged Release must be split
-first, and a Release Review deletion remains the path for a single processing disposition.
+An administrator or editor can delete any Release at any time, including one that is merged,
+deprecated, or already tombstoned. There is no undo: the only surviving record is the
+`release_hard_deleted` audit event. Take a coordinated database and media backup before bulk
+cleanup.
+
+A single Release Review decision remains a separate, policy-driven path; the Processing Queue
+bulk **Delete** action uses this same hard-deletion behavior for the selected rows. See
+[Processing](../admin/processing/#bulk-delete).
 
 The same browsing routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).

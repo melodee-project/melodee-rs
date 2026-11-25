@@ -120,6 +120,10 @@ pub fn router() -> Router<AdminPurgeState> {
             "/api/admin/v1/ingest/work-items/purge",
             post(purge_work_items),
         )
+        .route(
+            "/api/admin/v1/ingest/work-items/delete",
+            post(delete_work_items),
+        )
         .layer(DefaultBodyLimit::max(MAX_PURGE_BODY_BYTES))
 }
 
@@ -179,6 +183,97 @@ async fn purge_work_items(
     Json(response).into_response()
 }
 
+/// Hard-delete selected work items from the Processing Queue (ADR-0211).
+///
+/// A work item already bound to a catalog Release is routed through the shared
+/// Release hard-deletion executor so its catalog rows, media, and processing
+/// record disappear together. A pre-catalog item is purged directly at any
+/// lifecycle state. The operator sees one confirmation and gets per-item
+/// outcomes; there is no additional workflow stage.
+async fn delete_work_items(
+    State(state): State<AdminPurgeState>,
+    admin: AdminPrincipal,
+    Json(request): Json<PurgeWorkItemsRequest>,
+) -> Response {
+    let reason = request
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .unwrap_or(DEFAULT_PURGE_REASON)
+        .to_owned();
+    if !request.confirm {
+        return purge_error(
+            StatusCode::BAD_REQUEST,
+            "confirmation_required",
+            "the delete request must carry explicit confirmation",
+        );
+    }
+    if request.work_item_ids.is_empty() || request.work_item_ids.len() > MAX_PURGE_BATCH {
+        return purge_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_batch",
+            format!("select between 1 and {MAX_PURGE_BATCH} work items"),
+        );
+    }
+
+    let mut response = PurgeWorkItemsResponse {
+        deleted: Vec::new(),
+        failed: Vec::new(),
+    };
+    for id in request.work_item_ids {
+        let release = sqlx::query_scalar::<_, Uuid>(
+            "SELECT release.public_api_id
+               FROM catalog_imports import
+               JOIN releases release ON release.id = import.release_id
+              WHERE import.work_item_id = $1
+              LIMIT 1",
+        )
+        .bind(id)
+        .fetch_optional(&state.admin.pool)
+        .await;
+        match release {
+            Err(error) => response.failed.push(PurgeFailedItem {
+                id,
+                code: "store_error",
+                message: error.to_string(),
+            }),
+            Ok(Some(public_id)) => match crate::admin_catalog_delete::execute_release_hard_delete(
+                &state.admin.pool,
+                state.canonical_root.as_deref(),
+                state.staging_root.as_deref(),
+                &[public_id],
+                &admin.public_api_id.to_string(),
+                &reason,
+            )
+            .await
+            {
+                Ok(outcome) => response.deleted.push(PurgeDeletedItem {
+                    id,
+                    paths: json!({
+                        "releaseIds": outcome.deleted_releases,
+                        "assetKeys": outcome.released_asset_keys,
+                    }),
+                }),
+                Err(error) => response.failed.push(PurgeFailedItem {
+                    id,
+                    code: error.code,
+                    message: error.message,
+                }),
+            },
+            Ok(None) => match purge_one(&state, &admin, id, &reason).await {
+                Ok(paths) => response.deleted.push(PurgeDeletedItem { id, paths }),
+                Err(failure) => response.failed.push(PurgeFailedItem {
+                    id,
+                    code: failure.code,
+                    message: failure.message,
+                }),
+            },
+        }
+    }
+    Json(response).into_response()
+}
+
 struct PurgeFailure {
     code: &'static str,
     message: String,
@@ -204,15 +299,6 @@ async fn purge_one(
             WorkStoreError::NotFound(_) => failure("not_found", "work item no longer exists"),
             other => failure("store_error", other.to_string()),
         })?;
-    if item.state != melodee_domain::IngestionState::Failed {
-        return Err(failure(
-            "invalid_state",
-            format!(
-                "only failed work items can be purged; this item is '{}'",
-                item.state.as_str()
-            ),
-        ));
-    }
     let import = CatalogStore
         .get_import(&state.admin.pool, item.id)
         .await

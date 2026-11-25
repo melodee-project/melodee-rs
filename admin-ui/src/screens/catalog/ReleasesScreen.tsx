@@ -18,6 +18,7 @@ import {
   previewReleaseMerge,
 } from '../../api/admin';
 import type { CatalogReleaseListItem, ReleaseMergePreview } from '../../api/types';
+import { useSessionRole } from '../../auth/AuthContext';
 import { CatalogDeleteDialog } from '../../components/CatalogDeleteDialog';
 import { ReleaseLink } from '../../components/EntityLink';
 import type { EntityColumn } from '../../components/EntityTable';
@@ -231,6 +232,8 @@ function MergeReleasesModal({ releases, onClose, onCompleted }: MergeReleasesMod
 
 export function ReleasesScreen() {
   const { t } = useTranslation();
+  const role = useSessionRole();
+  const isAdmin = role === 'admin';
   const [items, setItems] = useState<CatalogReleaseListItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -309,7 +312,7 @@ export function ReleasesScreen() {
         selection={{ selectedIds, onChange: setSelectedIds }}
         toolbarActions={
           <>
-            <Button
+            {isAdmin ? <Button
               kind="secondary"
               size="sm"
               disabled={selectedIds.length < 2}
@@ -319,7 +322,7 @@ export function ReleasesScreen() {
               }}
             >
               {t('catalog.releases.merge.selectedAction', { count: selectedIds.length })}
-            </Button>
+            </Button> : null}
             <Button
               kind="danger--tertiary"
               size="sm"
@@ -370,8 +373,8 @@ export function ReleasesScreen() {
           kind="release"
           count={selectedIds.length}
           preview={async () => releaseDeletePreviewView(await previewReleaseDelete(selectedIds))}
-          onSubmit={async (mode, reason) => {
-            const result = await deleteReleases({ releaseIds: selectedIds, mode, reason });
+          onSubmit={async () => {
+            const result = await deleteReleases({ releaseIds: selectedIds });
             setDeleteOpen(false);
             setNoticeDeleteCount(result.deletedReleaseIds.length);
             setNotice('delete');
