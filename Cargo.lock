@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-application"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boa_engine",
  "futures-util",
@@ -2305,7 +2305,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-auth"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "bcrypt",
@@ -2322,7 +2322,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-catalog"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "melodee-domain",
  "melodee-persistence",
@@ -2337,7 +2337,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -2366,7 +2366,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-domain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "serde",
@@ -2378,7 +2378,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-ingestion"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "melodee-domain",
@@ -2398,7 +2398,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-media"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "lofty",
@@ -2415,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-mql"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "serde",
@@ -2426,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-persistence"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bcrypt",
  "getrandom 0.4.3",
@@ -2445,7 +2445,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-policy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "melodee-domain",
  "melodee-persistence",
@@ -2460,7 +2460,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-search"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "melodee-domain",
@@ -2481,7 +2481,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "base64 0.23.1",

@@ -7,6 +7,16 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+## 0.2.0 — 2026-11-24
+
+The Admin UI shows the running server version in the navigation footer. Artist and Release
+artwork uploads accept WebP and refresh the primary image after upload. The legacy user-state
+importer can match accounts by email and Tracks by exact Artist, Release, and Track titles.
+Rerunning the import as the library grows picks up newly matched preferences.
+
+For source installations upgrading from the November 24 `e35ca9f` build, run the usual
+updater. This release adds no database migration beyond that revision.
+
 ### Fixed
 
 - Artist and Release artwork uploads accept WebP and convert it to JPEG. The detail header

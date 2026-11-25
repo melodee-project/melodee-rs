@@ -11,13 +11,13 @@ publish = false
 boa_engine.workspace = true
 futures-util.workspace = true
 sha2.workspace = true
-melodee-search = { path = "../melodee-search", version = "0.1.0" }
+melodee-search = { path = "../melodee-search", version = "0.2.0" }
 image.workspace = true
 lettre.workspace = true
-melodee-domain = { path = "../melodee-domain", version = "0.1.0" }
-melodee-ingestion = { path = "../melodee-ingestion", version = "0.1.0" }
-melodee-media = { path = "../melodee-media", version = "0.1.0" }
-melodee-persistence = { path = "../melodee-persistence", version = "0.1.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.2.0" }
+melodee-ingestion = { path = "../melodee-ingestion", version = "0.2.0" }
+melodee-media = { path = "../melodee-media", version = "0.2.0" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.2.0" }
 quick-xml.workspace = true
 reqwest.workspace = true
 serde.workspace = true
