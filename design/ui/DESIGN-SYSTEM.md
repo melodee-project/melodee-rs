@@ -20,7 +20,7 @@ consumer player.
 - Persistent collapsible left navigation.
 - Global search/command entry in the header.
 - User, language, appearance, notifications, and server status controls in the header; locale,
-  appearance, and collapse in the navigation footer.
+  running server version, and collapse in the navigation footer.
 - Server status is reported once, in the header. Never duplicate it in the rail.
 - Primary navigation groups: Overview; Processing; Catalog; Policies; System.
 - Consumer playback features are not primary navigation. Track preview is available where curation

@@ -9,6 +9,9 @@ Upgrade by selecting a released GHCR image tag. Do not use `latest` for unattend
 updates unless you intentionally accept each new stable release automatically. Prefer an exact
 `X.Y.Z` tag or image digest.
 
+During `0.x`, a minor update can require migration steps. From `1.0.0` onward, a major update
+signals an incompatible change to a supported interface. See the [Melodee versioning policy](https://github.com/melodee-project/melodee-rs/blob/main/VERSIONING.md).
+
 ## Before the upgrade
 
 1. Read the GitHub Release notes for the target version.

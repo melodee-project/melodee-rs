@@ -133,7 +133,7 @@ export function ThemeSection() {
   const packMeta = (pack: ThemePackInfo): string =>
     [
       pack.author ? t('theme.byAuthor', { author: pack.author }) : null,
-      pack.version ? t('theme.versionLabel', { version: pack.version }) : null,
+      pack.version ? t('common.versionLabel', { version: pack.version }) : null,
     ]
       .filter((part): part is string => part !== null)
       .join(' · ');

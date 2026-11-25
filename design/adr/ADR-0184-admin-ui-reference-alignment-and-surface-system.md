@@ -61,6 +61,10 @@ PRD-UI-REF-002 baselines that currently act as the regression gate.
    indicator; the navigation footer carries only locale, appearance, and the collapse control, so
    the shell never shows the same status twice.
 
+   **Amendment (2026-11-24).** The expanded navigation footer now shows the running server
+   version below the locale. Operators can identify the build from any screen. The appearance
+   preference remains available in the header menu.
+
 4. **No fabricated values.** Every element the mockups show must trace to an API field. Where
    the data does not exist, the element is omitted and recorded in `DESIGN-SYSTEM.md` — never
    simulated. Concretely, the queue `Priority` column is omitted (no priority concept exists

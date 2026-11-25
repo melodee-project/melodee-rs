@@ -122,6 +122,9 @@ structured logs remain CLI/evidence surfaces.
 
 ## Service health
 
+To see the running Melodee version, expand the Admin UI navigation. The version appears
+below the language in the footer when the server responds to the health check.
+
 ```http
 GET /healthz
 ```

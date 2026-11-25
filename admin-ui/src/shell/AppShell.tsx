@@ -159,7 +159,7 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [openPanel, setOpenPanel] = useState<'language' | 'appearance' | 'user' | null>(null);
-  const [health, setHealth] = useState<HealthState>('checking');
+  const [server, setServer] = useState<{ health: HealthState; version?: string }>({ health: 'checking' });
 
   // WCAG 2.1.1: keep horizontally scrolling regions (tables, chip strips)
   // keyboard-focusable whenever they overflow.
@@ -172,23 +172,26 @@ export function AppShell() {
   // provider, so polling suppresses its own auth event.
   useEffect(() => {
     let cancelled = false;
+    let timer: number;
     const poll = async () => {
       try {
-        await getSystemInfo({ suppressAuthEvent: true });
+        const info = await getSystemInfo({ suppressAuthEvent: true });
         if (!cancelled) {
-          setHealth('online');
+          setServer({ health: 'online', version: info.version });
         }
       } catch {
         if (!cancelled) {
-          setHealth('offline');
+          setServer({ health: 'offline' });
         }
+      }
+      if (!cancelled) {
+        timer = window.setTimeout(() => void poll(), HEALTH_POLL_MS);
       }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), HEALTH_POLL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, []);
 
@@ -306,7 +309,7 @@ export function AppShell() {
         </button>
         <HeaderGlobalBar>
           <span className="melodee-shell__health">
-            <HealthIndicator state={health} />
+            <HealthIndicator state={server.health} />
           </span>
           <HeaderGlobalAction
             aria-label={t('shell.openSearch', { shortcut: '⌘K' })}
@@ -459,13 +462,11 @@ export function AppShell() {
           )}
         </SideNavItems>
         <div className="melodee-shell__footer">
-          {/* Server status lives once, in the header. The footer carries only the
-              locale, appearance, and the collapse control. */}
           <span className="melodee-shell__footer-controls">
             {expanded ? (
               <span className="melodee-shell__footer-meta">
                 <span>{currentCulture?.nativeName ?? i18n.language}</span>
-                <span>{appearanceLabel}</span>
+                {server.version && <bdi>{t('common.versionLabel', { version: server.version })}</bdi>}
               </span>
             ) : null}
             <HeaderGlobalAction

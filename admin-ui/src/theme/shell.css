@@ -293,8 +293,7 @@
   margin-inline-start: 16rem;
 }
 
-/* Foot of the rail: locale, appearance, and the collapse control. Server
-   status is reported once, by the header indicator. */
+/* The footer holds the locale, server version, and collapse control. */
 .melodee-shell__footer {
   padding-inline: var(--melodee-space-3);
   padding-block: var(--melodee-space-3);
@@ -313,6 +312,8 @@
 .melodee-shell__footer-meta {
   display: flex;
   flex-direction: column;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
   line-height: 1.35;
   text-transform: none;
 }
@@ -338,8 +339,7 @@
   }
 }
 
-/* UI-SPEC §8 sm: single column; the header health chip yields its space to the
-   action buttons — the server status remains visible in the nav footer. */
+/* UI-SPEC §8 sm: the header health chip yields its space to the action buttons. */
 @media (max-width: 671px) {
   /* UI-SPEC §8 sm: the collapsed rail becomes an off-canvas navigation.
      The header menu expands the existing SideNav over the page; it must not

@@ -13,7 +13,7 @@ async function mockAdminApi(page: Page) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ service: 'melodee', version: 'test', status: 'ok' }),
+        body: JSON.stringify({ service: 'melodee', version: '1.2.3-rc.4', status: 'ok' }),
       });
       return;
     }
@@ -83,6 +83,12 @@ test('renders the shell navigation groups in English', async ({ page }) => {
   await expect(nav.getByText('Catalog').first()).toBeVisible();
   await expect(nav.getByText('Policies').first()).toBeVisible();
   await expect(nav.getByText('System').first()).toBeVisible();
+  const footer = nav.locator('.melodee-shell__footer');
+  await expect(footer.getByText('Version 1.2.3-rc.4', { exact: true })).toBeVisible();
+  await expect(footer.getByText('System', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Appearance: System' })).toBeVisible();
+  await footer.getByRole('button', { name: 'Collapse navigation' }).click();
+  await expect(footer.getByText('Version 1.2.3-rc.4')).toHaveCount(0);
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
@@ -104,7 +110,7 @@ test('server status is reported once, by the header, and the rail shows the badg
   await expect(headerStatus).toBeVisible();
   await expect(headerStatus).toContainText(/server status unknown|server online/i);
 
-  // The rail footer carries locale, appearance, and collapse only.
+  // Server health has a single indicator, even when the footer shows the version.
   const footer = page.locator('.melodee-shell__footer');
   await expect(footer).toBeVisible();
   await expect(footer).not.toContainText(/server online|server offline|checking server status/i);
@@ -116,6 +122,23 @@ test('server status is reported once, by the header, and the rail shows the badg
   );
   // Count the status indicators in the whole shell: exactly one.
   await expect(page.locator('.melodee-shell__health')).toHaveCount(1);
+});
+
+test('the footer follows the running server across a failed poll and recovery', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1056, 'expanded desktop navigation');
+  await page.clock.install();
+  await page.goto('/');
+  const footer = page.locator('.melodee-shell__footer');
+  await expect(footer).toContainText('Version 1.2.3-rc.4');
+  await page.route('**/api/admin/v1/system/info', (route) => route.fulfill({ status: 503 }));
+  await page.clock.fastForward(30_000);
+  await expect(page.locator('.melodee-shell__health')).toContainText(/server offline/i);
+  await expect(footer).not.toContainText('Version');
+  await page.route('**/api/admin/v1/system/info', (route) => route.fulfill({
+    json: { service: 'melodee', version: '1.2.3', status: 'ok' },
+  }));
+  await page.clock.fastForward(30_000);
+  await expect(footer.getByText('Version 1.2.3', { exact: true })).toBeVisible();
 });
 
 test('switching to ar-SA sets dir=rtl on the document root', async ({ page }) => {

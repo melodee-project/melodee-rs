@@ -76,6 +76,8 @@ for acceptance.
 
 ## Maintainer release flow
 
+Choose the next version and prepare the release commit using the [Melodee versioning policy](VERSIONING.md).
+
 Official deployable releases are GHCR OCI images, not native binary assets. Before publishing a
 GitHub Release, ensure the exact release commit is on `main`, its Cargo server/CLI version matches
 the intended SemVer tag, and the full gate is green. Publish the GitHub Release with release notes;

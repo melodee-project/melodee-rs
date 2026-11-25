@@ -57,7 +57,7 @@ pills, status chips, progress bars), Melodee owns a primitive built on Carbon to
   rail shows the badge only.
 - Content region: max width none (data-heavy), **24 px padding at ≥ lg** (was 16 px), 16 px below.
 - Inspector panel: 400 px right rail rendered as a `Surface` card (dismissible; content reflows).
-- Footer strip: locale, appearance, and the collapse control inside the side nav. Server status is
+- Footer strip: locale, running server version, and the collapse control inside the side nav. Server status is
   reported exactly once, by the header indicator — there is no duplicate status line in the rail.
 - Mockup proportions of 220 px navigation and 72 px header are directional only; the dimensions
   above are binding.
