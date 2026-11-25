@@ -46,11 +46,16 @@ pub(crate) enum UserCommands {
     /// The import is additive: it never deletes rows, older exports cannot
     /// downgrade newer local changes, play counts are monotonic, and playlist
     /// items are only appended. Missing music is skipped and reported. Re-run
-    /// the same export after adding music to import newly matched state.
+    /// the same export after adding music to import newly matched state. Accounts with an
+    /// unambiguous email match keep their Rust profile. Tracks match automatically on a unique
+    /// release artist, release title, and track title. Apply saves these pairs for future imports.
     ImportState {
         /// Export directory containing manifest.json and the NDJSON streams.
         #[arg(long, value_name = "DIR")]
         input: PathBuf,
+        /// Approved legacy-to-target public ID links for a rebuilt catalog.
+        #[arg(long, value_name = "FILE")]
+        identity_map: Option<PathBuf>,
         /// Validate, resolve identities, and print the plan without writing.
         #[arg(long)]
         dry_run: bool,
@@ -165,6 +170,7 @@ pub(crate) async fn run(command: UserCommands) {
         }
         UserCommands::ImportState {
             input,
+            identity_map,
             dry_run,
             allow_unmatched,
             require_all_matches,
@@ -181,7 +187,9 @@ pub(crate) async fn run(command: UserCommands) {
                 grant_privileged_roles,
                 batch_size,
             };
-            match crate::user_state_import::import(&pool, &input, options).await {
+            match crate::user_state_import::import(&pool, &input, options, identity_map.as_deref())
+                .await
+            {
                 Ok(summary) => {
                     if json {
                         match serde_json::to_string_pretty(&summary) {
@@ -192,7 +200,14 @@ pub(crate) async fn run(command: UserCommands) {
                             }
                         }
                     } else {
-                        println!("{}", crate::user_state_import::render(&summary));
+                        println!(
+                            "{}",
+                            crate::user_state_import::render(
+                                &summary,
+                                &input,
+                                identity_map.as_deref()
+                            )
+                        );
                     }
                 }
                 Err(message) => {

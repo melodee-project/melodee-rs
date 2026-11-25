@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -23,6 +24,50 @@ assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
+
+
+class CatalogEvidenceTests(unittest.TestCase):
+    def test_tracks_referenced_only_by_history_playlists_or_bookmarks_are_included_once(
+        self,
+    ) -> None:
+        ids = [f"00000000-0000-4000-8000-{n:012d}" for n in range(1, 5)]
+        streams = {name: [] for name in MODULE.STREAMS}
+        streams["entity-states.ndjson"].append(
+            MODULE.Row(
+                "entity-states.ndjson", {"entity": "track", "entityPublicId": ids[0]}
+            )
+        )
+        for stream, key in zip(
+            ("track-plays.ndjson", "playlist-items.ndjson", "bookmarks.ndjson"),
+            ids[1:],
+            strict=True,
+        ):
+            streams[stream] = [
+                MODULE.Row(stream, {"trackPublicId": ref}) for ref in (key, ids[0])
+            ]
+
+        def query(_psql, _url, sql):
+            for key in ids:
+                self.assertEqual(sql.count(key), 1)
+            return [
+                [json.dumps({"kind": "track", "publicId": key, "title": "One\nTwo"})]
+                for key in reversed(ids)
+            ]
+
+        with patch.object(MODULE, "run_query", side_effect=query) as lookup:
+            rows = MODULE.export_catalog_evidence("psql", "fixture", streams)
+        lookup.assert_called_once()
+        self.assertEqual([row.payload["publicId"] for row in rows], ids)
+        self.assertTrue(all(row.stream == "catalog-evidence.ndjson" for row in rows))
+
+
+    def test_missing_metadata_still_lists_the_original_public_id(self):
+        key = "00000000-0000-4000-8000-000000000123"
+        streams = {name: [] for name in MODULE.STREAMS}
+        streams["bookmarks.ndjson"] = [MODULE.Row("bookmarks.ndjson", {"trackPublicId": key})]
+        with patch.object(MODULE, "run_query", return_value=[]):
+            rows = MODULE.export_catalog_evidence("psql", "fixture", streams)
+        self.assertEqual([row.payload for row in rows], [{"kind": "track", "publicId": key}])
 
 
 class TimestampTests(unittest.TestCase):

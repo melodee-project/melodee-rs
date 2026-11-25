@@ -62,6 +62,7 @@ and a `referenceOnly` section) plus one NDJSON stream per domain:
 |---|---|
 | `users.ndjson` | Account identity, profile fields, time zone, description, optional avatar |
 | `entity-states.ndjson` | Per-user Artist/Release/Track star, dislike, rating, pin, play count, last played |
+| `catalog-evidence.ndjson` | Legacy artist, release, title, track number, and duration for referenced music. Used to review possible matches in a rebuilt library. |
 | `track-plays.ndjson` | Individual play-history events |
 | `playlists.ndjson` | Static playlists with their public ids |
 | `playlist-items.ndjson` | Static playlist ordering |
@@ -126,11 +127,12 @@ melodee-cli users import-state --input ./legacy-user-state
 | `--no-create-users` | Do not create missing accounts; every exported user must already exist. **Missing accounts are created by default.** |
 | `--grant-privileged-roles` | Keep the exported administrator/editor flags on **newly created** accounts. Off by default; existing accounts never change privilege. |
 | `--allow-unmatched` | Skip missing users when combined with `--no-create-users`. Missing catalog entities are already skipped and reported by default. |
-| `--require-all-matches` | Fail before writing if any referenced catalog entity is missing or not live. Cannot be combined with `--allow-unmatched`. |
+| `--require-all-matches` | Fail before writing if a reference is missing, inactive, or still needs approval. Cannot be combined with `--allow-unmatched`. |
+| `--identity-map FILE` | Use reviewed old and new public IDs for this Rust installation. Linked accounts keep their existing login, roles, and profile. |
 | `--batch-size N` | Rows per committed transaction (default 1000). |
 | `--json` | Emit the machine-readable summary. |
 
-Accounts in the export that do not exist locally are **created** (unprivileged, using the exported
+After checking public IDs, saved links, and unique email matches, missing accounts are **created** (unprivileged, using the exported
 portable bcrypt hash when present, otherwise an unguessable placeholder credential that requires a
 password reset). Existing accounts keep their credentials and privileges. Rows for missing or
 inactive catalog entries are **skipped and counted**, while matched rows are imported. Use
@@ -165,23 +167,89 @@ Each row is merged by its natural key with these rules:
 - **Smart playlists, bookmarks, groups, playback settings, equalizer presets** — applied by
   natural key only when newer; memberships are additive.
 
-The summary reports created, updated, unchanged, and duplicate counts, plus unmatched counts for
-entity states, play history, playlist items, and bookmarks. JSON output includes `statesUnmatched`,
-`playsUnmatched`, `playlistItemsUnmatched`, and `bookmarksUnmatched`. The `referenceOnly` domains
-are listed separately. Dry-run row counts include only rows whose user and catalog entity resolve.
+Read **Favorites (likes)** to see how many times listeners marked an artist, release, or track as a
+favorite. The next three lines break that total down by type. Two listeners who like the same
+track each contribute one favorite. Dislikes, ratings, and pins have their own counts. A listener
+can both rate and like a track, so the same preference record can appear in both counts.
+
+**In export** counts all preferences in the source files. **Matched** counts preferences for an
+existing or planned account when the importer can identify one live catalog item. This includes
+a unique match on artist, release, and track title. **Unmatched** counts preferences for missing
+accounts, missing music, and tracks with conflicting candidates. If a listener rated a track one
+star and also liked it, finding that track adds one to both **Ratings** and **Favorite tracks**.
+Both are ready to import. An existing newer choice can still take precedence.
+
+In JSON, `exportedPreferences` counts the source data and `matchedPreferences` counts matched
+preferences. Each listener’s breakdown is in `preferencesByUser`. `supersededPreferences`
+counts legacy choices superseded by existing ones. `tracksMatchedByMetadata` counts newly
+identified exact track pairs. `tracksWithAmbiguousMatches` counts tracks requiring review.
+`statesUnmatched`, `playsUnmatched`, `playlistItemsUnmatched`, and `bookmarksUnmatched` count
+rows skipped on this run. Listening history counts individual plays. In the account summary,
+`usersMatchedByEmail` counts new email matches, `usersLinked` counts saved links, and
+`usersRequiringReview` counts account conflicts.
 
 ## Identity matching
 
-Everything is matched by preserved public id:
+The importer first looks up saved links and preserved public IDs.
 
-- **Users** by their C# `ApiKey` (stored as `public_api_id`); missing accounts are created by default.
+- **Users** with different public IDs can match automatically by email. The address must be unique in both the export and the Rust database after trimming spaces and ignoring case. A renamed username is fine. The preview reports these matches separately. Missing accounts are created by default.
 - **Artists, Releases, Tracks** by their preserved `ApiKey`, and only while they are live (`Active`
   / `Verified`; deleted and merged entries are skipped).
+- **Rebuilt tracks** also match automatically when exactly one referenced legacy track and one live track share the release artist, release title, and track title.
 - **Playlists, smart playlists, equalizer presets, groups** by their own public ids.
 
-If the Rust catalog was not produced by the full legacy migration, public ids will not line up and
-rows are reported as unmatched. That is expected and safe: nothing is guessed from names, titles,
-or file paths.
+### When you are rebuilding from the old music files
+
+Reprocessing the same files normally gives them new public IDs. Keep the export and one identity
+map in a private directory that survives reboots. An older export without
+`catalog-evidence.ndjson` can still import preserved IDs. To find matches by metadata, export once
+more from the quiesced legacy database into a new private directory before retiring it.
+
+When the import preview reports accounts to review or ambiguous tracks, open a terminal on your workstation in the
+`melodee-rs` checkout and run the review command printed in the preview. Each **Legacy user** is
+followed by numbered accounts from the target server. Confirm a pair only if both accounts belong
+to the same person. You can also review suggested music matches here after each batch of releases.
+Both commands use `MELODEE__DATABASE__URL` for the Rust target. These examples use a directory
+named `legacy-user-state` and a map named `approved-links.json` in the current directory.
+
+```bash
+python3 scripts/reconcile_legacy_user_state.py --input ./legacy-user-state --identity-map ./approved-links.json --review
+melodee-cli users import-state --input ./legacy-user-state --identity-map ./approved-links.json --dry-run
+melodee-cli users import-state --input ./legacy-user-state --identity-map ./approved-links.json
+```
+
+The review tool only reads PostgreSQL. It shows both sides of each suggested link. Enter the
+candidate number to confirm the pair, press Enter to skip it, or enter `q` to finish. Each approval
+is saved immediately on your workstation and reused across runs. Omit `--review` for a preview
+that also leaves the map untouched. Add `--show-pending` to list source items without suggestions.
+
+- Accounts matched by email need no confirmation. On apply, the CLI saves their public IDs in
+  `account-links-<installation UUID>.json` inside the export directory. Keep that file with the
+  export so a future change of email still points to the same person. A dry run leaves it untouched.
+  Linked users keep their Rust login, password, profile, avatar, and roles.
+- Review accounts when identifiers disagree, for example when an old username and email point to
+  different Rust users. Exporter-generated addresses such as `migrated-user-123@import.local` cannot establish an automatic link.
+  If you cannot identify the person, press Enter to leave the account unresolved.
+- Artist suggestions use the artist name. Release suggestions use the artist and release title.
+  The import preview compares the release artist, release title, and track title together.
+  It ignores differences in case and whitespace and retains edition and version text. A unique
+  match requires one exported track and one live track with those names. On apply, the CLI saves
+  the pair in `track-links-<installation UUID>.json` in the export directory. Keep this file
+  with the export. A later edition or title change will still resolve to the originally matched
+  track. When that track is unavailable, its listener data stays pending. The review tool shows
+  track numbers and durations where available to help distinguish editions. If several tracks
+  share those names, confirm the edition you recognize or leave it pending.
+- If the names changed enough to prevent a suggestion, locate the exact item
+  in the rebuilt library and verify it independently. With the review tool closed, you can add a
+  confirmed pair to the map's `approved` array, for example
+  `{"kind":"track","legacyId":"<old public UUID>","targetId":"<new public UUID>"}`.
+  Each public ID can occur only once per side and kind. Keep a backup of the map. Editing a pair
+  after applying it does not undo any data previously imported.
+- For the final check, add `--require-all-matches --dry-run` to the import command. A successful
+  check accounts for all referenced music. Apply the same export, then run it once more to confirm
+  zero new preference records and plays. Review any counts for current listener choices that take
+  precedence over a legacy favorite, dislike, rating, or pin. If a recording is still missing,
+  retain the export and retry when it becomes available.
 
 ## Troubleshooting
 
@@ -190,7 +258,7 @@ or file paths.
 | `psql is not on PATH` | Install the PostgreSQL client on the machine running the export. |
 | `checksum mismatch` | The export directory was edited or partially copied. Re-run the export. |
 | `user(s) in the export do not exist on this server` | You passed `--no-create-users`. Remove it to create the accounts, or add `--allow-unmatched` to skip their data. |
-| Rows reported as `unmatched` | Their user or live catalog entry is missing. Add the music with preserved public ids and re-run the same export. Matched rows are still imported. |
-| `reference catalog entities that are missing or not live` | You passed `--require-all-matches`. Remove it to import matched rows now, or complete the catalog before retrying. |
+| Preferences under **Unmatched** | Check whether the account and release exist. If several tracks share the same artist, release, and title, review the candidates. Repeat the same export after adding music or approving a link. |
+| `missing or not live` with `--require-all-matches` | Complete the catalog and approve outstanding matches, or remove the flag to import ready rows now. |
 | `playlist ... different owner` | The playlist public id already exists locally under another account. The importer refuses to steal it; resolve the conflict manually. |
 | Nothing was written but the command succeeded | The export is already applied, local state is newer, or no catalog ids match. Review the `unchanged`, `unmatched`, and `referenceOnly` counts. |

@@ -1,4 +1,4 @@
-//! Portable user-state import (ADR-0200, ADR-0201).
+//! Portable user-state import (ADR-0200, ADR-0201, ADR-0203 through ADR-0205).
 //!
 //! Reads an export directory produced by
 //! `scripts/export_legacy_user_state.py` and applies it to this server's native
@@ -19,9 +19,11 @@
 //!   edits are preserved.
 //! * **Memberships and bindings are additive.**
 //!
-//! Identity is always the preserved public id: users by `public_api_id`,
-//! catalog entities by `public_api_id` and live status, playlists and smart
-//! playlists by their public ids. Missing catalog rows are skipped and reported
+//! Accounts resolve by public ID, saved links, or a unique normalized email from the trusted
+//! export. The first applied email match binds the two public IDs for subsequent runs.
+//! Live catalog items resolve by preserved or linked public IDs. Rebuilt tracks can also
+//! resolve by a unique artist, release, and track title. Apply saves that association. Playlists
+//! and smart playlists resolve by their public IDs. Missing catalog rows are skipped and reported
 //! so the same export can be retried after more music arrives. Operators can
 //! require a complete catalog with `--require-all-matches`.
 //!
@@ -31,6 +33,9 @@
 //! in the manifest's `referenceOnly` section with their counts and reasons so
 //! nothing is silently dropped; use the `melodee-cli legacy import` path for
 //! those.
+
+mod identity_map;
+use identity_map::IdentityMap;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader, Read};
@@ -107,6 +112,10 @@ pub struct ImportSummary {
     pub generator: String,
     pub generated_at: String,
     pub users_in_export: usize,
+    pub users_already_on_server: usize,
+    pub users_linked: usize,
+    pub users_matched_by_email: usize,
+    pub users_requiring_review: usize,
     pub users_matched: usize,
     pub users_created: usize,
     /// Accounts a dry run would create.
@@ -116,6 +125,12 @@ pub struct ImportSummary {
     pub users_unmatched: Vec<String>,
     pub avatars_written: usize,
     pub entity_states_in_export: usize,
+    pub exported_preferences: PreferenceCounts,
+    pub matched_preferences: PreferenceCounts,
+    pub tracks_matched_by_metadata: usize,
+    pub tracks_with_ambiguous_matches: usize,
+    pub superseded_preferences: PreferenceCounts,
+    pub preferences_by_user: BTreeMap<Uuid, ListenerPreferences>,
     pub states_created: usize,
     pub states_updated: usize,
     pub states_unchanged: usize,
@@ -150,6 +165,55 @@ impl ImportSummary {
         if self.warnings.len() < MAX_REPORTED {
             self.warnings.push(message);
         }
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerPreferences {
+    username: String,
+    exported: PreferenceCounts,
+    matched: PreferenceCounts,
+}
+
+/// Each count represents one listener's preference for one catalog item.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreferenceCounts {
+    favorite_artists: usize,
+    favorite_releases: usize,
+    favorite_tracks: usize,
+    dislikes: usize,
+    ratings: usize,
+    pins: usize,
+}
+
+impl PreferenceCounts {
+    fn count(&mut self, row: &EntityStateRow) {
+        self.add(
+            row.entity,
+            row.starred,
+            row.hated,
+            row.rating > 0,
+            row.pinned,
+        );
+    }
+
+    fn add(&mut self, kind: EntityKind, favorite: bool, dislike: bool, rated: bool, pinned: bool) {
+        if favorite {
+            match kind {
+                EntityKind::Artist => self.favorite_artists += 1,
+                EntityKind::Release => self.favorite_releases += 1,
+                EntityKind::Track => self.favorite_tracks += 1,
+            }
+        }
+        self.dislikes += usize::from(dislike);
+        self.ratings += usize::from(rated);
+        self.pins += usize::from(pinned);
+    }
+
+    fn favorites(&self) -> usize {
+        self.favorite_artists + self.favorite_releases + self.favorite_tracks
     }
 }
 
@@ -908,6 +972,19 @@ impl EqualizerRecord {
 // Export loading
 // ---------------------------------------------------------------------------
 
+/// Names as observed by the legacy exporter. Extra provider and edition evidence
+/// stays in the portable stream for operator review.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogEvidence {
+    #[serde(skip_serializing)]
+    kind: EntityKind,
+    public_id: Uuid,
+    artist: Option<String>,
+    release: Option<String>,
+    title: Option<String>,
+}
+
 /// Fully validated export contents.
 #[derive(Debug)]
 pub struct Export {
@@ -916,6 +993,7 @@ pub struct Export {
     generated_at: String,
     source_fingerprint: Option<String>,
     users: Vec<UserRecord>,
+    track_evidence: Option<Vec<CatalogEvidence>>,
     states: Vec<StateRecord>,
     plays: Vec<PlayRecord>,
     playlists: Vec<(PlaylistRow, OffsetDateTime, OffsetDateTime)>,
@@ -971,6 +1049,20 @@ pub fn load(input: &Path) -> Result<Export, String> {
             ));
         }
     }
+
+    let evidence = "catalog-evidence.ndjson";
+    let track_evidence =
+        if manifest.checksums.contains_key(evidence) || manifest.counts.contains_key(evidence) {
+            let rows = expect_stream::<CatalogEvidence>(input, &manifest, evidence)?;
+            let tracks: Vec<_> = rows
+                .into_iter()
+                .filter(|row| row.kind == EntityKind::Track)
+                .collect();
+            reject_duplicates(evidence, tracks.iter().map(|row| row.public_id))?;
+            Some(tracks)
+        } else {
+            None
+        };
 
     let users = expect_stream::<UserRow>(input, &manifest, USERS_NAME)?
         .into_iter()
@@ -1129,6 +1221,7 @@ pub fn load(input: &Path) -> Result<Export, String> {
             .as_ref()
             .map(|source| source.fingerprint.clone()),
         users,
+        track_evidence,
         states,
         plays,
         playlists,
@@ -1152,10 +1245,11 @@ pub fn load(input: &Path) -> Result<Export, String> {
 /// # Errors
 /// Returns a message for unresolved users without `--allow-unmatched`, catalog
 /// gaps with `--require-all-matches`, ownership conflicts, or database failures.
-pub async fn apply(
+async fn apply(
     pool: &PgPool,
     export: &Export,
     options: ImportOptions,
+    links: &mut IdentityMap,
 ) -> Result<ImportSummary, String> {
     if options.batch_size < 1 || options.batch_size > MAX_BATCH_SIZE {
         return Err(format!(
@@ -1199,7 +1293,7 @@ pub async fn apply(
     let UserResolution {
         ids: mut users,
         missing: missing_users,
-    } = resolve_users(pool, export, options, &mut summary).await?;
+    } = resolve_users(pool, export, options, links, &mut summary).await?;
     if !summary.users_unmatched.is_empty() && !options.allow_unmatched {
         return Err(format!(
             "{} user(s) in the export do not exist on this server ({}); remove --no-create-users to create them, or pass --allow-unmatched to skip their data",
@@ -1208,31 +1302,52 @@ pub async fn apply(
         ));
     }
 
-    let entities = resolve_entities(pool, export).await?;
-    summary.states_unmatched = export
-        .states
-        .iter()
-        .filter(|state| {
-            !users.contains_key(&state.row.user_public_id)
-                || !entities.contains_key(&(state.row.entity.as_str(), state.row.entity_public_id))
+    let mut entities = resolve_entities(pool, export, links).await?;
+    match_track_metadata(pool, export, links, &mut entities, &mut summary).await?;
+    if export.track_evidence.is_none()
+        && export.states.iter().any(|state| {
+            state.row.entity == EntityKind::Track
+                && !entities.contains_key(&("track", state.row.entity_public_id))
         })
-        .count();
-    let track_ids = resolve_tracks(
-        pool,
-        export
-            .plays
-            .iter()
-            .map(|play| play.row.track_public_id)
-            .chain(
-                export
-                    .playlist_items
-                    .iter()
-                    .map(|item| item.track_public_id),
+    {
+        summary.warn("This export has no artist, release, or track titles. Use the export directory containing catalog-evidence.ndjson to match tracks by name.".into());
+    }
+    summary.preferences_by_user = export
+        .users
+        .iter()
+        .map(|user| {
+            (
+                user.row.public_id,
+                ListenerPreferences {
+                    username: user.row.username.clone(),
+                    ..Default::default()
+                },
             )
-            .chain(export.bookmarks.iter().map(|row| row.row.track_public_id)),
-    )
-    .await?;
-
+        })
+        .collect();
+    for state in &export.states {
+        let row = &state.row;
+        let listener = summary
+            .preferences_by_user
+            .entry(row.user_public_id)
+            .or_default();
+        listener.exported.count(row);
+        summary.exported_preferences.count(row);
+        if users.contains_key(&row.user_public_id)
+            && entities.contains_key(&(row.entity.as_str(), row.entity_public_id))
+        {
+            listener.matched.count(row);
+            summary.matched_preferences.count(row);
+        } else {
+            summary.states_unmatched += 1;
+        }
+    }
+    summary.superseded_preferences =
+        superseded_preferences(pool, &export.states, &users, &entities, batch).await?;
+    let track_ids = entities
+        .iter()
+        .filter_map(|(&(kind, source), &id)| (kind == "track").then_some((source, id)))
+        .collect::<BTreeMap<_, _>>();
     summary.plays_unmatched = export
         .plays
         .iter()
@@ -1269,26 +1384,18 @@ pub async fn apply(
         + summary.bookmarks_unmatched;
     if unresolved_rows > 0 && options.require_all_matches {
         return Err(format!(
-            "{unresolved_rows} row(s) reference catalog entities that are missing or not live; remove --require-all-matches to import matched rows and retry the same export after adding music"
+            "{unresolved_rows} row(s) depend on users or music that are missing or not live, or on conflicting matches that need review. Review the suggested pairs or remove --require-all-matches to import ready rows"
         ));
     }
     if unresolved_rows > 0 {
         summary.warn(format!(
-            "{unresolved_rows} row(s) skipped because their user or catalog entity is missing or not live. Re-run the same export after adding music to import newly matched rows."
+            "{unresolved_rows} row(s) skipped because their user or music is missing, inactive, or needs identity review. Re-run the same export after adding music to import newly matched rows."
         ));
     }
 
     if options.dry_run {
         summary.users_matched = users.len();
-        summary.states_created = export
-            .states
-            .iter()
-            .filter(|state| {
-                users.contains_key(&state.row.user_public_id)
-                    && entities
-                        .contains_key(&(state.row.entity.as_str(), state.row.entity_public_id))
-            })
-            .count();
+        summary.states_created = summary.entity_states_in_export - summary.states_unmatched;
         summary.plays_inserted = export
             .plays
             .iter()
@@ -1316,6 +1423,7 @@ pub async fn apply(
 
     // Complete identity preflight before any account or user-state writes, so
     // strict catalog validation cannot leave newly created accounts behind.
+    links.save()?;
     for user in missing_users {
         let id = create_user(pool, user, options.grant_privileged_roles).await?;
         users.insert(user.row.public_id, id);
@@ -1327,7 +1435,7 @@ pub async fn apply(
             ));
         }
     }
-    apply_users(pool, export, &users, &mut summary).await?;
+    apply_users(pool, export, &users, links, &mut summary).await?;
     apply_groups(pool, export, &users, &mut summary).await?;
     apply_states(pool, export, &users, &entities, batch, &mut summary).await?;
     apply_plays(pool, export, &users, &track_ids, batch, &mut summary).await?;
@@ -1343,51 +1451,120 @@ struct UserResolution<'a> {
     missing: Vec<&'a UserRecord>,
 }
 
+/// The C# exporter synthesizes an @import.local address for missing email.
+fn usable_account_email(normalized: &str) -> bool {
+    normalized.split_once('@').is_some_and(|(local, domain)| {
+        !local.is_empty()
+            && !domain.is_empty()
+            && !domain.contains('@')
+            && !(domain == "IMPORT.LOCAL"
+                && local
+                    .strip_prefix("MIGRATED-USER-")
+                    .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())))
+            && !normalized.chars().any(char::is_whitespace)
+    })
+}
+
 async fn resolve_users<'a>(
     pool: &PgPool,
     export: &'a Export,
     options: ImportOptions,
+    links: &mut IdentityMap,
     summary: &mut ImportSummary,
 ) -> Result<UserResolution<'a>, String> {
-    let mut resolved = BTreeMap::new();
     let mut missing = Vec::new();
-    if export.users.is_empty() {
-        return Ok(UserResolution {
-            ids: resolved,
-            missing,
-        });
-    }
-    let ids = export
-        .users
-        .iter()
-        .map(|user| user.row.public_id)
-        .collect::<Vec<_>>();
-    let rows: Vec<(Uuid, Uuid)> =
-        sqlx::query_as("SELECT public_api_id, id FROM native_users WHERE public_api_id = ANY($1)")
-            .bind(&ids)
-            .fetch_all(pool)
-            .await
-            .map_err(|error| format!("user lookup failed: {error}"))?;
-    for (public_id, id) in rows {
-        resolved.insert(public_id, id);
-    }
+    let mut resolved = links
+        .resolve(
+            pool,
+            "user",
+            export.users.iter().map(|user| user.row.public_id).collect(),
+            "SELECT public_api_id, id FROM native_users WHERE public_api_id = ANY($1)",
+        )
+        .await?;
+    summary.users_linked = resolved
+        .keys()
+        .filter(|id| links.target("user", id).is_some())
+        .count();
+    summary.users_already_on_server = resolved.len() - summary.users_linked;
+    let mut emails = BTreeMap::new();
+    let mut names = BTreeMap::new();
     for user in &export.users {
-        if resolved.contains_key(&user.row.public_id) {
+        *emails
+            .entry(user.row.email.trim().to_uppercase())
+            .or_insert(0usize) += 1;
+        *names
+            .entry(user.row.username.trim().to_uppercase())
+            .or_insert(0usize) += 1;
+    }
+    let targets: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
+        "SELECT public_api_id, id, normalized_email, normalized_username FROM native_users
+         WHERE normalized_email=ANY($1) OR normalized_username=ANY($2)",
+    )
+    .bind(emails.keys().collect::<Vec<_>>())
+    .bind(names.keys().collect::<Vec<_>>())
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("account email lookup failed: {e}"))?;
+    let by_email: BTreeMap<_, _> = targets
+        .iter()
+        .map(|(public, id, email, _)| (email, (*public, *id)))
+        .collect();
+    let by_name: BTreeMap<_, _> = targets
+        .iter()
+        .map(|(public, _, _, name)| (name, *public))
+        .collect();
+    let mut reserved = links.targets("user");
+    reserved.extend(export.users.iter().map(|u| u.row.public_id));
+    for user in &export.users {
+        let source = user.row.public_id;
+        if resolved.contains_key(&source) {
             continue;
         }
-        if options.create_users {
-            // Reserve an identity for planning; accounts are only created once
-            // all identity checks pass. No placeholder ID is ever persisted.
-            resolved.insert(user.row.public_id, Uuid::now_v7());
-            missing.push(user);
-            if options.dry_run {
-                summary.users_planned_created += 1;
+        let email = user.row.email.trim().to_uppercase();
+        let name = user.row.username.trim().to_uppercase();
+        let same_email = by_email.get(&email);
+        let same_name = by_name.get(&name);
+        if let Some(&(public, internal)) = same_email
+            && emails[&email] == 1
+            && usable_account_email(&email)
+            && same_name.is_none_or(|other| *other == public)
+            && reserved.insert(public)
+        {
+            links.link_email_match(source, public);
+            resolved.insert(source, internal);
+            summary.users_matched_by_email += 1;
+            continue;
+        }
+        if same_email.is_some() || same_name.is_some() || emails[&email] > 1 || names[&name] > 1 {
+            summary.users_requiring_review += 1;
+            if !options.create_users && options.allow_unmatched {
+                summary
+                    .users_unmatched
+                    .push(format!("{} ({source})", user.row.username));
             }
+        } else if options.create_users {
+            missing.push(user);
+            resolved.insert(source, Uuid::now_v7());
         } else {
             summary
                 .users_unmatched
-                .push(format!("{} ({})", user.row.username, user.row.public_id));
+                .push(format!("{} ({source})", user.row.username));
         }
+    }
+    if summary.users_requiring_review > 0 {
+        let message = format!(
+            "{} exported account(s) have a conflicting username, email, or saved identity. Review these accounts with scripts/reconcile_legacy_user_state.py --review and use the saved --identity-map.",
+            summary.users_requiring_review
+        );
+        if options.require_all_matches
+            || (!options.dry_run && (options.create_users || !options.allow_unmatched))
+        {
+            return Err(message);
+        }
+        summary.warn(message);
+    }
+    if options.dry_run {
+        summary.users_planned_created = missing.len();
     }
     summary.users_matched = resolved.len();
     Ok(UserResolution {
@@ -1453,12 +1630,17 @@ async fn apply_users(
     pool: &PgPool,
     export: &Export,
     users: &BTreeMap<Uuid, Uuid>,
+    links: &IdentityMap,
     summary: &mut ImportSummary,
 ) -> Result<(), String> {
     for user in &export.users {
         let Some(user_id) = users.get(&user.row.public_id) else {
             continue;
         };
+        // A link authorizes attaching listener data, not replacing an existing login or avatar.
+        if links.target("user", &user.row.public_id).is_some() {
+            continue;
+        }
         if user.row.credential.is_some() {
             summary.warn(format!(
                 "user {} already exists; its credentials and privileges are kept (export credential is reference-only)",
@@ -1593,6 +1775,68 @@ async fn apply_groups(
         summary.group_members_added += usize::try_from(added).unwrap_or(0);
     }
     Ok(())
+}
+
+/// Distinguish a resolved legacy preference from one that a listener has since
+/// changed. Use the same timestamp precedence as the upsert, including ties.
+async fn superseded_preferences(
+    pool: &PgPool,
+    states: &[StateRecord],
+    users: &BTreeMap<Uuid, Uuid>,
+    entities: &BTreeMap<(&'static str, Uuid), Uuid>,
+    batch: usize,
+) -> Result<PreferenceCounts, String> {
+    let mut counts = PreferenceCounts::default();
+    for kind in [EntityKind::Artist, EntityKind::Release, EntityKind::Track] {
+        let matched = states
+            .iter()
+            .filter(|s| s.row.entity == kind)
+            .filter_map(|s| {
+                Some((
+                    users.get(&s.row.user_public_id)?,
+                    entities.get(&(kind.as_str(), s.row.entity_public_id))?,
+                    s,
+                ))
+            })
+            .collect::<Vec<_>>();
+        let sql = format!(
+            "SELECT keys.ord::bigint, s.starred, s.hated, s.rating, s.pinned, s.updated_at
+            FROM unnest($1::uuid[], $2::uuid[]) WITH ORDINALITY AS keys(uid, entity, ord)
+            JOIN {} s ON s.user_id=keys.uid AND s.{}=keys.entity",
+            kind.table(),
+            kind.entity_column()
+        );
+        for chunk in matched.chunks(batch) {
+            let (uids, ids): (Vec<_>, Vec<_>) = chunk
+                .iter()
+                .map(|(user, entity, _)| (**user, **entity))
+                .unzip();
+            let local: Vec<(i64, bool, bool, i16, bool, OffsetDateTime)> =
+                sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+                    .bind(uids)
+                    .bind(ids)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(|e| format!("cannot compare existing preferences: {e}"))?;
+            for (ord, starred, hated, rating, pinned, modified) in local {
+                let index = usize::try_from(ord - 1).map_err(|e| e.to_string())?;
+                let (_, _, state) = chunk
+                    .get(index)
+                    .ok_or("invalid catalog preference position")?;
+                if modified >= state.updated_at {
+                    let r = &state.row;
+                    counts.add(
+                        kind,
+                        r.starred && !starred,
+                        r.hated && !hated,
+                        r.rating > 0 && r.rating != rating,
+                        r.pinned && !pinned,
+                    );
+                }
+            }
+        }
+    }
+    Ok(counts)
 }
 
 async fn apply_states(
@@ -1891,23 +2135,94 @@ async fn apply_playlists(
     Ok(())
 }
 
+fn referenced_entities(export: &Export, entity: EntityKind) -> BTreeSet<Uuid> {
+    let mut ids: BTreeSet<Uuid> = export
+        .states
+        .iter()
+        .filter(|state| state.row.entity == entity)
+        .map(|state| state.row.entity_public_id)
+        .collect();
+    if entity == EntityKind::Track {
+        ids.extend(export.plays.iter().map(|play| play.row.track_public_id));
+        ids.extend(export.playlist_items.iter().map(|row| row.track_public_id));
+        ids.extend(
+            export
+                .bookmarks
+                .iter()
+                .map(|bookmark| bookmark.row.track_public_id),
+        );
+    }
+    ids
+}
+
+#[derive(sqlx::FromRow)]
+struct TrackMatch {
+    source: Uuid,
+    target: Option<Uuid>,
+    internal_id: Option<Uuid>,
+    source_count: i64,
+    target_count: i64,
+}
+
+async fn match_track_metadata(
+    pool: &PgPool,
+    export: &Export,
+    links: &mut IdentityMap,
+    entities: &mut BTreeMap<(&'static str, Uuid), Uuid>,
+    summary: &mut ImportSummary,
+) -> Result<(), String> {
+    let Some(evidence) = &export.track_evidence else {
+        return Ok(());
+    };
+    let originals = referenced_entities(export, EntityKind::Track);
+    let evidence: Vec<_> = evidence
+        .iter()
+        .filter(|row| originals.contains(&row.public_id))
+        .collect();
+    if evidence.is_empty() {
+        return Ok(());
+    }
+    let reserved = links.targets("track");
+    let rows: Vec<TrackMatch> =
+        sqlx::query_as(include_str!("user_state_import/track_metadata.sql"))
+            .bind(sqlx::types::Json(evidence))
+            .fetch_all(pool)
+            .await
+            .map_err(|error| {
+                format!("cannot compare exported track titles with the live catalog: {error}")
+            })?;
+    for row in rows {
+        let source = row.source;
+        if entities.contains_key(&("track", source)) || links.target("track", &source).is_some() {
+            continue;
+        }
+        match (
+            row.source_count,
+            row.target_count,
+            row.target,
+            row.internal_id,
+        ) {
+            (1, 1, Some(public), Some(id))
+                if !reserved.contains(&public) && !originals.contains(&public) =>
+            {
+                links.link_track_match(source, public);
+                entities.insert(("track", source), id);
+                summary.tracks_matched_by_metadata += 1;
+            }
+            _ => summary.tracks_with_ambiguous_matches += 1,
+        }
+    }
+    Ok(())
+}
+
 async fn resolve_entities(
     pool: &PgPool,
     export: &Export,
+    links: &IdentityMap,
 ) -> Result<BTreeMap<(&'static str, Uuid), Uuid>, String> {
     let mut resolved = BTreeMap::new();
     for entity in [EntityKind::Artist, EntityKind::Release, EntityKind::Track] {
-        let ids = export
-            .states
-            .iter()
-            .filter(|state| state.row.entity == entity)
-            .map(|state| state.row.entity_public_id)
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        if ids.is_empty() {
-            continue;
-        }
+        let ids = referenced_entities(export, entity);
         let sql = match entity {
             EntityKind::Artist => {
                 "SELECT public_api_id, id FROM artists
@@ -1923,39 +2238,11 @@ async fn resolve_entities(
                   WHERE track.public_api_id = ANY($1) AND release.status = 'active'"
             }
         };
-        let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(sql)
-            .bind(&ids)
-            .fetch_all(pool)
-            .await
-            .map_err(|error| format!("{} lookup failed: {error}", entity.as_str()))?;
-        for (public_id, id) in rows {
+        for (public_id, id) in links.resolve(pool, entity.as_str(), ids, sql).await? {
             resolved.insert((entity.as_str(), public_id), id);
         }
     }
     Ok(resolved)
-}
-
-async fn resolve_tracks(
-    pool: &PgPool,
-    public_ids: impl Iterator<Item = Uuid>,
-) -> Result<BTreeMap<Uuid, Uuid>, String> {
-    let ids = public_ids
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    if ids.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        "SELECT track.public_api_id, track.id FROM tracks track
-           JOIN releases release ON release.id = track.release_id
-          WHERE track.public_api_id = ANY($1) AND release.status = 'active'",
-    )
-    .bind(&ids)
-    .fetch_all(pool)
-    .await
-    .map_err(|error| format!("track lookup failed: {error}"))?;
-    Ok(rows.into_iter().collect())
 }
 
 async fn apply_smart_playlists(
@@ -2208,73 +2495,174 @@ async fn apply_preferences(
 
 /// Human-readable report used by the CLI.
 #[must_use]
-pub fn render(summary: &ImportSummary) -> String {
+pub fn render(summary: &ImportSummary, input: &Path, identity_map: Option<&Path>) -> String {
     let mut lines = Vec::new();
     lines.push(format!(
-        "user-state import {} (schema v{}, {})",
+        "User data import {} (schema v{}, {})",
         if summary.dry_run {
-            "plan (dry run)"
+            "preview — dry run, no changes written"
         } else {
             "applied"
         },
         summary.schema_version,
         summary.generator
     ));
+    let (new_accounts, action) = if summary.dry_run {
+        (summary.users_planned_created, "planned for creation")
+    } else {
+        (summary.users_created, "created")
+    };
     lines.push(format!(
-        "  users:       {} matched, {} created, {} planned, {} updated, {} unchanged, {} unmatched",
-        summary.users_matched,
-        summary.users_created,
-        summary.users_planned_created,
-        summary.users_updated,
-        summary.users_unchanged,
-        summary.users_unmatched.len()
+        "  User accounts — {} in the export, {} matched to existing accounts, {new_accounts} {action}, {} skipped.",
+        summary.users_in_export, summary.users_already_on_server + summary.users_linked + summary.users_matched_by_email, summary.users_unmatched.len()
     ));
+    if summary.users_matched_by_email > 0 {
+        lines.push(format!(
+            "  Existing accounts matched automatically by email — {}.",
+            summary.users_matched_by_email
+        ));
+    }
+    if summary.users_requiring_review > 0 {
+        lines.push(format!(
+            "  Accounts to review — {}. Confirm which old and current accounts belong to the same person.",
+            summary.users_requiring_review
+        ));
+    }
+    if summary.tracks_matched_by_metadata > 0 {
+        lines.push(format!(
+            "  Tracks matched automatically by artist, release, and track title — {}.",
+            summary.tracks_matched_by_metadata
+        ));
+    }
+    if summary.tracks_with_ambiguous_matches > 0 {
+        lines.push(format!(
+            "  Tracks needing review because the match is ambiguous — {}.",
+            summary.tracks_with_ambiguous_matches
+        ));
+    }
+    if summary.users_requiring_review + summary.tracks_with_ambiguous_matches > 0 {
+        lines.push("  Open the interactive review in your terminal from the melodee-rs checkout. Use the same database connection as this preview.".to_owned());
+        let map = identity_map.unwrap_or(Path::new("./approved-links.json"));
+        let quote_path =
+            |path: &Path| format!("'{}'", path.display().to_string().replace('\'', "'\\''"));
+        lines.push(format!(
+            "    python3 scripts/reconcile_legacy_user_state.py --input {} --identity-map {} --review",
+            quote_path(input), quote_path(map)
+        ));
+        if !input.join("catalog-evidence.ndjson").is_file() {
+            lines.push("  This export supports account review only. To review music too, use the export directory containing catalog-evidence.ndjson.".to_owned());
+        }
+        lines.push("  Enter a candidate number to save a link, press Enter to skip, or enter q to finish. Then repeat this preview with the same --identity-map file.".to_owned());
+    }
+    if summary.users_linked > 0 {
+        lines.push(format!(
+            "  Existing accounts linked by saved public IDs — {}.",
+            summary.users_linked
+        ));
+    }
+    if !summary.dry_run {
+        lines.push(format!(
+            "  User profiles — {} updated, {} unchanged. Avatars written — {}.",
+            summary.users_updated, summary.users_unchanged, summary.avatars_written
+        ));
+    }
+    lines.push(String::new());
     lines.push(format!(
-        "  avatars:     {} written",
-        summary.avatars_written
+        "  {:<32} {:>10} {:>10} {:>10}",
+        "Preferences across all users", "In export", "Matched", "Unmatched"
     ));
-    lines.push(format!(
-        "  states:      {} created, {} updated, {} unchanged, {} unmatched",
-        summary.states_created,
-        summary.states_updated,
-        summary.states_unchanged,
-        summary.states_unmatched
-    ));
-    lines.push(format!(
-        "  plays:       {} inserted, {} already present, {} unmatched",
-        summary.plays_inserted, summary.plays_duplicate, summary.plays_unmatched
-    ));
-    lines.push(format!(
-        "  playlists:   {} created, {} updated; items {} added, {} already present, {} unmatched",
-        summary.playlists_created,
-        summary.playlists_updated,
-        summary.playlist_items_added,
-        summary.playlist_items_duplicate,
-        summary.playlist_items_unmatched
-    ));
-    lines.push(format!(
-        "  smart:       {} created, {} updated",
-        summary.smart_playlists_created, summary.smart_playlists_updated
-    ));
-    lines.push(format!(
-        "  bookmarks:   {} written, {} unmatched; groups {} created, memberships {} added",
-        summary.bookmarks_written,
-        summary.bookmarks_unmatched,
-        summary.groups_created,
-        summary.group_members_added
-    ));
-    lines.push(format!(
-        "  preferences: playback {} written, equalizer {} written",
-        summary.playback_settings_written, summary.equalizer_presets_written
-    ));
-    for (domain, count) in &summary.reference_only {
-        lines.push(format!("  reference-only: {domain} ({count} rows)"));
+    let exported = &summary.exported_preferences;
+    let matched = &summary.matched_preferences;
+    for (label, total, matches) in [
+        (
+            "Favorites (likes)",
+            exported.favorites(),
+            matched.favorites(),
+        ),
+        (
+            "  Favorite artists",
+            exported.favorite_artists,
+            matched.favorite_artists,
+        ),
+        (
+            "  Favorite releases",
+            exported.favorite_releases,
+            matched.favorite_releases,
+        ),
+        (
+            "  Favorite tracks",
+            exported.favorite_tracks,
+            matched.favorite_tracks,
+        ),
+        ("Dislikes", exported.dislikes, matched.dislikes),
+        ("Ratings (1 to 5)", exported.ratings, matched.ratings),
+        ("Pinned items", exported.pins, matched.pins),
+    ] {
+        lines.push(format!(
+            "  {label:<32} {total:>10} {matches:>10} {:>10}",
+            total - matches
+        ));
+    }
+    let kept = &summary.superseded_preferences;
+    if kept.favorites() + kept.dislikes + kept.ratings + kept.pins > 0 {
+        lines.push(format!("  Current listener choices take precedence over {} matched favorites, {} dislikes, {} ratings and {} pins from the export.",
+            kept.favorites(), kept.dislikes, kept.ratings, kept.pins));
+    }
+    lines.push(String::new());
+    if summary.dry_run {
+        lines.push(format!(
+            "  Music preferences and play counts — {} records ready to import, {} skipped.",
+            summary.states_created, summary.states_unmatched
+        ));
+        lines.push(format!(
+            "  Listening history — {} plays ready to import, {} skipped.",
+            summary.plays_inserted, summary.plays_unmatched
+        ));
+    } else {
+        lines.push(format!(
+            "  Music preferences and play counts — {} records created, {} updated, {} unchanged, {} unmatched.",
+            summary.states_created, summary.states_updated, summary.states_unchanged, summary.states_unmatched
+        ));
+        lines.push(format!(
+            "  Listening history — {} plays added, {} already present, {} unmatched.",
+            summary.plays_inserted, summary.plays_duplicate, summary.plays_unmatched
+        ));
+    }
+    if summary.dry_run {
+        lines.push(format!(
+            "  Playlists — {} with a matched owner. Playlist entries — {} matched, {} unmatched.",
+            summary.playlists_created,
+            summary.playlist_items_added,
+            summary.playlist_items_unmatched
+        ));
+        lines.push(format!(
+            "  Bookmarks — {} matched, {} unmatched.",
+            summary.bookmarks_written, summary.bookmarks_unmatched
+        ));
+    } else {
+        lines.push(format!("  Playlists — {} created, {} updated. Playlist entries — {} added, {} already present, {} unmatched.",
+            summary.playlists_created, summary.playlists_updated, summary.playlist_items_added,
+            summary.playlist_items_duplicate, summary.playlist_items_unmatched));
+        lines.push(format!(
+            "  Smart playlists — {} created, {} updated.",
+            summary.smart_playlists_created, summary.smart_playlists_updated
+        ));
+        lines.push(format!("  Bookmarks — {} written, {} unmatched. Access groups — {} created, {} memberships added.",
+            summary.bookmarks_written, summary.bookmarks_unmatched, summary.groups_created, summary.group_members_added));
+        lines.push(format!(
+            "  Playback settings written — {}. Equalizer presets written — {}.",
+            summary.playback_settings_written, summary.equalizer_presets_written
+        ));
+    }
+    // The detailed notes are capped. Still account for every reference-only stream.
+    for (domain, count) in summary.reference_only.iter().skip(MAX_REPORTED) {
+        lines.push(format!("  For reference only — {domain} ({count} rows)."));
     }
     for warning in &summary.warnings {
-        lines.push(format!("  note: {warning}"));
+        lines.push(format!("  {warning}"));
     }
     for unmatched in &summary.users_unmatched {
-        lines.push(format!("  unmatched user: {unmatched}"));
+        lines.push(format!("  Missing user — {unmatched}"));
     }
     lines.join("\n")
 }
@@ -2287,9 +2675,11 @@ pub async fn import(
     pool: &PgPool,
     input: &Path,
     options: ImportOptions,
+    identity_map: Option<&Path>,
 ) -> Result<ImportSummary, String> {
     let export = load(input)?;
-    apply(pool, &export, options).await
+    let mut links = IdentityMap::load(pool, input, identity_map).await?;
+    apply(pool, &export, options, &mut links).await
 }
 
 #[cfg(test)]

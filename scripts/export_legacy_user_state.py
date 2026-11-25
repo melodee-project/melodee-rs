@@ -20,6 +20,7 @@ Output directory
     manifest.json              schema version, per-stream row counts + SHA-256
     users.ndjson               account/profile/avatar rows
     entity-states.ndjson       artist/release/track star/hate/rating/pin/plays
+    catalog-evidence.ndjson    names, editions, positions and durations for referenced music
     track-plays.ndjson         play history events
     playlists.ndjson           static playlists
     playlist-items.ndjson      static playlist ordering
@@ -66,6 +67,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import UUID
 
 SCHEMA_VERSION = 1
 GENERATOR = {"name": "melodee-legacy-user-state-export", "version": "1.0.0"}
@@ -74,6 +76,7 @@ DEFAULT_SOURCE_ENV = "MELODEE_LEGACY_SOURCE_DATABASE_URL"
 STREAMS = (
     "users.ndjson",
     "entity-states.ndjson",
+    "catalog-evidence.ndjson",
     "track-plays.ndjson",
     "playlists.ndjson",
     "playlist-items.ndjson",
@@ -785,6 +788,45 @@ def source_fingerprint(psql: str, url: str) -> dict:
     return {"fingerprint": digest, "facts": "redacted"}
 
 
+def export_catalog_evidence(
+    psql: str, url: str, streams: dict[str, list[Row]]
+) -> list[Row]:
+    """Keep the legacy identities and descriptive evidence needed after retiring C#."""
+    ids: dict[str, set[UUID]] = {"artist": set(), "release": set(), "track": set()}
+    for row in streams["entity-states.ndjson"]:
+        ids[row.payload["entity"]].add(UUID(row.payload["entityPublicId"]))
+    for stream in ("track-plays.ndjson", "playlist-items.ndjson", "bookmarks.ndjson"):
+        ids["track"].update(UUID(row.payload["trackPublicId"]) for row in streams[stream])
+
+    artist = """SELECT json_build_object('kind','artist','publicId',a."ApiKey",
+        'artist',a."Name",'artistMbid',a."MusicBrainzId") FROM "Artists" a WHERE a."ApiKey" """
+    release = """SELECT json_build_object('kind','release','publicId',r."ApiKey",
+        'artist',a."Name",'release',r."Name",'releaseDate',r."ReleaseDate",
+        'releaseMbid',r."MusicBrainzId",'artistMbid',a."MusicBrainzId")
+        FROM "Albums" r JOIN "Artists" a ON a."Id"=r."ArtistId" WHERE r."ApiKey" """
+    track = """SELECT json_build_object('kind','track','publicId',t."ApiKey",
+        'artist',a."Name",'release',r."Name",'releaseDate',r."ReleaseDate",
+        'title',t."Title",'trackNumber',t."SongNumber",'durationMs',round(t."Duration")::bigint,
+        'fileSize',t."FileSize",'legacyFileHash',t."FileHash",'trackMbid',t."MusicBrainzId",
+        'releaseMbid',r."MusicBrainzId",'artistMbid',a."MusicBrainzId")
+        FROM "Songs" t JOIN "Albums" r ON r."Id"=t."AlbumId"
+        JOIN "Artists" a ON a."Id"=r."ArtistId" WHERE t."ApiKey" """
+    result = []
+    for kind, query in (("artist", artist), ("release", release), ("track", track)):
+        ordered = sorted(ids[kind])
+        for start in range(0, len(ordered), 500):
+            # UUID objects are validated above. Batching bounds both psql argv and the lookup.
+            values = ",".join(f"'{key}'::uuid" for key in ordered[start : start + 500])
+            rows = run_query(psql, url, f"{query} IN ({values})")
+            records = (json.loads(raw) for (raw,) in rows)
+            found = {record["publicId"]: record for record in records}
+            # Keep references visible in the review backlog even if the source row is gone.
+            for source_id in ordered[start : start + 500]:
+                record = found.get(str(source_id), {"kind": kind, "publicId": str(source_id)})
+                result.append(Row("catalog-evidence.ndjson", record))
+    return sorted(result, key=lambda row: (row.payload["kind"], row.payload["publicId"]))
+
+
 def write_stream(path: Path, rows: list[Row]) -> tuple[int, str]:
     digest = hashlib.sha256()
     count = 0
@@ -882,6 +924,10 @@ def build_export(args: argparse.Namespace) -> dict:
     ):
         for row in collection:
             rows_by_stream[row.stream].append(row)
+
+    evidence = export_catalog_evidence(psql, source_db, rows_by_stream)
+    rows_by_stream["catalog-evidence.ndjson"] = evidence
+    progress("referenced music", len(evidence))
 
     counts = {}
     checksums = {}

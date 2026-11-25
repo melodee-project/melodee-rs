@@ -4,12 +4,14 @@
 - **Status:** Accepted
 - **Decision owners:** Migration tooling, Persistence, CLI
 - **Supersedes:** None
-- **Superseded by:** ADR-0201 (decision 5 catalog-gap failure default only)
+- **Superseded by:** ADR-0201 (decision 5 catalog-gap default), ADR-0203 (explicitly approved public-ID links)
 - **Related requirements:** PRD-MIG-002, PRD-MIG-003, PRD-USER-001, PRD-PLAYLIST-001
 
 Decision 5's catalog-gap failure default is superseded by
 [ADR-0201](ADR-0201-import-available-user-state-as-the-catalog-grows.md). The original decision
-below records the prior behavior; the other identity and merge rules remain in force.
+below records the prior behavior. [ADR-0203](ADR-0203-reconcile-listener-preferences-with-a-rebuilt-catalog.md)
+also permits an operator to link two public IDs explicitly for a rebuilt installation. The merge
+rules remain in force.
 
 ## Context
 
