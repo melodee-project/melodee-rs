@@ -147,6 +147,7 @@ async fn normalize_once_with_shutdown(
         claimed = stats.claimed,
         completed = stats.completed,
         failed = stats.failed,
+        errors = stats.errors,
         "normalization batch completed"
     );
     Ok(stats)
@@ -404,6 +405,20 @@ async fn normalize_one(
 
     if let Err(error) = publish_result {
         match &error {
+            WorkStoreError::Database(sqlx::Error::Database(db_error))
+                if matches!(db_error.code().as_deref(), Some("22P05" | "22021")) =>
+            {
+                // The manifest write rolled back. The same input will fail after
+                // every lease expiry, so record the failure while we own it.
+                return record_normalization_failure(
+                    store, pool, worker, item.id, work_config,
+                    "normalization.invalid_manifest_text",
+                    "PostgreSQL rejected text in the normalized metadata. Check the Release tags and sidecar files before retrying.",
+                    FailureClass::Permanent, OffsetDateTime::now_utc(),
+                )
+                .await
+                .map(|_| NormalizationOutcome::Failed);
+            }
             WorkStoreError::LeaseExpired(_) | WorkStoreError::NotLeaseOwner(_) => {
                 warn!(
                     work_item_id = %item.id,

@@ -22,7 +22,15 @@ position in the lifecycle. **Waiting for publisher** (`staged`, 70%) means valid
 and the Release is queued. When a publisher claims it, the state becomes `publishing` (80%).
 **Added to queue** shows when Melodee discovered the Release. To see how long it has waited for
 publication, select the row and find the transition to `staged` in its event timeline.
+On NFS, all publishers share the configured bandwidth budget. A new asset uses that budget
+once to write its bytes and twice to read them back for verification. At a 10 MiB/s budget,
+the resulting files can account for at most about 3.3 MiB/s before overhead. When that limit
+is already in use, adding publisher workers cannot increase it.
 On a page left open, use **Refresh** to fetch the latest row states.
+If a Release stays in **Normalizing**, check its event timeline. Repeated claims without a
+transition to **Validating** mean the worker keeps trying the same step. If PostgreSQL rejects
+the character encoding of the normalized metadata, the worker marks the Release **Failed** with
+`normalization.invalid_manifest_text`. Check the tags and sidecar files before retrying.
 The **Search Releases** box filters the queue server-side by
 Release title, billed Artist, or work-item path.
 

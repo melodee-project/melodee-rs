@@ -159,6 +159,9 @@ evidence, and releases pre-commit claims on graceful cancellation. `melodee-cli 
 - External and embedded JPEG/PNG artwork within resource bounds is decoded and written as padded
   1600×1600 JPEG. Malformed or unsafe artwork is skipped with a structured manifest finding.
 - CUE, M3U, SFV, NFO, LRC, and matching lyric sidecars are parsed into structured observations.
+  Melodee reads UTF-8, UTF-16 with a little- or big-endian byte order mark, and legacy
+  Windows-1252 text. A malformed UTF-16 sidecar or one containing an embedded NUL produces a
+  finding for that file. The worker preserves the original and continues processing the audio.
   A lyric sidecar is a basename-matched `<audio>.txt`; unrelated text files remain unknown residue.
   The legacy JSON lyric document (`Artist`, `Title`, and `Value`) and plain UTF-8/Windows-1252
   lyric text are accepted. NFO text and XML fields include title, artist/album artist, date/year,

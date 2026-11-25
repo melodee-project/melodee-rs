@@ -2221,6 +2221,62 @@ async fn missing_presentation_is_durably_routed_to_needs_review_before_canonical
 
 #[cfg(unix)]
 #[tokio::test]
+async fn unpersistable_normalized_text_stops_reencoding_after_lease_expiry() {
+    if !tools_available() {
+        eprintln!("skipping manifest failure test: media tools unavailable");
+        return;
+    }
+    let scenario = Scenario::new("invalid_manifest_text").await;
+    let release = scenario.root.join("release");
+    fs::create_dir(&release).unwrap();
+    generate_tagged_mp3(&release.join("track.mp3"));
+    scenario.discover_settle_and_inspect().await;
+
+    // Inject the same PostgreSQL data exception as an unrepresentable JSONB
+    // string, independently of which metadata source produced the manifest.
+    sqlx::raw_sql("CREATE FUNCTION reject_normalized_text() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'invalid manifest text' USING ERRCODE = '22P05'; END $$;
+        CREATE TRIGGER invalid_manifest BEFORE UPDATE OF manifest_payload ON release_work_item_manifests
+        FOR EACH ROW EXECUTE FUNCTION reject_normalized_text()")
+        .execute(&scenario.pool).await.unwrap();
+    let now = OffsetDateTime::now_utc();
+    let config = WorkEngineConfig::default();
+    let stats = normalize_once(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        &config,
+        now,
+    )
+    .await
+    .unwrap();
+    assert_eq!((stats.claimed, stats.failed, stats.errors), (1, 1, 0));
+    let failed = WorkItemStore
+        .list(&scenario.pool, Some(IngestionState::Failed), 1, 0)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(
+        failed.last_error_code.as_ref().map(|code| code.as_str()),
+        Some("normalization.invalid_manifest_text")
+    );
+    assert!(failed.lease_owner.is_none() && failed.next_attempt_at.is_none());
+    let later = normalize_once(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        &config,
+        now + config.lease_duration * 2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(later.claimed, 0);
+    scenario.finish().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn real_mp3_flac_ogg_wav_unicode_artwork_and_sidecars_reach_published() {
     use std::os::unix::fs::symlink;
 
@@ -2247,11 +2303,13 @@ async fn real_mp3_flac_ogg_wav_unicode_artwork_and_sidecars_reach_published() {
         )
         .unwrap();
         fs::write(release.join("notes Ω.nfo"), b"Pathology notes").unwrap();
-        fs::write(
-            release.join("playlist Ω.m3u"),
-            format!("#EXTM3U\n-01 Unicode Ω.{extension}\n"),
-        )
-        .unwrap();
+        let playlist = format!("#EXTM3U\r\n-01 Unicode Ω.{extension}\r\n");
+        let playlist_bytes: Vec<u8> = std::iter::once(0xfeff)
+            .chain(playlist.encode_utf16())
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        fs::write(release.join("playlist Ω.m3u"), playlist_bytes).unwrap();
+        fs::write(release.join("broken.m3u"), b"bad\0path").unwrap();
         fs::write(
             release.join("lyrics Ω.lrc"),
             b"[ar:Pathology Artist]\n[00:00.00]Synthetic lyric\n",
@@ -2331,6 +2389,17 @@ async fn real_mp3_flac_ogg_wav_unicode_artwork_and_sidecars_reach_published() {
             .unwrap();
         let manifest: ReleaseManifest = serde_json::from_value(stored_manifest.payload).unwrap();
         assert_eq!(3, manifest.schema_version);
+        assert!(
+            manifest
+                .normalization
+                .as_ref()
+                .unwrap()
+                .findings
+                .iter()
+                .any(
+                    |f| f.code == "sidecar.parse_failed" && f.file.as_deref() == Some("broken.m3u")
+                )
+        );
         for file in &manifest.files {
             if file.kind == melodee_domain::ObservedFileKind::Audio {
                 let extension = Path::new(&file.relative_path)
@@ -2342,6 +2411,15 @@ async fn real_mp3_flac_ogg_wav_unicode_artwork_and_sidecars_reach_published() {
             }
         }
         for sidecar in &manifest.normalization.as_ref().unwrap().parsed_sidecars {
+            if sidecar.sidecar_type == "m3u" {
+                let audio = manifest
+                    .files
+                    .iter()
+                    .find(|file| file.kind == melodee_domain::ObservedFileKind::Audio)
+                    .unwrap();
+                assert_eq!(sidecar.parsed["entries"][0]["path"], audio.relative_path);
+                assert_eq!(sidecar.parsed["entries"].as_array().unwrap().len(), 1);
+            }
             *observed_sidecars
                 .entry(sidecar.sidecar_type.clone())
                 .or_insert(0_usize) += 1;

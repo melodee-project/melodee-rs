@@ -128,6 +128,8 @@ pub enum NormalizationError {
     Fpcalc(String),
     #[error("normalized output verification failed: {0}")]
     Verification(String),
+    #[error("invalid sidecar text: {0}")]
+    InvalidSidecarText(&'static str),
     #[error("path escaped the work-area boundary: {0}")]
     PathEscape(String),
     #[error("manifest hashing failed: {0}")]
@@ -2087,7 +2089,7 @@ fn parse_sidecar_content(
             file.relative_path.clone(),
         ));
     }
-    let (content, mut findings) = decode_sidecar(&bytes, &file.relative_path);
+    let (content, mut findings) = decode_sidecar(&bytes, &file.relative_path)?;
 
     let mut cue_model = None;
     let (parsed, parser_findings) = match sidecar_type {
@@ -2107,6 +2109,12 @@ fn parse_sidecar_content(
         }
         _ => (serde_json::json!({ "raw": content }), Vec::new()),
     };
+    // A structured sidecar can also express NUL through a JSON escape.
+    if sidecar_contains_nul(&parsed) {
+        return Err(NormalizationError::InvalidSidecarText(
+            "embedded NUL character in parsed metadata",
+        ));
+    }
     findings.extend(parser_findings.into_iter().map(|mut finding| {
         finding.file = Some(file.relative_path.clone());
         finding
@@ -2123,8 +2131,56 @@ fn parse_sidecar_content(
     })
 }
 
-fn decode_sidecar(bytes: &[u8], relative: &str) -> (String, Vec<Finding>) {
-    let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
+fn sidecar_contains_nul(value: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match value {
+        Value::String(text) => text.contains('\0'),
+        Value::Array(items) => items.iter().any(sidecar_contains_nul),
+        Value::Object(fields) => fields
+            .iter()
+            .any(|(key, item)| key.contains('\0') || sidecar_contains_nul(item)),
+        _ => false,
+    }
+}
+
+fn decode_sidecar(
+    bytes: &[u8],
+    relative: &str,
+) -> Result<(String, Vec<Finding>), NormalizationError> {
+    let (text, findings) = match bytes {
+        [0xff, 0xfe, rest @ ..] => (decode_utf16_sidecar(rest, u16::from_le_bytes)?, Vec::new()),
+        [0xfe, 0xff, rest @ ..] => (decode_utf16_sidecar(rest, u16::from_be_bytes)?, Vec::new()),
+        _ => decode_legacy_sidecar(
+            bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes),
+            relative,
+        ),
+    };
+    // Neither file paths nor PostgreSQL text can contain NUL. Preserve the
+    // source file and let the caller record a finding for the unparseable text.
+    if text.contains('\0') {
+        return Err(NormalizationError::InvalidSidecarText(
+            "embedded NUL character",
+        ));
+    }
+    Ok((text, findings))
+}
+
+fn decode_utf16_sidecar(
+    bytes: &[u8],
+    read_unit: fn([u8; 2]) -> u16,
+) -> Result<String, NormalizationError> {
+    let (pairs, trailing) = bytes.as_chunks::<2>();
+    if !trailing.is_empty() {
+        return Err(NormalizationError::InvalidSidecarText(
+            "truncated UTF-16 code unit",
+        ));
+    }
+    char::decode_utf16(pairs.iter().copied().map(read_unit))
+        .collect::<Result<_, _>>()
+        .map_err(|_| NormalizationError::InvalidSidecarText("invalid UTF-16 surrogate pair"))
+}
+
+fn decode_legacy_sidecar(bytes: &[u8], relative: &str) -> (String, Vec<Finding>) {
     match String::from_utf8(bytes.to_vec()) {
         Ok(content) => (content, Vec::new()),
         Err(_) => (
@@ -3251,8 +3307,54 @@ mod tests {
     }
 
     #[test]
+    fn utf16_sidecars_honor_the_bom_and_preserve_track_names() {
+        let text = "#EXTM3U\r\n03 - 音楽 🎵.flac\r\n";
+        for big_endian in [false, true] {
+            let mut bytes = if big_endian {
+                vec![0xfe, 0xff]
+            } else {
+                vec![0xff, 0xfe]
+            };
+            for unit in text.encode_utf16() {
+                bytes.extend(if big_endian {
+                    unit.to_be_bytes()
+                } else {
+                    unit.to_le_bytes()
+                });
+            }
+            let (content, findings) = decode_sidecar(&bytes, "disc.m3u").unwrap();
+            assert!(findings.is_empty());
+            assert_eq!(
+                parse_m3u(&content).0["entries"][0]["path"],
+                "03 - 音楽 🎵.flac"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_sidecar_text_cannot_silently_change_file_or_track_names() {
+        for bytes in [
+            &b"foo\0bar"[..],
+            &[0xff, 0xfe, 0, 0],
+            &[0xfe, 0xff, 0x41],
+            &[0xff, 0xfe, 0x00, 0xd8],
+        ] {
+            assert!(matches!(
+                decode_sidecar(bytes, "disc.m3u"),
+                Err(NormalizationError::InvalidSidecarText(_))
+            ));
+        }
+        assert!(sidecar_contains_nul(
+            &serde_json::json!({"entries":[{"title":"a\0b"}]})
+        ));
+        assert!(!sidecar_contains_nul(
+            &serde_json::json!({"title":r"a\u0000b"})
+        ));
+    }
+
+    #[test]
     fn windows_1252_sidecar_fallback_is_structured() {
-        let (text, findings) = decode_sidecar(b"Beyonc\xe9", "release.nfo");
+        let (text, findings) = decode_sidecar(b"Beyonc\xe9", "release.nfo").unwrap();
         assert_eq!(text, "Beyonc\u{e9}");
         assert_eq!(findings[0].code, "sidecar.encoding_fallback");
     }
