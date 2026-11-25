@@ -921,12 +921,16 @@ PUT /api/admin/v1/catalog/artists/{id}/image
 PUT /api/admin/v1/catalog/releases/{id}/image
 ```
 
-Raw request body with `Content-Type: image/jpeg` or `image/png`; the declared type must match
-the magic bytes. Uploads are validated against the shared image pipeline bounds (at most
-10 MiB encoded, dimension and pixel caps, decodability) — invalid, truncated, mismatched, or
-oversized uploads return `400 invalid_image`. Unknown entity ids return `404 not_found`. The
+Send a raw request body with `Content-Type` set to `image/jpeg`, `image/png`, or `image/webp`.
+The declared type must match the file. Melodee converts WebP to JPEG at its original dimensions,
+using white behind transparent pixels. JPEG and PNG uploads retain their original bytes. The input
+and stored image must each fit in 10 MiB, with a maximum of 4096 pixels per side. Invalid,
+truncated, mismatched, or oversized uploads return `400 invalid_image`. Unknown entity ids return `404 not_found`. The
 response is `{"message", "imageId", "updatedAt"}` where `imageId` carries the frozen endpoint
-prefix (`artist_…` / `album_…`). Re-uploading replaces the override.
+prefix (`artist_…` / `album_…`). Each successful upload becomes the primary image. Artist and
+Release detail responses include `imageUpdatedAt`, the override timestamp, or `null` when using
+fallback artwork. Clients can use this value to version their image URLs. Reverse proxies serving
+unversioned artwork URLs should allow ETag revalidation so listeners see replacements.
 
 ```http
 DELETE /api/admin/v1/catalog/artists/{id}/image

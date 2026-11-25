@@ -554,7 +554,22 @@ export function getCatalogTrack(id: string, signal?: AbortSignal): Promise<Track
 
 /** Client-side pre-validation bounds mirroring the server pipeline. */
 export const CATALOG_ARTWORK_MAX_BYTES = 10 * 1024 * 1024;
-export const CATALOG_ARTWORK_TYPES: readonly string[] = ['image/jpeg', 'image/png'];
+const artworkTypes: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+const artworkMimeTypes = [...new Set(Object.values(artworkTypes))];
+export const CATALOG_ARTWORK_ACCEPT = [...artworkMimeTypes, ...Object.keys(artworkTypes)].join(',');
+
+/** Some file pickers supply an empty MIME type. The server verifies the actual bytes. */
+export function catalogArtworkType(file: File): string | undefined {
+  if (file.type) {
+    return artworkMimeTypes.includes(file.type) ? file.type : undefined;
+  }
+  return artworkTypes[file.name.slice(file.name.lastIndexOf('.')).toLowerCase()];
+}
 
 export interface CatalogImageMutation {
   message: string;
@@ -563,17 +578,17 @@ export interface CatalogImageMutation {
 }
 
 /**
- * Uploads a raw jpeg/png artwork override for one Artist/Release. The server
+ * Uploads raw JPEG, PNG, or WebP artwork for one Artist/Release. The server
  * re-validates magic bytes, size, and dimensions (400 invalid_image).
  */
 export function uploadCatalogImage(
   entity: 'artists' | 'releases',
   id: string,
-  file: Blob,
+  file: File,
 ): Promise<CatalogImageMutation> {
   return apiFetch<CatalogImageMutation>(
     `${ADMIN}/catalog/${entity}/${encodeURIComponent(id)}/image`,
-    { method: 'PUT', rawBody: { data: file, contentType: file.type || 'image/jpeg' } },
+    { method: 'PUT', rawBody: { data: file, contentType: catalogArtworkType(file) ?? 'application/octet-stream' } },
   );
 }
 

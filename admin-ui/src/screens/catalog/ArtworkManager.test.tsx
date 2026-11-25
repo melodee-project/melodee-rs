@@ -19,6 +19,7 @@ const mockRemove = vi.mocked(removeCatalogImage);
 
 const PROPS = {
   entity: 'artists' as const,
+  imageUpdatedAt: null,
   entityId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   imageId: 'artist_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   name: 'The Nomads',
@@ -65,10 +66,10 @@ describe('ArtworkManager (ADR-0143)', () => {
     expect(removeButtons().trigger).toBeEnabled();
   });
 
-  it('rejects a non-jpeg/png file client-side without calling the API', () => {
+  it('rejects a non-image file client-side without calling the API', () => {
     render(<ArtworkManager {...PROPS} onChanged={vi.fn()} />);
     chooseFile(new File(['x'], 'notes.txt', { type: 'text/plain' }));
-    expect(screen.getByText('Only JPEG or PNG images can be uploaded.')).toBeInTheDocument();
+    expect(screen.getByText('Choose a JPEG, PNG, or WebP image.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upload artwork' })).toBeDisabled();
     expect(mockUpload).not.toHaveBeenCalled();
   });
@@ -81,19 +82,22 @@ describe('ArtworkManager (ADR-0143)', () => {
     expect(mockUpload).not.toHaveBeenCalled();
   });
 
-  it('uploads the chosen file, refreshes the artwork, and notifies the parent', async () => {
+  it.each(['image/webp', ''])('accepts WebP with MIME %j and retries a failed preview after upload', async (type) => {
     mockUpload.mockResolvedValue({ message: 'Artwork updated', imageId: PROPS.imageId });
     const onChanged = vi.fn();
-    render(<ArtworkManager {...PROPS} onChanged={onChanged} />);
-    const file = pngFile();
+    const { rerender } = render(<ArtworkManager {...PROPS} onChanged={onChanged} />);
+    expect(screen.getByLabelText('Choose image file')).toHaveAttribute('accept', expect.stringContaining('image/webp'));
+    fireEvent.error(screen.getByRole('img', { name: 'The Nomads' }));
+    const file = new File(['webp'], 'portrait.webp', { type });
     chooseFile(file);
-    expect(screen.getByText(/Selected: cover.png/)).toBeInTheDocument();
+    expect(screen.getByText(/Selected: portrait.webp/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Upload artwork' }));
     await waitFor(() => expect(mockUpload).toHaveBeenCalledWith('artists', PROPS.entityId, file));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(screen.queryByText(/Selected:/)).not.toBeInTheDocument();
-    // The refresh key busts the cached image URL.
-    expect(screen.getByRole('img', { name: 'The Nomads' }).getAttribute('src')).toContain('?v=1');
+    expect(screen.getByRole('status')).toHaveTextContent('Primary image updated.');
+    rerender(<ArtworkManager {...PROPS} onChanged={onChanged} imageUpdatedAt="new-version" />);
+    expect(screen.getByRole('img', { name: 'The Nomads' }).getAttribute('src')).toContain('?v=new-version');
   });
 
   it('surfaces a localized error when the server rejects the upload (400)', async () => {

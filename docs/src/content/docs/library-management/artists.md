@@ -194,6 +194,10 @@ restricted to the backend whitelist, and the view state lives in the URL so it c
 Selecting an Artist opens the **detail view** with tabs for overview, **Tracks**, Releases,
 appearances, contributions, relationships, identity, images, and history (the audit timeline).
 
+To change the Artist’s primary portrait, open **Images**, choose a JPEG, PNG, or WebP,
+and select **Upload artwork**. The new portrait appears in the page header and in the
+Images tab. **Remove custom artwork** restores the fallback image. [Artwork upload limits](../api/admin-api/#catalog-artwork-overrides).
+
 The summary numbers are **links into the rows they count**, so a statistic is never a dead end: the
 **Track credits** card (every Track the Artist is credited on, whatever the role) and
 **Appearances** (the performance subset) both open the **Tracks** tab, which lists the Track, the

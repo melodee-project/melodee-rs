@@ -26,29 +26,33 @@ export function CatalogArtwork({
   imageSize?: 'thumbnail' | 'small' | 'medium' | 'large';
   decorative?: boolean;
   /**
-   * Bumps the query string so a just-mutated override is re-fetched instead
-   * of reusing the cached predecessor (the endpoint ignores the query).
+   * Persisted override timestamp, or null for the catalog fallback.
    */
-  cacheKey?: number;
+  cacheKey?: string | null;
 }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
+  const base = catalogImageUrl(imageId, imageSize);
+  const src = cacheKey === undefined
+    ? base
+    : `${base}?v=${encodeURIComponent(cacheKey ?? 'default')}`;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (failedSrc === src) {
     return <EntityAvatar name={name} size={size} decorative={decorative} />;
   }
-  const base = catalogImageUrl(imageId, imageSize);
   return (
     <span
       className="melodee-entity-avatar"
       style={{ inlineSize: size, blockSize: size, fontSize: size / 2 }}
     >
       <img
-        src={cacheKey === undefined ? base : `${base}?v=${cacheKey}`}
+        key={src}
+        src={src}
         alt={decorative ? '' : name}
         // The fixed-size fallback must settle before a mobile user reaches the
         // adjacent upload controls; lazy loading otherwise shifts the tab
         // panel while the browser is scrolling to the button.
         loading="eager"
-        onError={() => setFailed(true)}
+        onLoad={() => setFailedSrc(null)}
+        onError={() => setFailedSrc(src)}
       />
     </span>
   );

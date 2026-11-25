@@ -34,6 +34,10 @@ identifiers, or identity relationships. The remaining curation actions are the a
 decisions in [Release Review](./release-review/) (including reprocess) and the
 [Policies](../admin/policies/) rule set.
 
+To change the primary cover, open **Images**, choose a JPEG, PNG, or WebP, and select
+**Upload artwork**. Tracks on the Release inherit its cover. **Remove custom artwork** restores
+the fallback cover. [Artwork upload limits](../api/admin-api/#catalog-artwork-overrides).
+
 The initial values come from the media, not from a guess: the release title and artists are the
 observed tags, and the release date is the date tag carried by most of the Release's Tracks, with
 the full date stored as the source text alongside the editable date. A Release whose audio carries

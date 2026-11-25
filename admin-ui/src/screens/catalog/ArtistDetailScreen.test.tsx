@@ -36,6 +36,7 @@ function makeDetail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
     endDate: null,
     mergedIntoArtistId: null,
     revision: 3,
+    imageUpdatedAt: null,
     imageId: `artist_${ARTIST_ID}`,
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-14T10:00:00Z',
@@ -425,11 +426,11 @@ describe('ArtistDetailScreen', () => {
     renderScreen(makeDetail());
     await screen.findByRole('heading', { name: 'The Nomads' });
     // The header artwork is the small image (the Images tab uses medium).
-    const image = document.querySelector(`img[src="/images/artist_${ARTIST_ID}/small"]`);
+    const image = document.querySelector(`img[src="/images/artist_${ARTIST_ID}/small?v=default"]`);
     expect(image).not.toBeNull();
     fireEvent.error(image as HTMLElement);
     expect(
-      document.querySelector(`img[src="/images/artist_${ARTIST_ID}/small"]`),
+      document.querySelector(`img[src="/images/artist_${ARTIST_ID}/small?v=default"]`),
     ).toBeNull();
   });
 

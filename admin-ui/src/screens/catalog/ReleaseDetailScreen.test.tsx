@@ -37,6 +37,7 @@ function makeDetail(overrides: Partial<ReleaseDetail> = {}): ReleaseDetail {
     trackCount: 1,
     durationMs: 222_000,
     mediaBytes: 33_554_432,
+    imageUpdatedAt: null,
     imageId: `album_${RELEASE_ID}`,
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-14T10:00:00Z',

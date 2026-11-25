@@ -23,7 +23,7 @@ use axum::{
 };
 #[cfg(test)]
 use image::ImageReader;
-use image::{ImageFormat, imageops::FilterType};
+use image::{ImageFormat, Pixel, Rgba, imageops::FilterType};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -281,8 +281,9 @@ pub enum ImageUploadValidationError {
 /// Shared upload validation for raw image bodies (avatars, playlist images,
 /// and the ADR-0143 admin catalog artwork overrides): the encoded-input
 /// bound plus magic-byte/dimension/pixel decode under the bounded pipeline.
-pub(crate) async fn validate_uploaded_image(
+pub(crate) async fn prepare_uploaded_image(
     input: Vec<u8>,
+    convert_to: Option<ImageFormat>,
 ) -> Result<Vec<u8>, ImageUploadValidationError> {
     if input.is_empty() || u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_IMAGE_INPUT_BYTES {
         return Err(ImageUploadValidationError::Invalid);
@@ -294,9 +295,30 @@ pub(crate) async fn validate_uploaded_image(
         .map_err(|_| ImageUploadValidationError::Busy)?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        decode_image(&input)
-            .map(|_| input)
-            .map_err(|_| ImageUploadValidationError::Invalid)
+        let mut decoded = decode_image(&input).map_err(|_| ImageUploadValidationError::Invalid)?;
+        let Some(format) = convert_to else {
+            return Ok(input);
+        };
+        if format == ImageFormat::Jpeg
+            && let Some(rgba) = decoded.as_mut_rgba8()
+        {
+            // JPEG has no alpha channel. Composite transparent WebP pixels
+            // onto white so their hidden RGB values never become visible.
+            for pixel in rgba.pixels_mut().filter(|pixel| pixel[3] != u8::MAX) {
+                let mut background = Rgba([255; 4]);
+                background.blend(pixel);
+                *pixel = background;
+            }
+        }
+        let mut output = Cursor::new(Vec::new());
+        decoded
+            .write_to(&mut output, format)
+            .map_err(|_| ImageUploadValidationError::Invalid)?;
+        let bytes = output.into_inner();
+        if bytes.len() > melodee_persistence::MAX_ENTITY_IMAGE_BYTES {
+            return Err(ImageUploadValidationError::Invalid);
+        }
+        Ok(bytes)
     })
     .await
     .map_err(|_| ImageUploadValidationError::Invalid)?

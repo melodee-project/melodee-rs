@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 
 import {
   CATALOG_ARTWORK_MAX_BYTES,
-  CATALOG_ARTWORK_TYPES,
+  CATALOG_ARTWORK_ACCEPT,
+  catalogArtworkType,
   removeCatalogImage,
   uploadCatalogImage,
 } from '../../api/admin';
@@ -17,7 +18,7 @@ import { CatalogArtwork } from './CatalogArtwork';
 /**
  * Catalog artwork override management (ADR-0143, parity matrix artwork row):
  * shows the current artwork served by the frozen native image endpoint,
- * uploads a jpeg/png replacement, and removes the override behind a
+ * uploads a JPEG, PNG, or WebP replacement, and removes the override behind a
  * DestructiveActionDialog-consistent confirm. Removal only deletes the
  * override row — the plan/placeholder fallback returns and canonical media
  * is never touched. Client-side type/size checks pre-validate against the
@@ -27,6 +28,7 @@ export function ArtworkManager({
   entity,
   entityId,
   imageId,
+  imageUpdatedAt,
   name,
   onChanged,
 }: {
@@ -34,6 +36,7 @@ export function ArtworkManager({
   entityId: string;
   /** Frozen-endpoint image id (`artist_…` / `album_…`) from the detail DTO. */
   imageId: string;
+  imageUpdatedAt: string | null;
   name: string;
   /** Re-fetches the parent detail after a committed mutation. */
   onChanged: () => void;
@@ -42,9 +45,9 @@ export function ArtworkManager({
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<'uploaded' | 'removed' | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const describeServerError = (cause: unknown): string => {
     if (cause instanceof ApiError) {
@@ -60,11 +63,12 @@ export function ArtworkManager({
 
   const onFileChosen = (chosen: File | null) => {
     setError(null);
+    setResult(null);
     if (!chosen) {
       setFile(null);
       return;
     }
-    if (!CATALOG_ARTWORK_TYPES.includes(chosen.type)) {
+    if (!catalogArtworkType(chosen)) {
       setFile(null);
       setError(t('catalog.artwork.error.type'));
       return;
@@ -83,13 +87,14 @@ export function ArtworkManager({
     }
     setBusy(true);
     setError(null);
+    setResult(null);
     try {
       await uploadCatalogImage(entity, entityId, file);
       setFile(null);
       if (inputRef.current) {
         inputRef.current.value = '';
       }
-      setRefreshKey((key) => key + 1);
+      setResult('uploaded');
       onChanged();
     } catch (cause) {
       setError(describeServerError(cause));
@@ -102,9 +107,10 @@ export function ArtworkManager({
     setConfirmOpen(false);
     setBusy(true);
     setError(null);
+    setResult(null);
     try {
       await removeCatalogImage(entity, entityId, reason);
-      setRefreshKey((key) => key + 1);
+      setResult('removed');
       onChanged();
     } catch (cause) {
       setError(describeServerError(cause));
@@ -120,11 +126,12 @@ export function ArtworkManager({
         name={name}
         size={192}
         imageSize="medium"
-        cacheKey={refreshKey}
+        cacheKey={imageUpdatedAt}
       />
       <p className="melodee-panel__subtitle" style={{ marginBlockStart: '0.5rem' }}>
         {t('catalog.artwork.hint', { max: formatBytes(CATALOG_ARTWORK_MAX_BYTES) })}
       </p>
+      <div role="status">{result ? t('catalog.artwork.' + result) : null}</div>
       {error ? (
         <InlineNotification
           kind="error"
@@ -147,7 +154,7 @@ export function ArtworkManager({
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png"
+          accept={CATALOG_ARTWORK_ACCEPT}
           aria-label={t('catalog.artwork.chooseFile')}
           onChange={(event) => onFileChosen(event.target.files?.[0] ?? null)}
         />

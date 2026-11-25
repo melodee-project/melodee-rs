@@ -16,6 +16,7 @@ mod common;
 mod phase5_common;
 
 use std::io::Cursor;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
@@ -171,7 +172,14 @@ async fn call(
     body: Vec<u8>,
     bearer: Option<&str>,
 ) -> (StatusCode, HeaderMap, Vec<u8>) {
-    let mut builder = Request::builder().method(method).uri(path);
+    let mut builder =
+        Request::builder()
+            .method(method)
+            .uri(path)
+            .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                [127, 0, 0, 1],
+                12345,
+            ))));
     if let Some(token) = bearer {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
@@ -526,6 +534,125 @@ async fn artist_override_is_served_and_audit_attributes_the_admin() {
         "every mutation is audit-logged with the acting administrator id"
     );
 
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn webp_replaces_primary_artwork_for_artist_and_release() {
+    use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+
+    let db = TestDb::create("art_webp").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp-art-admin");
+    let (_, release, artist, track) = seed_catalog(&db, 13).await;
+    let app = app(db.pool.clone());
+    // Half transparent (with hidden red), half blue, non-square to catch resizing.
+    let source = RgbaImage::from_fn(80, 48, |x, _| {
+        if x < 40 {
+            Rgba([255, 0, 0, 0])
+        } else {
+            Rgba([0, 0, 255, 255])
+        }
+    });
+    let mut webp = Cursor::new(Vec::new());
+    DynamicImage::ImageRgba8(source)
+        .write_to(&mut webp, ImageFormat::WebP)
+        .expect("encode WebP");
+    let webp = webp.into_inner();
+    for (collection, id, prefix) in [
+        ("artists", artist, "artist"),
+        ("releases", release, "album"),
+    ] {
+        let detail = format!("/api/admin/v1/catalog/{collection}/{id}");
+        let upload = format!("{detail}/image");
+        let primary = format!("/images/{prefix}_{id}/original");
+        let (status, _, _) = call(
+            app.clone(),
+            "PUT",
+            &upload,
+            Some("image/png"),
+            png_upload(64, 64),
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, old_headers, _) = call(app.clone(), "GET", &primary, None, vec![], None).await;
+
+        let (status, _, body) = call(
+            app.clone(),
+            "PUT",
+            &upload,
+            Some("image/webp"),
+            webp.clone(),
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let mutation: serde_json::Value = serde_json::from_slice(&body).expect("mutation");
+        let (status, _, body) = call(app.clone(), "GET", &detail, None, vec![], Some(&admin)).await;
+        assert_eq!(status, StatusCode::OK);
+        let detail_body: serde_json::Value = serde_json::from_slice(&body).expect("detail");
+        assert!(mutation["updatedAt"].is_string());
+        assert_eq!(detail_body["imageUpdatedAt"], mutation["updatedAt"]);
+
+        let (status, headers, bytes) = call(app.clone(), "GET", &primary, None, vec![], None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_ne!(headers[header::ETAG], old_headers[header::ETAG]);
+        assert_eq!(headers[header::CONTENT_TYPE], "image/jpeg");
+        assert_eq!(
+            image::guess_format(&bytes).expect("stored format"),
+            ImageFormat::Jpeg
+        );
+        let pixels = image::load_from_memory(&bytes)
+            .expect("decode JPEG")
+            .into_rgb8();
+        assert_eq!(pixels.dimensions(), (80, 48));
+        assert!(pixels.get_pixel(4, 24).0.iter().all(|&v| v >= 245));
+        let [r, g, b] = pixels.get_pixel(70, 24).0;
+        assert!(r < 10 && g < 10 && b > 245);
+        if collection == "releases" {
+            let (_, _, inherited) = call(
+                app.clone(),
+                "GET",
+                &format!("/images/song_{track}/original"),
+                None,
+                vec![],
+                None,
+            )
+            .await;
+            assert_eq!(inherited, bytes);
+        }
+
+        for (mime, invalid) in [
+            ("image/webp", png_upload(4, 4)),
+            ("image/png", webp.clone()),
+            ("image/webp", webp[..14].to_vec()),
+        ] {
+            let (status, _, _) = call(
+                app.clone(),
+                "PUT",
+                &upload,
+                Some(mime),
+                invalid,
+                Some(&admin),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+        let (_, _, retained) = call(app.clone(), "GET", &primary, None, vec![], None).await;
+        assert_eq!(
+            retained, bytes,
+            "rejected replacement must preserve the current primary"
+        );
+        let (status, _, _) = call(app.clone(), "DELETE", &upload, None, vec![], Some(&admin)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (_, _, body) = call(app.clone(), "GET", &detail, None, vec![], Some(&admin)).await;
+        let detail_body: serde_json::Value = serde_json::from_slice(&body).expect("detail");
+        assert_eq!(
+            detail_body.get("imageUpdatedAt"),
+            Some(&serde_json::Value::Null)
+        );
+    }
     db.drop().await;
 }
 

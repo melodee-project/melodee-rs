@@ -9,6 +9,9 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- Artist and Release artwork uploads accept WebP and convert it to JPEG. The detail header
+  and Images tab both refresh after an upload, even when a browser has cached the previous image.
+
 - Ingestion stages no longer throttle a bulk import to their poll interval. Every stage loop
   (inspection, normalization, validation, publication, catalog import, policy) now runs another pass
   immediately when the previous pass claimed its full batch, so the poll interval is an idle cadence

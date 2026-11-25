@@ -22,6 +22,7 @@ use axum::{
     routing::get,
     routing::put,
 };
+use image::ImageFormat;
 use melodee_persistence::{
     ArtistCatalogDetail, ArtistMetadataPatch, BilledArtistRow, BoundedSection, CatalogArtistSort,
     CatalogAuditEventRow, CatalogBrowseError, CatalogImageAudit, CatalogImageEntity,
@@ -36,7 +37,7 @@ use uuid::Uuid;
 
 use crate::admin_access::{AdminAccessErrorBody, AdminAccessState, AdminPrincipal};
 use crate::native::NativeStreamUrlSigner;
-use crate::native::images::{ImageUploadValidationError, validate_uploaded_image};
+use crate::native::images::{ImageUploadValidationError, prepare_uploaded_image};
 use crate::native_stream::ClientAddressResolver;
 
 /// Maximum rows returned by catalog browsing listings.
@@ -51,7 +52,7 @@ const LIST_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
 /// ADR-0143 §1/§3: the upload pipeline bound for catalog artwork overrides
 /// (mirrors `MAX_IMAGE_INPUT_BYTES`). The route body limit admits one MiB of
 /// slack above it so an oversized-but-parseable body reaches
-/// `validate_uploaded_image` and earns the contract `400 invalid_image`
+/// `prepare_uploaded_image` and earns the contract `400 invalid_image`
 /// instead of the limiter's bare `413`.
 const MAX_ARTWORK_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
 const ARTWORK_BODY_LIMIT_BYTES: usize = MAX_ARTWORK_UPLOAD_BYTES + 1024 * 1024;
@@ -564,6 +565,8 @@ pub struct ArtistDetailDto {
     pub merged_into_artist_id: Option<Uuid>,
     pub revision: i64,
     pub image_id: String,
+    #[serde(with = "crate::admin_time::option")]
+    pub image_updated_at: Option<OffsetDateTime>,
     #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
     #[serde(with = "crate::admin_time")]
@@ -755,6 +758,8 @@ pub struct ReleaseDetailDto {
     pub duration_ms: i64,
     pub media_bytes: i64,
     pub image_id: String,
+    #[serde(with = "crate::admin_time::option")]
+    pub image_updated_at: Option<OffsetDateTime>,
     #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
     #[serde(with = "crate::admin_time")]
@@ -1140,6 +1145,7 @@ fn artist_detail_dto(
 ) -> ArtistDetailDto {
     ArtistDetailDto {
         id: detail.public_api_id,
+        image_updated_at: detail.image_updated_at,
         image_id: image_id("artist", detail.public_api_id),
         name: detail.canonical_name,
         sort_name: detail.sort_name,
@@ -1324,6 +1330,7 @@ fn release_detail_dto(
 ) -> ReleaseDetailDto {
     ReleaseDetailDto {
         id: detail.public_api_id,
+        image_updated_at: detail.image_updated_at,
         image_id: image_id("album", detail.public_api_id),
         title: detail.title,
         sort_title: detail.sort_title,
@@ -1482,13 +1489,10 @@ pub struct ImageDeleteRequest {
 
 /// Detects the image family from magic bytes; the declared Content-Type is
 /// never trusted (same rule as the native avatar/playlist uploads).
-fn artwork_image_format(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
-        Some("image/png")
-    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
-        Some("image/jpeg")
-    } else {
-        None
+fn artwork_image_format(bytes: &[u8]) -> Option<ImageFormat> {
+    match image::guess_format(bytes).ok()? {
+        format @ (ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP) => Some(format),
+        _ => None,
     }
 }
 
@@ -1548,8 +1552,8 @@ async fn upload_entity_image(
         Ok(None) => return not_found(route.kind, public_id),
         Err(error) => return store_failure("image entity resolution failed", &error),
     };
-    let Some(mime) = artwork_image_format(&body) else {
-        return invalid_image("image body must be a jpeg or png upload");
+    let Some(format) = artwork_image_format(&body) else {
+        return invalid_image("image body must be JPEG, PNG, or WebP");
     };
     let declared = headers
         .get(header::CONTENT_TYPE)
@@ -1562,10 +1566,11 @@ async fn upload_entity_image(
                 .trim()
                 .to_ascii_lowercase()
         });
-    if declared.as_deref() != Some(mime) {
+    if declared.as_deref() != Some(format.to_mime_type()) {
         return invalid_image("declared content type does not match the image bytes");
     }
-    let bytes = match validate_uploaded_image(body.to_vec()).await {
+    let convert_to = (format == ImageFormat::WebP).then_some(ImageFormat::Jpeg);
+    let bytes = match prepare_uploaded_image(body.to_vec(), convert_to).await {
         Ok(bytes) => bytes,
         Err(ImageUploadValidationError::Invalid) => {
             return invalid_image("image exceeds the compatibility bounds");
@@ -1584,7 +1589,7 @@ async fn upload_entity_image(
         &state.admin.pool,
         route.entity,
         internal_id,
-        mime,
+        convert_to.unwrap_or(format).to_mime_type(),
         &bytes,
         CatalogImageAudit {
             actor: &actor,
@@ -1675,7 +1680,7 @@ async fn delete_entity_image(
     StatusCode::NO_CONTENT.into_response()
 }
 
-/// PUT /api/admin/v1/catalog/artists/{id}/image — raw-body jpeg/png upload.
+/// PUT /api/admin/v1/catalog/artists/{id}/image — raw-body JPEG, PNG, or WebP upload.
 async fn upload_artist_image(
     State(state): State<AdminCatalogState>,
     admin: AdminPrincipal,
@@ -1696,7 +1701,7 @@ async fn delete_artist_image(
     delete_entity_image(&state, &admin, ARTIST_ARTWORK, id, body).await
 }
 
-/// PUT /api/admin/v1/catalog/releases/{id}/image — raw-body jpeg/png upload.
+/// PUT /api/admin/v1/catalog/releases/{id}/image — raw-body JPEG, PNG, or WebP upload.
 async fn upload_release_image(
     State(state): State<AdminCatalogState>,
     admin: AdminPrincipal,

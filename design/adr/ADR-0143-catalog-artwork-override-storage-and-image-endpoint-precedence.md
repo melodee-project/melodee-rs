@@ -200,6 +200,14 @@ the decision.
 
 Evidence: `design/evidence/known-corpus/RUN-m2.md`.
 
+### WebP input and primary artwork refresh (2026-11-24)
+
+Artist and Release uploads also accept `image/webp` under the same bounded decode and
+audit rules as JPEG and PNG. Convert WebP to JPEG during upload, preserving dimensions
+and compositing transparency onto white. The existing storage formats and client response
+contracts cover the result. Both admin detail views use the override’s persisted update
+time to identify the current header and preview image across edits and page loads.
+
 ## Validation
 
 - Upload → `GET /images/{kind}_{id}/{size}` serves the uploaded bytes (resized pipeline

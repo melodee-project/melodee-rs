@@ -301,7 +301,7 @@ export function ArtistDetailScreen() {
             />
           ) : null}
           <HeroCard
-            media={<CatalogArtwork imageId={detail.imageId} name={detail.name} size={112} decorative />}
+            media={<CatalogArtwork cacheKey={detail.imageUpdatedAt} imageId={detail.imageId} name={detail.name} size={112} decorative />}
             title={detail.name}
             subtitle={detail.disambiguation ?? undefined}
             chips={
@@ -876,6 +876,7 @@ export function ArtistDetailScreen() {
                   entity="artists"
                   entityId={detail.id}
                   imageId={detail.imageId}
+                  imageUpdatedAt={detail.imageUpdatedAt}
                   name={detail.name}
                   onChanged={retry}
                 />

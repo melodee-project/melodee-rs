@@ -1367,6 +1367,7 @@ export interface ArtistDetail {
   mergedIntoArtistId: string | null;
   revision: number;
   imageId: string;
+  imageUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
   stats: ArtistStats;
@@ -1490,6 +1491,7 @@ export interface ReleaseDetail {
   durationMs: number;
   mediaBytes: number;
   imageId: string;
+  imageUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
   tracks: Section<ReleaseTrack>;

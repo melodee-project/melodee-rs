@@ -28,7 +28,7 @@ use super::{
     catalog::{album_dtos_by_public_ids, artist_dtos_by_public_ids, song_dtos_by_public_ids},
     dto::{PagedResponse, PaginationMetadata, PlaylistDto, SongDto, UserDto, duration_formatted},
     error::NativeApiError,
-    images::{ImageUploadValidationError, validate_uploaded_image},
+    images::{ImageUploadValidationError, prepare_uploaded_image},
 };
 
 const DEFAULT_PAGE_SIZE: u16 = 50;
@@ -463,7 +463,7 @@ pub async fn upload_playlist_image(
     let multipart = multipart.map_err(|_| NativeApiError::CapturedMissingFile)?;
     let upload = read_file_part(multipart, max_upload_bytes).await?;
     let mime = image_mime_from_magic(&upload.bytes).ok_or(NativeApiError::BadRequest)?;
-    let bytes = validate_uploaded_image(upload.bytes)
+    let bytes = prepare_uploaded_image(upload.bytes, None)
         .await
         .map_err(|error| match error {
             ImageUploadValidationError::Invalid => NativeApiError::BadRequest,

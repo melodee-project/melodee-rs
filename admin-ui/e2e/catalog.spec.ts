@@ -254,6 +254,7 @@ async function mockAdminApi(
   } = {},
 ) {
   const listRequests: string[] = [];
+  const imageVersions = new Map<string, string>();
   const artworkRequests: { method: string; body: string }[] = [];
   const metadataRequests: { pathname: string; body: unknown }[] = [];
   const mergeRequests: { pathname: string; body: Record<string, unknown> }[] = [];
@@ -349,14 +350,18 @@ async function mockAdminApi(
           await json({ code: 'invalid_image', message: 'rejected', correlationId: null }, 400);
           return;
         }
+        const id = pathname.includes('/artists/') ? ARTIST_ROW.imageId : RELEASE_ROW.imageId;
+        const updatedAt = '2026-08-14T12:00:00Z';
+        imageVersions.set(id, updatedAt);
         await json({
           message: 'Artwork updated',
-          imageId: `artist_${ARTIST_ID}`,
-          updatedAt: '2026-08-14T12:00:00Z',
+          imageId: id,
+          updatedAt,
         });
         return;
       }
       if (method === 'DELETE') {
+        imageVersions.delete(pathname.includes('/artists/') ? ARTIST_ROW.imageId : RELEASE_ROW.imageId);
         await route.fulfill({ status: 204 });
         return;
       }
@@ -517,11 +522,11 @@ async function mockAdminApi(
       return;
     }
     if (pathname === `/api/admin/v1/catalog/artists/${ARTIST_ID}`) {
-      await json(ARTIST_DETAIL);
+      await json({ ...ARTIST_DETAIL, imageUpdatedAt: imageVersions.get(ARTIST_ROW.imageId) ?? null });
       return;
     }
     if (pathname === `/api/admin/v1/catalog/releases/${RELEASE_ID}`) {
-      await json(releaseDetail);
+      await json({ ...releaseDetail, imageUpdatedAt: imageVersions.get(RELEASE_ROW.imageId) ?? null });
       return;
     }
     if (pathname.includes('/metadata-transforms')) {
@@ -608,7 +613,13 @@ async function mockAdminApi(
   // Absent artwork: the native endpoint answers an undecodable empty 200;
   // the UI must fall back to initials, never a broken image.
   await page.route('**/images/**', async (route) => {
-    await route.fulfill({ status: 200, body: '' });
+    const url = new URL(route.request().url());
+    const version = imageVersions.get(url.pathname.split('/')[2]);
+    if (version && url.searchParams.get('v') === version) {
+      await route.fulfill({ contentType: 'image/webp', body: WEBP_BYTES });
+    } else {
+      await route.fulfill({ status: 200, body: '' });
+    }
   });
   return { listRequests, artworkRequests, mergeRequests, metadataRequests, deleteRequests };
 }
@@ -916,6 +927,7 @@ test('release detail shows tracks, an honest empty classification, and provenanc
 });
 
 // ADR-0143 artwork override management (upload → remove → error path).
+const WEBP_BYTES = Buffer.from('UklGRjwAAABXRUJQVlA4IDAAAADwAQCdASoDAAUAAUAmJaACdLoB+AAF9AAA/vFNr/0JPwSfgk/hM/+bA1RZvloAAAA=', 'base64');
 const PNG_BYTES = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
@@ -927,17 +939,23 @@ test('artist artwork upload and remove flow through the override endpoints', asy
 
   await page.getByRole('tab', { name: 'Images' }).click();
   await page.getByLabel('Choose image file').setInputFiles({
-    name: 'cover.png',
-    mimeType: 'image/png',
-    buffer: PNG_BYTES,
+    name: 'portrait.webp',
+    mimeType: 'image/webp',
+    buffer: WEBP_BYTES,
   });
-  await expect(page.getByText(/Selected: cover.png/)).toBeVisible();
+  await expect(page.getByText(/Selected: portrait.webp/)).toBeVisible();
   await page.getByRole('button', { name: 'Upload artwork' }).click();
   await expect
     .poll(() => api.artworkRequests.some((request) => request.method === 'PUT'))
     .toBe(true);
-  // The detail refetches after the mutation.
-  await expect(page.getByRole('heading', { name: 'The Nomads' })).toBeVisible();
+  // Both the header and the Images tab recover from the previous decode failure.
+  const portrait = page.locator(`img[src^="/images/${ARTIST_ROW.imageId}/"]`);
+  await expect(portrait).toHaveCount(2);
+  await expect.poll(() => portrait.evaluateAll((images) =>
+    images.every((image) => (image as HTMLImageElement).naturalWidth === 3),
+  )).toBe(true);
+  await page.reload();
+  await expect(portrait).toHaveCount(2);
 
   // Removal goes through the destructive-confirm dialog with a reason.
   await page.getByRole('button', { name: 'Remove custom artwork' }).click();
@@ -983,7 +1001,7 @@ test('release artwork client-side validation rejects a non-image file', async ({
     mimeType: 'text/plain',
     buffer: Buffer.from('not an image'),
   });
-  await expect(page.getByText('Only JPEG or PNG images can be uploaded.')).toBeVisible();
+  await expect(page.getByText('Choose a JPEG, PNG, or WebP image.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Upload artwork' })).toBeDisabled();
   expect(api.artworkRequests).toHaveLength(0);
 });

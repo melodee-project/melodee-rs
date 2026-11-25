@@ -210,7 +210,7 @@ export function ReleaseDetailScreen() {
           ) : null}
           <HeroCard
             media={
-              <CatalogArtwork imageId={detail.imageId} name={detail.title} size={176} decorative />
+              <CatalogArtwork cacheKey={detail.imageUpdatedAt} imageId={detail.imageId} name={detail.title} size={176} decorative />
             }
             title={detail.title}
             subtitle={[
@@ -598,6 +598,7 @@ export function ReleaseDetailScreen() {
                   entity="releases"
                   entityId={detail.id}
                   imageId={detail.imageId}
+                  imageUpdatedAt={detail.imageUpdatedAt}
                   name={detail.title}
                   onChanged={retry}
                 />

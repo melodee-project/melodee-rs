@@ -349,6 +349,7 @@ pub struct ArtistCatalogDetail {
     pub performance_track_count: i64,
     pub all_credit_track_count: i64,
     pub created_at: OffsetDateTime,
+    pub image_updated_at: Option<OffsetDateTime>,
     pub updated_at: OffsetDateTime,
     pub aliases: BoundedSection<ArtistAliasRow>,
     pub external_ids: BoundedSection<ArtistExternalIdRow>,
@@ -487,6 +488,7 @@ pub struct ReleaseCatalogDetail {
     pub duration_ms: i64,
     pub media_bytes: i64,
     pub created_at: OffsetDateTime,
+    pub image_updated_at: Option<OffsetDateTime>,
     pub updated_at: OffsetDateTime,
     pub tracks: BoundedSection<ReleaseTrackRow>,
     pub artists: Vec<BilledArtistRow>,
@@ -750,13 +752,15 @@ impl CatalogStore {
                 i64,
                 OffsetDateTime,
                 OffsetDateTime,
+                Option<OffsetDateTime>,
             ),
         >(
             "SELECT a.id, a.canonical_name, a.sort_name, a.artist_type,
                     a.disambiguation, a.status, a.begin_date, a.end_date,
                     merged.public_api_id AS merged_into_public_api_id,
-                    a.revision, a.created_at, a.updated_at
+                    a.revision, a.created_at, a.updated_at, image.updated_at
                FROM artists a
+               LEFT JOIN catalog_entity_images image ON image.artist_id = a.id
                LEFT JOIN artists merged ON merged.id = a.merged_into_artist_id
               WHERE a.public_api_id = $1",
         )
@@ -776,6 +780,7 @@ impl CatalogStore {
             revision,
             created_at,
             updated_at,
+            image_updated_at,
         )) = artist
         else {
             return Ok(None);
@@ -1065,6 +1070,7 @@ impl CatalogStore {
             performance_track_count: stats.2,
             all_credit_track_count: stats.3,
             created_at,
+            image_updated_at,
             updated_at,
             aliases,
             external_ids,
@@ -1103,6 +1109,7 @@ impl CatalogStore {
                 i64,
                 OffsetDateTime,
                 OffsetDateTime,
+                Option<OffsetDateTime>,
             ),
         >(
             "SELECT release.id, merged.public_api_id, release.title, release.sort_title,
@@ -1111,8 +1118,9 @@ impl CatalogStore {
                     workflow.state AS workflow_state,
                     decision.disposition AS policy_disposition,
                     decision.evidence_summary AS policy_evidence_summary,
-                    release.revision, release.created_at, release.updated_at
+                    release.revision, release.created_at, release.updated_at, image.updated_at
                FROM releases release
+               LEFT JOIN catalog_entity_images image ON image.release_id = release.id
                LEFT JOIN releases merged ON merged.id = release.merged_into_release_id
                LEFT JOIN catalog_imports import ON import.release_id = release.id
                LEFT JOIN release_work_items workflow ON workflow.id = import.work_item_id
@@ -1137,6 +1145,7 @@ impl CatalogStore {
             revision,
             created_at,
             updated_at,
+            image_updated_at,
         )) = release
         else {
             return Ok(None);
@@ -1351,6 +1360,7 @@ impl CatalogStore {
             duration_ms: stats.1,
             media_bytes: stats.2,
             created_at,
+            image_updated_at,
             updated_at,
             tracks,
             artists,
