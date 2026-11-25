@@ -7,6 +7,8 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-25
+
 The Processing Queue shows per-stage throughput and alerts on 15-minute stalls.
 Operators can register a bulk submission, reserve capacity for ordinary arrivals and
 measure arrival-to-playable times for both. Fresh NFS publication uses one shared-budget
@@ -23,6 +25,18 @@ the source of host-managed deployment settings.
 
 Administrators and editors can delete a Release awaiting review even when validation stopped
 before catalog import. Type the confirmation shown in Release Review. A reason is optional.
+
+Editors can correct Release, Artist and Track metadata and requeue a held Release. They can
+also identify a Release using the local catalog or a configured metadata provider. The Admin UI
+header displays the signed-in user's avatar when available. Normalization now records a
+permanent failure when PostgreSQL rejects text, preventing repeated encodes of the same input.
+
+The docs build now uses a project-pinned Node.js runtime when running prechecks.
+
+**Upgrade from 0.2.1.** Back up PostgreSQL and verify the backup before applying migrations
+0050 through 0053 with the usual updater. Existing inbound work keeps ordinary priority. To
+prioritize new arrivals during an archive import, register the bulk directory names before
+transfer. See the [processing guide](docs/src/content/docs/admin/processing.md).
 
 ## 0.2.1 — 2026-11-24
 

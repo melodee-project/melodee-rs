@@ -52,7 +52,9 @@ output, reports timings, and stops at the first failure. It requires pnpm and ca
 instead of accepting the full gate's local tool skips. Install the pinned Rust toolchain,
 Node.js/pnpm, cargo-deny, FFmpeg/ffprobe, and fpcalc first, and prepare the development/test
 PostgreSQL instance as described in [the source-build guide](docs/src/content/docs/installation/build-from-source.md).
-Dependency installs and audits require network access.
+The docs install also fetches the Node.js runtime pinned in `docs/package.json`. Astro uses
+that runtime even when your shell has an older Node.js version. To rerun just the docs
+checks, use `python3 scripts/check.py docs`. Dependency installs and audits require network access.
 
 For Admin UI changes, run `python3 scripts/do-prechecks.py --include-e2e` to also run
 Playwright end-to-end/visual tests; install its Chromium browser first. Prechecks validate

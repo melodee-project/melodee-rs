@@ -9,8 +9,8 @@ publish = false
 
 [dependencies]
 getrandom.workspace = true
-melodee-auth = { path = "../melodee-auth", version = "0.2.1" }
-melodee-domain = { path = "../melodee-domain", version = "0.2.1" }
+melodee-auth = { path = "../melodee-auth", version = "0.3.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

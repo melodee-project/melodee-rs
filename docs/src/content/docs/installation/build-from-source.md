@@ -54,6 +54,9 @@ installation. `python3 scripts/node_toolchain.py --project admin-ui` checks this
 the guided reset command use the same resolver, including the configured build environment and
 `PATH`. Direct `pnpm` commands still require a compatible global/Corepack installation.
 
+To validate the documentation site, run `python3 scripts/check.py docs` from the repository root.
+Its frozen pnpm install supplies the Node.js version pinned in `docs/package.json` for Astro.
+
 Install `melodee-script-worker` beside `melodee-server` and `melodee-cli` when copying the binaries
 out of `target/release`. The server uses that executable for bounded script execution.
 
