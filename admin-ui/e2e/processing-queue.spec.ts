@@ -72,6 +72,10 @@ async function mockAdminApi(page: Page) {
       await json({ service: 'melodee', version: 'test', status: 'ok' });
       return;
     }
+    if (pathname === '/api/admin/v1/ingest/stages') {
+      await json([]);
+      return;
+    }
     if (pathname === '/api/admin/v1/ingest/work-items/counts') {
       await json([
         { state: 'ready', count: 1 },

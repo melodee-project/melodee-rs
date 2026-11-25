@@ -7,6 +7,11 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+The Processing Queue shows per-stage throughput and alerts on 15-minute stalls.
+Operators can register a bulk submission, reserve capacity for ordinary arrivals and
+measure arrival-to-playable times for both. Fresh NFS publication uses one shared-budget
+write and one final verification read per asset. The catalog worker drains a full batch before waiting for its next idle poll.
+
 The Processing Queue identifies Releases waiting for a publisher. Inspection, normalization,
 validation and publication workers now use their own concurrency limits to decide when to
 start the next batch. The Admin UI serves the Melodee browser icon.

@@ -11,10 +11,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { getWorkItemCounts, listWorkItems, purgeWorkItems } from '../../api/admin';
+import { getProcessingStages, getWorkItemCounts, listWorkItems, purgeWorkItems } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type {
   IngestionPhase,
+  ProcessingStageHealth,
   IngestionState,
   Page,
   PurgeWorkItemsResult,
@@ -144,6 +145,8 @@ export function ProcessingQueueScreen() {
   const [listError, setListError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<WorkItemStateCount[] | null>(null);
+  const [stages, setStages] = useState<ProcessingStageHealth[]>([]);
+  const [stagesUnavailable, setStagesUnavailable] = useState(false);
   const [bulkSelected, setBulkSelected] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -226,6 +229,12 @@ export function ProcessingQueueScreen() {
   useEffect(() => {
     let cancelled = false;
     const poll = () => {
+      void getProcessingStages().then((result) => {
+        if (!cancelled) {
+          setStages(result);
+          setStagesUnavailable(false);
+        }
+      }).catch(() => { if (!cancelled) setStagesUnavailable(true); });
       getWorkItemCounts()
         .then((result) => {
           if (!cancelled) {
@@ -422,6 +431,29 @@ export function ProcessingQueueScreen() {
     <div className="melodee-queue-layout">
       <div className="melodee-queue-main">
         <PageHeader title={t('queue.title')} subtitle={t('queue.subtitle')} />
+        {stagesUnavailable && <InlineNotification kind="warning" lowContrast hideCloseButton title={t('queue.health.unavailable')} />}
+        {stages.filter((stage) => stage.stalled).map((stage) => (
+          <InlineNotification key={stage.stage} kind="warning" lowContrast hideCloseButton
+            title={t('queue.health.stall', { stage: t(`queue.stage.${stage.stage}`) })} />
+        ))}
+        {stages.length > 0 && <details className="melodee-stage-health">
+          <summary>{t('queue.health.title')}</summary>
+          <div className="melodee-stage-table">
+            <table className="cds--data-table cds--data-table--sm" aria-label={t('queue.health.title')}>
+              <thead><tr>{['stage','waiting','active','oldest','last','hour'].map((key) => <th key={key} scope="col">{t(`queue.health.${key}`)}</th>)}</tr></thead>
+              <tbody>{stages.map((row) => <tr key={row.stage}>
+                <th scope="row">{t(`queue.stage.${row.stage}`)}</th>
+                <td>{formatNumber(row.waiting)}</td><td>{formatNumber(row.inProgress)}</td>
+                <td>{row.oldestItem && row.oldestSince ? <>
+                  <Button kind="ghost" size="sm" onClick={() => updateParams({item: row.oldestItem})}>{row.oldestRelease}</Button>
+                  <time dateTime={row.oldestSince} title={formatDateTime(row.oldestSince)}>{formatRelativeTime(row.oldestSince)}</time>
+                </> : <AbsentCell label={t('common.none')} />}</td>
+                <td>{row.lastCompletion ? <time dateTime={row.lastCompletion} title={formatDateTime(row.lastCompletion)}>{formatRelativeTime(row.lastCompletion)}</time> : <AbsentCell label={t('common.none')} />}</td>
+                <td>{formatNumber(row.completedHour)}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </details>}
         {notice ? (
           <InlineNotification
             kind={notice.kind}

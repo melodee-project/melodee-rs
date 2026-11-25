@@ -1426,3 +1426,8 @@ Every endpoint above backs the Carbon-based admin single-page application served
 see [Admin Overview](../admin/overview/) for the screens built on these routes. Remaining
 catalog curation endpoints will be documented here when implemented.
 :::
+
+
+### Processing stage health
+
+`GET /api/admin/v1/ingest/stages` requires an administrator session. It returns one row per automatic stage with `waiting`, `inProgress`, the oldest waiting Release and its work item ID, the UTC timestamps `oldestSince` and `lastCompletion`, `completedHour` and a `stalled` flag. Timestamps and the oldest Release are nullable when there is no corresponding evidence.

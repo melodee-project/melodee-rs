@@ -657,29 +657,17 @@ impl PolicyStore {
         now: OffsetDateTime,
     ) -> Result<Vec<PolicyClaim>, PolicyStoreError> {
         let mut tx = pool.begin().await?;
-        let candidates: Vec<(Uuid, Uuid, String, String, String)> = sqlx::query_as(
-            r#"SELECT w.id, ci.release_id, r.title, ci.sealed_manifest_hash,
-                      ci.semantic_manifest_hash
-                 FROM release_work_items w
-                 JOIN catalog_imports ci ON ci.work_item_id = w.id
-                 JOIN releases r ON r.id = ci.release_id
-                WHERE w.state = 'cataloged'
-                  AND (w.lease_expires_at IS NULL OR w.lease_expires_at <= $1)
-                  AND (w.next_attempt_at IS NULL OR w.next_attempt_at <= $1)
-                ORDER BY w.updated_at, w.id
-                LIMIT $2
-                FOR UPDATE OF w SKIP LOCKED"#,
-        )
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .fetch_all(&mut *tx)
-        .await?;
-        if candidates.is_empty() {
+        let selected = crate::processing::claim_candidates(&mut tx, "policy", config, now).await?;
+        if selected.is_empty() {
             tx.commit().await?;
             return Ok(Vec::new());
         }
-
-        let work_item_ids: Vec<Uuid> = candidates.iter().map(|row| row.0).collect();
+        let work_item_ids: Vec<_> = selected.iter().map(|row| row.id).collect();
+        let candidates: Vec<(Uuid, Uuid, String, String, String)> = sqlx::query_as(
+            "SELECT ci.work_item_id,ci.release_id,r.title,ci.sealed_manifest_hash,ci.semantic_manifest_hash
+               FROM catalog_imports ci JOIN releases r ON r.id=ci.release_id
+              WHERE ci.work_item_id=ANY($1)")
+            .bind(&work_item_ids).fetch_all(&mut *tx).await?;
         let lease_expires_at = now + config.lease_duration;
         let rows: Vec<WorkItemRow> = sqlx::query_as(
             r#"UPDATE release_work_items

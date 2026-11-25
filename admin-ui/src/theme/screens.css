@@ -370,3 +370,8 @@
 @media (max-width: 600px) {
   .melodee-review-track-fields { grid-template-columns: 1fr; }
 }
+
+.melodee-stage-health { margin-block: var(--cds-spacing-04); }
+.melodee-stage-health summary { cursor: pointer; }
+.melodee-stage-table { overflow-x: auto; margin-block: var(--cds-spacing-03); }
+.melodee-stage-table time { display: block; white-space: nowrap; }

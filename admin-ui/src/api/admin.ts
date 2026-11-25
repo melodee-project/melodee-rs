@@ -3,6 +3,7 @@ import { apiFetch, buildQuery } from './client';
 import type {
   AccessGroup,
   Stats,
+  ProcessingStageHealth,
   AccessGroupDetail,
   AdminScript,
   ArtistMergePreview,
@@ -267,6 +268,10 @@ export function listWorkItems(params: WorkItemListParams = {}): Promise<Page<Wor
  */
 export function getDiagnosticsBundle(): Promise<DiagnosticsBundle> {
   return apiFetch<DiagnosticsBundle>(`${ADMIN}/diagnostics/bundle`);
+}
+
+export function getProcessingStages(): Promise<ProcessingStageHealth[]> {
+  return apiFetch<ProcessingStageHealth[]>(`${ADMIN}/ingest/stages`);
 }
 
 export function getWorkItemCounts(): Promise<WorkItemStateCount[]> {

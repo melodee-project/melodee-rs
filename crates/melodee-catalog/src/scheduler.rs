@@ -57,7 +57,7 @@ pub fn start_catalog_loop(
         // The poll interval is the idle cadence, not a throughput ceiling: a pass
         // that claims a full batch means more `published` work is queued, so run
         // again immediately instead of sleeping out the rest of the tick.
-        let claim_batch_size = work_config.claim_batch_size as usize;
+        let claim_batch_size = config.claim_limit() as usize;
         let interval = TokioDuration::try_from(config.poll_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(5));
         let mut ticker = time::interval(interval);

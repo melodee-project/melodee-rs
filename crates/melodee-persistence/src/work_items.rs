@@ -719,6 +719,13 @@ impl WorkItemStore {
 
         let row = match inserted {
             Some(row) => {
+                crate::processing::assign_registered_arrival(
+                    &mut tx,
+                    row.id,
+                    row.source_library_id,
+                    &row.source_path,
+                )
+                .await?;
                 let row_state = row.state.clone();
                 let state = IngestionState::parse(&row_state)
                     .ok_or_else(|| WorkStoreError::CorruptState(row_state))?;
@@ -1177,18 +1184,8 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         // Select candidates with row locks (skipped when locked by rivals).
         // Only normalizing items with expired/no leases are eligible.
-        let candidates = sqlx::query_as::<_, WorkItemRow>(
-            "SELECT * FROM release_work_items
-             WHERE state = 'normalizing'
-               AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-             ORDER BY updated_at, id
-             LIMIT $2
-             FOR UPDATE SKIP LOCKED",
-        )
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .fetch_all(&mut *tx)
-        .await?;
+        let candidates =
+            crate::processing::claim_candidates(&mut tx, "normalization", config, now).await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
@@ -1257,18 +1254,8 @@ impl WorkItemStore {
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
-        let candidates = sqlx::query_as::<_, WorkItemRow>(
-            "SELECT * FROM release_work_items
-             WHERE state = 'validating'
-               AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-             ORDER BY updated_at, id
-             LIMIT $2
-             FOR UPDATE SKIP LOCKED",
-        )
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .fetch_all(&mut *tx)
-        .await?;
+        let candidates =
+            crate::processing::claim_candidates(&mut tx, "validation", config, now).await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
@@ -1652,21 +1639,8 @@ impl WorkItemStore {
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
-        let candidates = sqlx::query_as::<_, WorkItemRow>(
-            "SELECT * FROM release_work_items
-             WHERE state IN ('staged', 'publishing')
-               AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-               AND EXISTS (
-                   SELECT 1 FROM release_publication_plans p WHERE p.work_item_id = release_work_items.id
-               )
-             ORDER BY updated_at, id
-             LIMIT $2
-             FOR UPDATE SKIP LOCKED",
-        )
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .fetch_all(&mut *tx)
-        .await?;
+        let candidates =
+            crate::processing::claim_candidates(&mut tx, "publication", config, now).await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
@@ -2230,31 +2204,13 @@ impl WorkItemStore {
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
-        let max_attempts = i32::try_from(config.retry_policy.max_attempts).unwrap_or(i32::MAX);
         let mut tx = pool.begin().await?;
         // Select candidates with row locks (skipped when locked by rivals),
         // then update each within the same transaction. Two steps so the
         // pre-update state is known for the failed->ready requeue event.
         // A continuous flow of fresh Ready work must not starve a recovered inspection.
-        let candidates = sqlx::query_as::<_, WorkItemRow>(
-            "SELECT * FROM release_work_items
-             WHERE (
-                     (state = 'ready' AND (next_attempt_at IS NULL OR next_attempt_at <= $2))
-                     OR (state = 'failed' AND next_attempt_at IS NOT NULL
-                         AND next_attempt_at <= $2 AND attempt_count < $4)
-                   )
-               AND (lease_expires_at IS NULL OR lease_expires_at <= $2)
-             ORDER BY CASE WHEN state = 'failed' AND last_error_code = 'lease.lost' THEN 0 ELSE 1 END,
-                      next_attempt_at NULLS FIRST, created_at, id
-             LIMIT $3
-             FOR UPDATE SKIP LOCKED",
-        )
-        .bind(worker.as_str())
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .bind(max_attempts)
-        .fetch_all(&mut *tx)
-        .await?;
+        let candidates =
+            crate::processing::claim_candidates(&mut tx, "inspection", config, now).await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {

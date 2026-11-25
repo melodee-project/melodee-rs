@@ -16,6 +16,53 @@ use melodee_catalog::{CatalogConfig, import_once, start_catalog_loop};
 use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkEngineConfig, WorkerId};
 
 #[tokio::test]
+async fn scheduler_drains_full_catalog_batches_before_the_next_idle_poll() {
+    let db = TestDb::create("catalog_drain").await;
+    for (ordinal, release_title) in [(1, "First"), (2, "Second"), (3, "Third")] {
+        seed_published_release(
+            &db,
+            ordinal,
+            CatalogFixturePresentation {
+                release_title,
+                release_artist: "Drain fixture",
+                track_title: "Fixture track",
+                track_artist: "Drain fixture",
+                release_date: "2026-01-01",
+            },
+        )
+        .await;
+    }
+    let handle = start_catalog_loop(
+        CatalogConfig {
+            concurrency: 1,
+            poll_interval: time::Duration::hours(1),
+            ..CatalogConfig::default()
+        },
+        db.pool.clone(),
+        CatalogStore,
+        WorkEngineConfig::default(),
+    );
+    let drained = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let imported: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM release_work_items WHERE state='cataloged'",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .expect("count real imports");
+            if imported == 3 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+    handle.stop().await;
+    db.drop().await;
+    drained.expect("one-slot catalog worker drained all three claims within its first tick");
+}
+
+#[tokio::test]
 async fn successful_import_reuses_one_artist_per_trusted_artist_id() {
     // ADR-0189: the same trusted provider Artist id is the same Artist, so the
     // second Release reuses the first Artist row instead of requiring a merge.

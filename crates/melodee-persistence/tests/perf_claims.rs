@@ -45,22 +45,19 @@ async fn claim_benchmark_10k_queue_32_workers() {
     .expect("seed queue");
 
     // Query plan for the claim selection (evidence for index justification).
-    let plan: Vec<(String,)> = sqlx::query_as(
-        "EXPLAIN (FORMAT TEXT)
-         SELECT * FROM release_work_items
-         WHERE (
-                 (state = 'ready' AND (next_attempt_at IS NULL OR next_attempt_at <= now()))
-                 OR (state = 'failed' AND next_attempt_at IS NOT NULL
-                     AND next_attempt_at <= now() AND attempt_count < 5)
-               )
-           AND (lease_expires_at IS NULL OR lease_expires_at <= now())
-         ORDER BY next_attempt_at NULLS FIRST, created_at, id
-         LIMIT 4
-         FOR UPDATE SKIP LOCKED",
-    )
-    .fetch_all(&db.pool)
-    .await
-    .expect("explain");
+    let explain = concat!(
+        "EXPLAIN (FORMAT TEXT) ",
+        include_str!("../src/processing/claim_lane.sql")
+    );
+    let plan: Vec<(String,)> = sqlx::query_as(explain)
+        .bind("inspection")
+        .bind(false)
+        .bind(T0)
+        .bind(5_i32)
+        .bind(4_i64)
+        .fetch_all(&db.pool)
+        .await
+        .expect("explain");
     let plan_text: Vec<String> = plan.into_iter().map(|row| row.0).collect();
 
     let started = Instant::now();

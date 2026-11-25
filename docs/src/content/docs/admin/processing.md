@@ -23,8 +23,8 @@ and the Release is queued. When a publisher claims it, the state becomes `publis
 **Added to queue** shows when Melodee discovered the Release. To see how long it has waited for
 publication, select the row and find the transition to `staged` in its event timeline.
 On NFS, all publishers share the configured bandwidth budget. A new asset uses that budget
-once to write its bytes and twice to read them back for verification. At a 10 MiB/s budget,
-the resulting files can account for at most about 3.3 MiB/s before overhead. When that limit
+once to write its bytes and once to read them back for final verification. At a 10 MiB/s budget,
+the resulting files can account for at most 5 MiB/s before overhead. When that limit
 is already in use, adding publisher workers cannot increase it.
 On a page left open, use **Refresh** to fetch the latest row states.
 If a Release stays in **Normalizing**, check its event timeline. Repeated claims without a
@@ -45,6 +45,32 @@ PostgreSQL state; nothing is inferred from a running process.
 The queue is otherwise read-only. The one bulk action is the failed-item **purge** described
 below; every other disposition is a per-item, audited decision made from the
 [Release Review](../library-management/release-review/) workspace or the CLI.
+
+### Stage throughput and stalled work
+
+Expand **Stage throughput** on the Processing Queue to see waiting and active counts, the oldest waiting Release, the last completed handoff and completions in the past hour. Select the oldest Release to open its history. A warning appears when a stage has eligible work at least 15 minutes old and has completed nothing for 15 minutes. The server also logs the warning and its recovery when the page is closed. A retry scheduled for later and a Release awaiting manual review are excluded. A single long-running Release can trigger the warning. Compare its progress with the worker logs.
+
+### Submit an archive alongside ordinary arrivals
+
+Before transferring the archive into your usual inbound directory, create a UTF-8 JSON manifest with its exact immediate directory names. For example:
+
+```json
+["Artist A - First Release", "Artist B - Second Release"]
+```
+
+Register the manifest against the same database and source as the ingestion worker:
+
+```sh
+melodee-cli ingest register-bulk --manifest batch.json
+```
+
+Use an absolute manifest path when running the CLI through a service wrapper. Pass `--manifest -` to read the JSON array from standard input. The command prints a submission UUID. Then copy or move those directories into the existing inbound directory as usual. Each reservation applies to the next occurrence of that name. When connecting directly to a database with multiple inbound sources, supply the corresponding library UUID with `--source-id`. Unlisted arrivals are ordinary. When both groups are waiting, three of every four claims at each worker stage go to ordinary Releases, and one goes to the archive. Either group can use all available slots when the other is empty.
+
+```sh
+melodee-cli ingest bulk-report SUBMISSION_UUID
+```
+
+The report starts at the first bulk directory Melodee discovers and ends when every registered entry has its first automatic outcome. Discovery follows inbound polling. If measuring from the start of a physical transfer, also record its start time. **Playable** means policy accepted the Release and activated it for listeners. The report includes ordinary arrivals discovered within the same window, including any that finish later. Each group shows the full denominator, the number playable within 30 minutes, mean, p95, slowest playable Release, failures, manual holds, exclusions and pending work. The report also shows the fraction of all ordinary arrivals playable within 30 minutes and how many bulk Releases were playable within 10 hours of the first discovery. A missing registered directory keeps the report open. Record the host uptime and array status alongside a production qualification run.
 
 ### Bulk purge of failed items
 

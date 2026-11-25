@@ -32,6 +32,7 @@ use axum::{
 use melodee_domain::{
     IngestionPhase, IngestionState, ReleaseWorkItem, ReleaseWorkItemEvent, WorkEventType,
 };
+use melodee_persistence::processing::{MonitorLimits, StageHealth, stage_health};
 use melodee_persistence::{ActiveLease, StateCount, WorkItemListRow, WorkItemSort, WorkItemStore};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -337,7 +338,29 @@ pub struct WorkItemPageDto {
 /// The admin-gated diagnostics router (ADR-0139). Shares `AdminAccessState`
 /// so the `AdminPrincipal` extractor can validate native access JWTs.
 pub fn router() -> Router<AdminAccessState> {
+    router_with_monitor(monitor_limits(
+        &melodee_ingestion::IngestionConfig::with_sources(Vec::new()),
+        melodee_persistence::WorkEngineConfig::default(),
+    ))
+}
+
+pub fn monitor_limits(
+    ingestion: &melodee_ingestion::IngestionConfig,
+    work: melodee_persistence::WorkEngineConfig,
+) -> MonitorLimits {
+    MonitorLimits {
+        max_attempts: work.retry_policy.max_attempts,
+        quiet_seconds: ingestion.settling_quiet_period.as_seconds_f64(),
+        marker_seconds: ingestion.ready_marker_shortcut.as_seconds_f64(),
+    }
+}
+
+pub fn router_with_monitor(limits: MonitorLimits) -> Router<AdminAccessState> {
     Router::new()
+        .route(
+            "/api/admin/v1/ingest/stages",
+            get(processing_stages).layer(axum::Extension(limits)),
+        )
         .route("/api/admin/v1/system/info", get(system_info))
         .route(
             "/api/admin/v1/ingest/work-items/counts",
@@ -350,6 +373,40 @@ pub fn router() -> Router<AdminAccessState> {
             get(list_work_item_events),
         )
         .route("/api/admin/v1/ingest/leases", get(list_active_leases))
+}
+
+async fn processing_stages(
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
+    axum::Extension(limits): axum::Extension<MonitorLimits>,
+) -> Result<Json<Vec<StageHealth>>, AdminApiError> {
+    stage_health(&state.pool, OffsetDateTime::now_utc(), limits)
+        .await
+        .map(Json)
+        .map_err(AdminApiError::from_store)
+}
+
+/// Emit an operator alert on entry to a stall and a recovery event when work
+/// resumes. Independent of clients polling the Processing Queue.
+pub async fn monitor_stages(pool: sqlx::PgPool, limits: MonitorLimits) {
+    let mut stalled = std::collections::HashSet::new();
+    let mut timer = tokio::time::interval(std::time::Duration::from_secs(60));
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        timer.tick().await;
+        match stage_health(&pool, OffsetDateTime::now_utc(), limits).await {
+            Ok(rows) => {
+                for row in rows {
+                    if row.stalled && stalled.insert(row.stage.clone()) {
+                        tracing::warn!(stage=%row.stage,waiting=row.waiting,active=row.in_progress,oldest=?row.oldest_item,"processing stage has completed no work for 15 minutes");
+                    } else if !row.stalled && stalled.remove(&row.stage) {
+                        tracing::info!(stage=%row.stage,"processing stage stall cleared");
+                    }
+                }
+            }
+            Err(error) => tracing::warn!(%error,"processing stage health unavailable"),
+        }
+    }
 }
 
 /// GET /api/admin/v1/system/info — health/version metadata, admin-gated per

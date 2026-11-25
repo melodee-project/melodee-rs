@@ -978,14 +978,16 @@
       "scripts/run_benchmarks.py",
       "crates/melodee-persistence/tests/catalog_performance.rs (repeatable 200-manifest PostgreSQL catalog workload)",
       "crates/melodee-search/src/bin/phase6_benchmark.rs",
-      "apps/melodee-server/tests/native_phase7_performance.rs"
+      "apps/melodee-server/tests/native_phase7_performance.rs",
+      "crates/melodee-persistence/src/processing/bulk_report.sql (registered bulk and concurrent ordinary arrival-to-playable evidence)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
       "crates/melodee-persistence/tests/catalog_performance.rs",
       "apps/melodee-server/tests/policy_worker.rs (200-Release policy workload)",
       "cargo run --release -p melodee-search --bin phase6_benchmark (10M streaming search workload)",
-      "cargo test --release -p melodee-server --test native_phase7_performance native_api_current_catalog_scale_evidence -- --ignored --exact --nocapture"
+      "cargo test --release -p melodee-server --test native_phase7_performance native_api_current_catalog_scale_evidence -- --ignored --exact --nocapture",
+      "crates/melodee-persistence/tests/processing_throughput.rs (weighted admission and bounded cohort window)"
     ],
     "note": "Legacy reference plus ingestion/catalog/policy, search, and native API workloads are repeatable and reported with exact environment, corpus, correctness checks, and limitations."
   },
@@ -1406,7 +1408,8 @@
       "crates/melodee-persistence/migrations/0006_canonical_publication.sql (durable decision/publication evidence)",
       "apps/melodee-cli/src/main.rs (catalog status/inspect exposes counts, retries, errors, and immutable import receipt)",
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (durable catalog audit, overlay, decision, and outbox evidence)",
-      "apps/melodee-server/src/admin_purge.rs and admin-ui/src/screens/processing/ProcessingQueueScreen.tsx (operator bulk purge for failed pre-catalog items; ADR-0197)"
+      "apps/melodee-server/src/admin_purge.rs and admin-ui/src/screens/processing/ProcessingQueueScreen.tsx (operator bulk purge for failed pre-catalog items; ADR-0197)",
+      "crates/melodee-persistence/src/processing.rs (per-stage backlog, completion and 15-minute stall monitoring)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/history.rs",
@@ -1414,9 +1417,10 @@
       "apps/melodee-server/tests/system_api.rs (bounded positive and fail-closed PostgreSQL readiness)",
       "crates/melodee-persistence/tests/publication.rs (durable publication evidence and operator-safe problem state)",
       "crates/melodee-persistence/tests/catalog_import.rs and catalog_identity.rs (durable retry/correction evidence)",
-      "apps/melodee-server/tests/admin_purge_api.rs; admin-ui/e2e/processing-queue.spec.ts (bulk failed-item purge with typed confirmation)"
+      "apps/melodee-server/tests/admin_purge_api.rs; admin-ui/e2e/processing-queue.spec.ts (bulk failed-item purge with typed confirmation)",
+      "crates/melodee-persistence/tests/processing_throughput.rs"
     ],
-    "note": "State/worker/attempt/error/history, publication, catalog-import, and identity evidence are durable and visible through Rust-native CLI/API diagnostics. The graphical UI is a future work."
+    "note": "State, worker, attempt, error, history and stage throughput evidence are available through Rust-native CLI and Admin diagnostics."
   },
   "PRD-WORK-003": {
     "status": "tested",
@@ -2790,10 +2794,12 @@
     "status": "tested",
     "implementation": [
       "admin-ui/src/screens/processing/ (table + right inspector, queue position preserved, URL state)",
-      "admin-ui/src/screens/review/ + identity/ (review workspaces)"
+      "admin-ui/src/screens/review/ + identity/ (review workspaces)",
+      "admin-ui/src/screens/processing/ProcessingQueueScreen.tsx (stage throughput and oldest waiting Release inspector)"
     ],
     "tests": [
-      "admin-ui/e2e/processing-queue.spec.ts (inspector preserves table state)"
+      "admin-ui/e2e/processing-queue.spec.ts (inspector preserves table state)",
+      "admin-ui/src/screens/processing/ProcessingQueueScreen.test.tsx (stall warning and oldest Release)"
     ]
   },
   "PRD-UI-007": {

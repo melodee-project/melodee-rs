@@ -299,6 +299,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         pool.clone(),
     ));
 
+    let monitor_limits = admin::monitor_limits(&ingestion_config, work_config);
+    let monitor_handle = tokio::spawn(admin::monitor_stages(pool.clone(), monitor_limits));
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
     let mut normalization_handle = None;
@@ -719,7 +721,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .route("/readyz", get(system::readyz).with_state(readiness))
         // Admin-gated diagnostics (ADR-0139): every /api/admin/v1 route
         // requires AdminPrincipal; /healthz and /readyz stay anonymous.
-        .merge(admin::router().with_state(admin_access_state.clone()))
+        .merge(admin::router_with_monitor(monitor_limits).with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_access::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_radio::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_device_profiles::router().with_state(admin_access_state.clone()))
@@ -802,6 +804,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     info!(%address, "Melodee Rust bootstrap server listening");
     wait_for_shutdown_signal().await;
+    monitor_handle.abort();
+    let _ = monitor_handle.await;
     if let Some(service) = &direct_play_shutdown {
         service.close_admission();
     }

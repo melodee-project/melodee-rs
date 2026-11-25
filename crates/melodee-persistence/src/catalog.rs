@@ -437,27 +437,11 @@ impl CatalogStore {
     ) -> Result<Vec<ReleaseWorkItem>, CatalogStoreError> {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
-        let candidates = sqlx::query_as::<_, (Uuid, String)>(
-            "SELECT w.id, w.state
-             FROM release_work_items w
-             WHERE w.state IN ('published', 'cataloging')
-               AND (w.lease_expires_at IS NULL OR w.lease_expires_at <= $1)
-               AND (w.next_attempt_at IS NULL OR w.next_attempt_at <= $1)
-               AND EXISTS (
-                   SELECT 1 FROM release_publication_receipts r
-                   WHERE r.work_item_id = w.id
-               )
-             ORDER BY w.updated_at, w.id
-             LIMIT $2
-             FOR UPDATE OF w SKIP LOCKED",
-        )
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .fetch_all(&mut *tx)
-        .await?;
-
+        let candidates =
+            crate::processing::claim_candidates(&mut tx, "catalog", config, now).await?;
         let mut claimed = Vec::with_capacity(candidates.len());
-        for (id, persisted_state) in candidates {
+        for candidate in candidates {
+            let (id, persisted_state) = (candidate.id, candidate.state);
             let from = IngestionState::parse(&persisted_state)
                 .ok_or_else(|| WorkStoreError::CorruptState(persisted_state.clone()))?;
             if from == IngestionState::Published {
@@ -580,25 +564,12 @@ impl CatalogStore {
     ) -> Result<Vec<PolicyEligibleWorkItem>, CatalogStoreError> {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
-        let candidates: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as(
-            "SELECT w.id, ci.release_id
-             FROM release_work_items w
-             JOIN catalog_imports ci ON ci.work_item_id = w.id
-             WHERE w.state = 'cataloged'
-               AND (w.lease_expires_at IS NULL OR w.lease_expires_at <= $1)
-               AND (w.next_attempt_at IS NULL OR w.next_attempt_at <= $1)
-             ORDER BY w.updated_at, w.id
-             LIMIT $2
-             FOR UPDATE OF w SKIP LOCKED",
-        )
-        .bind(now)
-        .bind(i64::from(config.claim_batch_size))
-        .fetch_all(&mut *tx)
-        .await?;
-
+        let candidates =
+            crate::processing::claim_candidates(&mut tx, "policy", config, now).await?;
         let mut claimed = Vec::with_capacity(candidates.len());
-        for (work_item_id, release_id) in candidates {
-            let release_id = match release_id {
+        for candidate in candidates {
+            let work_item_id = candidate.id;
+            let release_id = match candidate.release_id {
                 Some(id) => id,
                 None => {
                     warn!(%work_item_id, "cataloged work item has no release_id, skipping");

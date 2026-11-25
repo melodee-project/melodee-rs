@@ -787,6 +787,10 @@ export async function mockAdminApi(
       await json([LEASE]);
       return;
     }
+    if (pathname === '/api/admin/v1/ingest/stages') {
+      await json([]);
+      return;
+    }
     if (pathname === "/api/admin/v1/ingest/work-items/counts") {
       await json([
         { state: "ready", count: 1 },

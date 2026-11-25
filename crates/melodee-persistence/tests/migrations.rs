@@ -6,6 +6,8 @@
 
 mod catalog_common;
 mod common;
+#[path = "common/historical_catalog.rs"]
+mod historical_catalog;
 mod phase5_common;
 
 use std::borrow::Cow;
@@ -1438,7 +1440,6 @@ async fn migration_0040_repairs_a_unique_match_on_a_multi_artist_release() {
 /// decision remains pending and withheld.
 #[tokio::test]
 async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
-    use catalog_common::CatalogFixturePresentation;
     use melodee_domain::{
         Disposition, IngestionState, PolicyActor, PolicyRule, PolicyRuleSet, PolicyRuleSetId,
         PolicyRuleType,
@@ -1527,21 +1528,11 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
         .await
         .expect("persist historical v1 defaults");
 
-    let builtin = phase5_common::seed_cataloged_release(
-        &db,
-        91,
-        CatalogFixturePresentation {
-            release_title: "Ordinary Unknown Built-in Review",
-            ..CatalogFixturePresentation::default()
-        },
-    )
-    .await;
+    let source = TestDb::create("policy_fixture_source").await;
+    let builtin_title = "Ordinary Unknown Built-in Review";
+    let builtin = historical_catalog::import(&source, &db, 91, builtin_title).await;
     let worker = WorkerId::new();
-    let mut claims = store
-        .claim_cataloged(&db.pool, &worker, &common::test_config(), now)
-        .await
-        .expect("claim built-in fixture");
-    let claim = claims.pop().expect("built-in claim");
+    let claim = historical_catalog::policy_claim(&db, &builtin, builtin_title, &worker).await;
     let context = store
         .load_context(&db.pool, &claim)
         .await
@@ -1554,26 +1545,16 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
         .await
         .expect("commit historical built-in review");
 
-    let custom = phase5_common::seed_cataloged_release(
-        &db,
-        92,
-        CatalogFixturePresentation {
-            release_title: "Explicit Custom Unknown Review",
-            ..CatalogFixturePresentation::default()
-        },
-    )
-    .await;
+    let custom_title = "Explicit Custom Unknown Review";
+    let custom = historical_catalog::import(&source, &db, 92, custom_title).await;
+    source.drop().await;
     let custom_rules = phase5_common::policy_rule_set(PolicyRuleSetId::new(), now);
     store
         .ensure_rule_set(&db.pool, &custom_rules, now)
         .await
         .expect("persist custom rule set");
     let custom_worker = WorkerId::new();
-    let mut claims = store
-        .claim_cataloged(&db.pool, &custom_worker, &common::test_config(), now)
-        .await
-        .expect("claim custom fixture");
-    let claim = claims.pop().expect("custom claim");
+    let claim = historical_catalog::policy_claim(&db, &custom, custom_title, &custom_worker).await;
     let context = store
         .load_context(&db.pool, &claim)
         .await
@@ -1589,7 +1570,7 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
 
     assert_eq!(
         WorkItemStore
-            .get(&db.pool, builtin.work_item_id())
+            .get(&db.pool, builtin.work_item_id)
             .await
             .expect("built-in before upgrade")
             .state,
@@ -1648,7 +1629,7 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
                 AND reason_code = 'policy.default_unknown_v2_reconciled'
                 AND from_state = 'needs_review' AND to_state = 'indexing'",
         )
-        .bind(builtin.work_item_id())
+        .bind(builtin.work_item_id)
         .fetch_one(&db.pool)
         .await
         .expect("count reconciliation event"),
@@ -1663,7 +1644,7 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
            JOIN release_work_items item ON item.id = decision.work_item_id
           WHERE decision.release_id = $1",
     )
-    .bind(custom.release_id().into_uuid())
+    .bind(custom.release_id.into_uuid())
     .fetch_one(&db.pool)
     .await
     .expect("read untouched custom review");

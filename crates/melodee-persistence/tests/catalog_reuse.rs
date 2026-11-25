@@ -3,6 +3,8 @@
 
 mod catalog_common;
 mod common;
+#[path = "common/historical_catalog.rs"]
+mod historical_catalog;
 
 use catalog_common::{CatalogFixturePresentation, seed_published_release_with_musicbrainz_ids};
 use common::{TestDb, test_config};
@@ -167,7 +169,16 @@ async fn migration_repairs_projection_and_appends_overlay_without_rewriting_hist
     .run(&db.pool)
     .await
     .expect("pre-repair schema");
-    let (release, artist) = import(&db, 210, serde_json::json!({})).await;
+    let source = TestDb::create("reuse_fixture_source").await;
+    let fixture = historical_catalog::import(&source, &db, 210, "Release 210").await;
+    source.drop().await;
+    let release = fixture.release_id.into_uuid();
+    let artist: Uuid =
+        sqlx::query_scalar("SELECT artist_id FROM release_artists WHERE release_id=$1")
+            .bind(release)
+            .fetch_one(&db.pool)
+            .await
+            .expect("historical credit");
     let payload: serde_json::Value = sqlx::query_scalar("SELECT overlay.payload FROM catalog_semantic_overlays overlay JOIN releases release ON release.current_overlay_id=overlay.id WHERE release.id=$1")
         .bind(release).fetch_one(&db.pool).await.expect("original overlay");
     let mut references: OverlayReferences =

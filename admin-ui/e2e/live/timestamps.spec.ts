@@ -11,6 +11,28 @@ function assertTimestamp(value: unknown): void {
 test.describe('live processing timestamps', () => {
   test.skip(!HAVE_CREDENTIALS, 'live administrator credentials are required');
 
+  test('the stage throughput table renders metrics from the authenticated server', async ({ page, context, request }) => {
+    const cookie = await signIn(context, request);
+    const stages = await apiGet<{ stage: string; waiting: number; inProgress: number; completedHour: number; lastCompletion: string | null }[]>(
+      request, cookie, `${LIVE_API}/api/admin/v1/ingest/stages`,
+    );
+    expect(stages.map((stage) => stage.stage)).toEqual([
+      'intake', 'inspection', 'normalization', 'validation', 'publication', 'catalog', 'policy', 'indexing',
+    ]);
+    for (const stage of stages) {
+      expect(Number.isInteger(stage.waiting) && stage.waiting >= 0).toBe(true);
+      expect(Number.isInteger(stage.inProgress) && stage.inProgress >= 0).toBe(true);
+      expect(Number.isInteger(stage.completedHour) && stage.completedHour >= 0).toBe(true);
+      if (stage.lastCompletion) assertTimestamp(stage.lastCompletion);
+    }
+    await page.addInitScript(() => localStorage.setItem('melodee.locale', 'en-US'));
+    await page.goto(`${LIVE_URL}/processing`);
+    await page.getByText('Stage throughput', {exact: true}).click();
+    const table = page.getByRole('table', {name: 'Stage throughput'});
+    await expect(table.getByRole('row')).toHaveCount(9);
+    await expect(table.getByRole('rowheader', {name: 'Publication'})).toBeVisible();
+  });
+
   test('real work-item and event timestamps are parseable and render in the queue', async ({ page, context, request }) => {
     const cookie = await signIn(context, request);
     const result = await apiGet<{ items: { id: string; createdAt: unknown; updatedAt: unknown }[] }>(
@@ -34,6 +56,7 @@ test.describe('live processing timestamps', () => {
       new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp)),
     item.createdAt as string);
     expect(rendered).not.toContain('Invalid Date');
-    await expect(page.getByTitle(rendered, { exact: true }).first()).toBeVisible();
+    const queue = page.getByRole('table', {name: 'Processing queue work items'});
+    await expect(queue.getByTitle(rendered, { exact: true }).first()).toBeVisible();
   });
 });

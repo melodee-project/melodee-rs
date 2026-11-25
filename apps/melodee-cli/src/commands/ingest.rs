@@ -14,6 +14,16 @@ use super::common::pool;
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum IngestCommands {
+    /// Register a JSON array of inbound directory names before transfer. Use --manifest - for stdin.
+    RegisterBulk {
+        #[arg(long)]
+        manifest: std::path::PathBuf,
+        /// Configured inbound library UUID when several sources are configured.
+        #[arg(long)]
+        source_id: Option<Uuid>,
+    },
+    /// Report arrival-to-playable times for the bulk submission and concurrent ordinary arrivals.
+    BulkReport { id: Uuid },
     /// Run one reconciliation pass for configured inbound sources.
     Reconcile,
     /// Claim and inspect one bounded batch of Ready Releases.
@@ -50,6 +60,50 @@ pub(crate) async fn run(command: IngestCommands) {
     let store = WorkItemStore;
 
     match command {
+        IngestCommands::RegisterBulk {
+            manifest,
+            source_id,
+        } => {
+            let source = match config.sources.as_slice() {
+                [] => source_id,
+                [single] if source_id.is_none() => single.id,
+                sources if source_id.is_some() && sources.iter().any(|s| s.id == source_id) => {
+                    source_id
+                }
+                _ => {
+                    eprintln!("error: specify the inbound source using --source-id");
+                    std::process::exit(2);
+                }
+            };
+            let result = async {
+                let names: Vec<String> = if manifest == std::path::Path::new("-") {
+                    serde_json::from_reader(std::io::stdin().lock())?
+                } else {
+                    serde_json::from_reader(std::fs::File::open(manifest)?)?
+                };
+                let id =
+                    melodee_persistence::processing::register_bulk(&pool, source, &names).await?;
+                println!(
+                    "Registered {} inbound Release directories. Submission {id}",
+                    names.len()
+                );
+                Ok::<(), Box<dyn std::error::Error>>(())
+            }
+            .await;
+            if let Err(error) = result {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            }
+        }
+        IngestCommands::BulkReport { id } => {
+            match melodee_persistence::processing::bulk_report(&pool, id).await {
+                Ok(report) => println!("{report:#}"),
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
         IngestCommands::Reconcile => {
             if config.sources.is_empty() {
                 println!("no inbound sources configured");

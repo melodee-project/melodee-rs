@@ -7,13 +7,14 @@ import { ProcessingQueueScreen } from './ProcessingQueueScreen';
 
 vi.mock('../../api/admin', () => ({
   listWorkItems: vi.fn(),
+  getProcessingStages: vi.fn().mockResolvedValue([]),
   getWorkItemCounts: vi.fn(),
   getWorkItem: vi.fn(),
   getWorkItemEvents: vi.fn(),
   purgeWorkItems: vi.fn(),
 }));
 
-const { listWorkItems, getWorkItemCounts, getWorkItem, getWorkItemEvents, purgeWorkItems } =
+const { getProcessingStages, listWorkItems, getWorkItemCounts, getWorkItem, getWorkItemEvents, purgeWorkItems } =
   await import('../../api/admin');
 const mockListWorkItems = vi.mocked(listWorkItems);
 const mockGetWorkItemCounts = vi.mocked(getWorkItemCounts);
@@ -101,6 +102,19 @@ describe('ProcessingQueueScreen', () => {
       makeWorkItem({ leaseOwner: 'worker-1', lastErrorMessage: 'checksum mismatch' }),
     );
     mockGetWorkItemEvents.mockResolvedValue([makeEvent()]);
+  });
+
+  it('shows a stalled stage and opens its oldest waiting Release', async () => {
+    vi.mocked(getProcessingStages).mockResolvedValueOnce([{
+      stage: 'publication', waiting: 2, inProgress: 1, oldestRelease: 'Oldest Release',
+      oldestItem: ID_ONE, oldestSince: '2026-08-14T10:00:00Z',
+      lastCompletion: null, completedHour: 0, stalled: true,
+    }]);
+    renderScreen();
+    expect(await screen.findByText('Publication has completed no work for 15 minutes.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Stage throughput'));
+    fireEvent.click(screen.getByRole('button', {name: 'Oldest Release'}));
+    expect(screen.getByTestId('search-params')).toHaveTextContent(ID_ONE);
   });
 
   it('renders rows and phase pills aggregated from the per-state counts', async () => {

@@ -740,6 +740,11 @@ fn copy_verified_asset(
         }
     }
     fsync_directory(parent)?;
+    if nfs.is_some() {
+        // The exclusive hard link names the inode we hashed while writing and
+        // synced. The final receipt still requires a full canonical readback.
+        return Ok(());
+    }
     verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io)
 }
 
@@ -1495,7 +1500,7 @@ mod tests {
     }
 
     #[test]
-    fn nfs_budgets_asset_writes_and_both_verifications_and_rechecks_on_adoption() {
+    fn fresh_nfs_charges_one_write_one_read_and_adoption_rehashes() {
         let f = FaultFixture::new("nfs-budget");
         let budget = NfsIoBudget::default();
         let publish = || {
@@ -1512,9 +1517,9 @@ mod tests {
         };
         assert_eq!(publish().unwrap().outcome, PublicationOutcome::Published);
         let size = ASSET_BYTES.len() as u64;
-        assert_eq!(budget.charged_bytes.load(Ordering::Relaxed), 3 * size);
+        assert_eq!(budget.charged_bytes.load(Ordering::Relaxed), 2 * size);
         assert_eq!(publish().unwrap().outcome, PublicationOutcome::Adopted);
-        assert_eq!(budget.charged_bytes.load(Ordering::Relaxed), 4 * size);
+        assert_eq!(budget.charged_bytes.load(Ordering::Relaxed), 3 * size);
     }
 
     #[test]

@@ -190,6 +190,7 @@ async fn anonymous_requests_get_401_with_envelope_on_every_route() {
     for path in [
         "/api/admin/v1/system/info".to_string(),
         "/api/admin/v1/ingest/work-items/counts".to_string(),
+        "/api/admin/v1/ingest/stages".to_string(),
         "/api/admin/v1/ingest/work-items".to_string(),
         format!("/api/admin/v1/ingest/work-items/{missing}"),
         format!("/api/admin/v1/ingest/work-items/{missing}/events"),
@@ -211,6 +212,7 @@ async fn non_admin_requests_get_403_with_envelope_on_every_route() {
     for path in [
         "/api/admin/v1/system/info".to_string(),
         "/api/admin/v1/ingest/work-items/counts".to_string(),
+        "/api/admin/v1/ingest/stages".to_string(),
         "/api/admin/v1/ingest/work-items".to_string(),
         format!("/api/admin/v1/ingest/work-items/{missing}"),
         format!("/api/admin/v1/ingest/work-items/{missing}/events"),

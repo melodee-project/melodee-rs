@@ -191,8 +191,21 @@ async fn list_page_enriched_filters_by_substring_and_survives_wildcards() {
 #[tokio::test]
 async fn enriched_listing_stays_a_single_join_plan() {
     let db = TestDb::create("queue_list_plan").await;
+    // Exercise pagination on a real backlog. PostgreSQL rightly prefers a
+    // sequential scan when an empty table fits on a single page.
+    sqlx::raw_sql(
+        "INSERT INTO release_work_items
+            (id, api_key, source_path, current_path, state, correlation_id, discovered_at, updated_at, created_at)
+         SELECT uuidv7(), uuidv7(), 'queue/' || g, 'queue/' || g, 'ready', uuidv7(),
+                now(), now(), now() - g * interval '1 second'
+         FROM generate_series(1, 10000) g;
+         ANALYZE release_work_items;",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("prepare representative queue statistics");
     let plan: Vec<(String,)> = sqlx::query_as(
-        "EXPLAIN SELECT w.*, ci.release_id, r.title, r.display_artist, rca.media_bytes
+        "EXPLAIN (ANALYZE, TIMING OFF) SELECT w.*, ci.release_id, r.title, r.display_artist, rca.media_bytes
            FROM release_work_items w
            LEFT JOIN catalog_imports ci ON ci.work_item_id = w.id
            LEFT JOIN releases r ON r.id = ci.release_id
@@ -228,8 +241,7 @@ async fn enriched_listing_stays_a_single_join_plan() {
         "the binding join must use its unique index:\n{text}"
     );
     assert!(
-        text.contains("release_work_items_admin_browse_created_idx")
-            || text.contains("release_work_items"),
+        text.contains("release_work_items_admin_browse_created_idx"),
         "paging must ride the work-item created_at index:\n{text}"
     );
     assert!(

@@ -1740,3 +1740,16 @@ export interface ReviewCorrection {
   tracks: { index: number; title: string; disc: number | null; number: number | null }[];
   selection: { provider: string; externalId: string; cacheKey: string | null } | null;
 }
+
+/** Automatically evaluated Release processing stages. */
+export interface ProcessingStageHealth {
+  stage: 'intake' | 'inspection' | 'normalization' | 'validation' | 'publication' | 'catalog' | 'policy' | 'indexing';
+  waiting: number;
+  inProgress: number;
+  oldestRelease: string | null;
+  oldestItem: string | null;
+  oldestSince: string | null;
+  lastCompletion: string | null;
+  completedHour: number;
+  stalled: boolean;
+}

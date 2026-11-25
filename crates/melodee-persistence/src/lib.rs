@@ -27,6 +27,7 @@ mod migrate;
 mod native_user_state;
 mod notifications;
 mod policy;
+pub mod processing;
 mod provider_enrichment;
 mod providers;
 mod radio;
