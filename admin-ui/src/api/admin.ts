@@ -17,6 +17,8 @@ import type {
   CatalogDeleteMode,
   ReleaseDeletePreview,
   ReleaseDeleteResult,
+  ConfigChange,
+  ConfigEntry,
   ConfigExport,
   ConfigImportResult,
   Dashboard,
@@ -798,6 +800,14 @@ export function unbindGroupLibrary(id: string, libraryId: string): Promise<void>
 }
 
 // ---- Configuration export/import ----
+
+export function listConfigEntries(): Promise<ConfigEntry[]> {
+  return apiFetch<ConfigEntry[]>(`${ADMIN}/config/entries`);
+}
+
+export function updateConfigEntry(key: string, change: ConfigChange): Promise<void> {
+  return apiFetch<void>(`${ADMIN}/config/entries/${encodeURIComponent(key)}`, { method: 'PUT', body: change });
+}
 
 export function exportConfig(): Promise<ConfigExport> {
   return apiFetch<ConfigExport>(`${ADMIN}/config/export`);

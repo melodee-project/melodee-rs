@@ -20,9 +20,11 @@ selection state live in the URL, so a filtered view can be shared as a link.
 Each row shows the Release the work item belongs to (its title and billed Artist once the import
 is bound, and the work item's own path before that), its durable state, its **stage progress** in
 the Release lifecycle, when it was added, and the media size once known. Stage progress is a
-position in the documented lifecycle — `Discovered → Processing → Review → Cataloged` — not an
-elapsed-time estimate, and `Attempts` stands in the place a priority column would occupy because
-Melodee has no priority concept. The **Search Releases** box filters the queue server-side by
+position in the lifecycle. **Waiting for publisher** (`staged`, 70%) means validation finished
+and the Release is queued. When a publisher claims it, the state becomes `publishing` (80%).
+**Added to queue** shows when Melodee discovered the Release. To see how long it has waited for
+publication, select the row and find the transition to `staged` in its event timeline.
+The **Search Releases** box filters the queue server-side by
 Release title, billed Artist, or work-item path.
 
 Selecting a row opens the **inspector**, which shows the work item's full durable state —
@@ -69,7 +71,7 @@ reason about; the state button in each row stays the precise value.
 |---|---|---|
 | Inbound | discovered, settling, ready | Arrived, being snapshotted, or waiting for a worker |
 | Processing | inspecting, normalizing, validating | Being read, converted, and checked |
-| Publishing | staged, publishing, published | Canonical publication in progress or verified |
+| Publishing | staged, publishing, published | Waiting for a publisher, publishing, or publication verified |
 | Catalog | cataloging, cataloged | Catalog import in progress or complete |
 | **Active** | indexing, indexed | **Live to clients: visible and playable.** The search projection may still be finishing |
 | Review | needs_review, quarantined | Parked on an operator decision |

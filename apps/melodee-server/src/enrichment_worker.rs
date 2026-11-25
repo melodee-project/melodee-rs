@@ -1,6 +1,7 @@
 //! Durable, fail-degraded external-provider enrichment worker (ADR-0162).
 
-use std::{env, fmt, time::Duration};
+use melodee_persistence::runtime_settings::var as config_var;
+use std::{fmt, time::Duration};
 
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use melodee_persistence::{
@@ -576,7 +577,7 @@ pub fn start_enrichment_loop(
 }
 
 fn env_bool(key: &'static str, default: bool) -> Result<bool, EnrichmentWorkerConfigError> {
-    match env::var(key) {
+    match config_var(key) {
         Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "yes" | "on" => Ok(true),
             "false" | "0" | "no" | "off" => Ok(false),
@@ -592,13 +593,13 @@ fn env_i64(
     min: i64,
     max: i64,
 ) -> Result<i64, EnrichmentWorkerConfigError> {
-    let value = env::var(key)
+    let value = config_var(key)
         .ok()
         .map(|value| value.parse::<i64>())
         .transpose()
         .map_err(|_| EnrichmentWorkerConfigError {
             key,
-            value: env::var(key).unwrap_or_default(),
+            value: config_var(key).unwrap_or_default(),
         })?
         .unwrap_or(default);
     if (min..=max).contains(&value) {
@@ -617,13 +618,13 @@ fn env_u64(
     min: u64,
     max: u64,
 ) -> Result<u64, EnrichmentWorkerConfigError> {
-    let value = env::var(key)
+    let value = config_var(key)
         .ok()
         .map(|value| value.parse::<u64>())
         .transpose()
         .map_err(|_| EnrichmentWorkerConfigError {
             key,
-            value: env::var(key).unwrap_or_default(),
+            value: config_var(key).unwrap_or_default(),
         })?
         .unwrap_or(default);
     if (min..=max).contains(&value) {

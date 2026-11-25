@@ -45,6 +45,7 @@ const SCREENS: ReadonlyArray<{ path: string; ready: RegExp }> = [
   { path: '/system/search', ready: /Search/ },
   { path: '/system/users', ready: /Users/ },
   { path: '/system/settings', ready: /Settings/ },
+  { path: '/system/stats', ready: /Release processing/ },
   { path: '/system/diagnostics', ready: /Diagnostics/ },
 ];
 
@@ -92,6 +93,22 @@ test.describe('live admin UI', () => {
       page.removeAllListeners('response');
     }
     expect(failures, `screens with failures:\n${failures.join('\n')}`).toEqual([]);
+  });
+
+  test('shows the server’s worker settings and masks its database connection', async ({ page, context, request }) => {
+    await signIn(context, request);
+    await page.goto(`${BASE_URL}/system/settings`);
+    const key = 'MELODEE__INSPECTION__CONCURRENCY';
+    await page.getByRole('button', { name: `Edit ${key}` }).click();
+    const dialog = page.getByRole('dialog', { name: `Edit ${key}` });
+    await expect(dialog.getByLabel('Value')).toHaveValue(/^[1-9][0-9]*$/);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.getByRole('searchbox', { name: 'Filter settings by key' }).fill('MELODEE__DATABASE__URL');
+    const row = page.getByRole('row').filter({ hasText: 'MELODEE__DATABASE__URL' });
+    await expect(row.getByText('Redacted')).toBeVisible();
+    await expect(row.getByText('Managed on host')).toBeVisible();
+    await expect(row.getByRole('button')).toHaveCount(0);
   });
 
   test('Release edit offers no field the API rejects', async ({ page, context, request }) => {

@@ -1,8 +1,9 @@
 //! Independently bounded policy evaluation over authoritative
 //! PostgreSQL catalog facts. This module never opens source or canonical media.
 
+use melodee_persistence::runtime_settings::var as config_var;
 use std::{
-    env, fmt,
+    fmt,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -43,12 +44,12 @@ pub struct PolicyWorkerConfig {
 impl PolicyWorkerConfig {
     /// Loads and validates only the documented policy-worker environment keys.
     pub fn from_env() -> Result<Self, PolicyWorkerConfigError> {
-        let enabled = env::var(ENV_POLICY_WORKER_ENABLED)
+        let enabled = config_var(ENV_POLICY_WORKER_ENABLED)
             .ok()
             .map(|raw| parse_bool(ENV_POLICY_WORKER_ENABLED, &raw))
             .transpose()?
             .unwrap_or(true);
-        let poll_seconds = env::var(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS)
+        let poll_seconds = config_var(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS)
             .ok()
             .map(|raw| parse_positive_u64(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS, &raw))
             .transpose()?

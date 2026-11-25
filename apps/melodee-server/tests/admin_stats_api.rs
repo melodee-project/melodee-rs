@@ -180,6 +180,13 @@ async fn stats_report_library_listening_and_database_panels() {
     let fixture = seed_users(&db).await;
     seed_release(&db, 41, "Stats Release One").await;
     seed_release(&db, 42, "Stats Release Two").await;
+    sqlx::query("UPDATE release_publication_receipts SET published_at = now() - interval '2 hours'
+                    WHERE work_item_id=(SELECT min(work_item_id::text)::uuid FROM release_publication_receipts)")
+        .execute(&db.pool).await.expect("recent publication");
+    sqlx::query("INSERT INTO release_work_items(id,api_key,source_path,current_path,state,state_reason,correlation_id,discovered_at,updated_at,created_at)
+        SELECT uuidv7(),uuidv7(),state,state,state,'stats fixture',uuidv7(),now(),now(),now()
+        FROM unnest(ARRAY['staged','needs_review']) AS state")
+        .execute(&db.pool).await.expect("seed two queue states");
     let app = build_app(db.pool.clone());
     let admin = token_for(fixture.admin_public, "stats-admin");
 
@@ -208,6 +215,14 @@ async fn stats_report_library_listening_and_database_panels() {
         decades.iter().any(|entry| entry["decade"] == 1990),
         "1997 must land in the 1990s bucket: {decades:?}"
     );
+
+    let processing = &body["processing"];
+    assert_eq!(processing["importedLastHour"], 2);
+    assert_eq!(processing["importedLastDay"], 2);
+    assert_eq!(processing["waitingForPublication"], 1);
+    assert_eq!(processing["awaitingReview"], 1);
+    assert_eq!(processing["publishedLastHour"], 0);
+    assert_eq!(processing["publishedLastDay"], 1);
 
     // Listening panel: a zero-filled day spine over the trailing window.
     let listening = &body["listening"];

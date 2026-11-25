@@ -996,6 +996,14 @@ export async function mockAdminApi(
       });
       return;
     }
+    if (pathname === '/api/admin/v1/config/entries') {
+      await json(Object.entries(EXPORT_DOC.settings).map(([key, value]) => ({
+        key, envName: `MELODEE__${key.toUpperCase().replaceAll('.', '__')}`, value, savedValue: value, pendingRestart: false, options: [],
+        source: 'database', savedSource: 'database', usage: 'registry', canReset: false,
+        kind: 'text', secret: value === '__MELODEE_SECRET_REDACTED__', editable: value !== '__MELODEE_SECRET_REDACTED__',
+      })));
+      return;
+    }
     if (pathname === "/api/admin/v1/config/export") {
       await json(EXPORT_DOC);
       return;
@@ -1113,6 +1121,7 @@ export interface CanonicalScreen {
  */
 export const STATS = {
   generatedAt: "2026-08-14T12:00:00Z",
+  processing: { waitingForPublication: 84, awaitingReview: 7, publishedLastHour: 43, publishedLastDay: 258, importedLastHour: 40, importedLastDay: 256 },
   library: {
     artists: 417,
     releases: 128,

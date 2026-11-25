@@ -502,20 +502,22 @@ pub fn start_inspection_loop(
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
         // Drain a full batch instead of sleeping out the tick: the interval is the
         // idle cadence, not a throughput ceiling.
-        let claim_batch_size = work_config.claim_batch_size as u64;
+        let claim_batch_size = u64::from(ingestion.inspection_concurrency);
         let mut ticker = time::interval(interval);
         let mut results = Vec::new();
-        loop {
+        let stop_requested = notifier.notified();
+        tokio::pin!(stop_requested);
+        'scheduler: loop {
             tokio::select! {
                 _ = ticker.tick() => {}
-                _ = notifier.notified() => break,
+                _ = &mut stop_requested => break,
             }
             loop {
-                let stopped = tokio::select! {
+                tokio::select! {
                     result = inspect_ready_once(&ingestion, &store, &pool, &work_config, OffsetDateTime::now_utc(), gate.as_deref()) => {
                         match result {
                             Ok(stats) => {
-                                let full_batch = stats.claimed >= claim_batch_size;
+                                let full_batch = stats.errors == 0 && stats.claimed >= claim_batch_size;
                                 results.push(crate::ReconcileResult {
                                     source: "inspection".to_owned(),
                                     stats: crate::ReconcileStats {
@@ -527,7 +529,6 @@ pub fn start_inspection_loop(
                                 if !full_batch {
                                     break;
                                 }
-                                false
                             }
                             Err(error) => {
                                 error!(%error, "inspection loop failed");
@@ -535,11 +536,8 @@ pub fn start_inspection_loop(
                             }
                         }
                     }
-                    _ = notifier.notified() => true,
+                    _ = &mut stop_requested => break 'scheduler,
                 };
-                if stopped {
-                    break;
-                }
                 tokio::task::yield_now().await;
             }
         }

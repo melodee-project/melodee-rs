@@ -32,6 +32,14 @@ async function mockAdminApi(page: Page): Promise<Captured> {
       await json({ service: 'melodee', version: 'test', status: 'ok' });
       return;
     }
+    if (pathname === '/api/admin/v1/config/entries') {
+      await json(Object.entries(EXPORT_DOC.settings).map(([key, value]) => ({
+        key, envName: `MELODEE__${key.toUpperCase().replaceAll('.', '__')}`, value, savedValue: value, pendingRestart: false, options: [],
+        source: 'database', savedSource: 'database', usage: 'registry', canReset: false,
+        kind: 'text', secret: value === '__MELODEE_SECRET_REDACTED__', editable: value !== '__MELODEE_SECRET_REDACTED__',
+      })));
+      return;
+    }
     if (pathname === '/api/admin/v1/config/export') {
       await json(EXPORT_DOC);
       return;
@@ -95,7 +103,7 @@ test('configuration browser groups settings and redacts secrets', async ({ page 
   // The secret renders as a redacted tag, never as an editable value.
   await expect(page.getByText('smtp.password')).toBeVisible();
   await expect(page.getByText('Redacted').first()).toBeVisible();
-  await expect(page.getByText('Settings are read-only here')).toBeVisible();
+  await expect(page.getByText('Managed on host')).toBeVisible();
 });
 
 test('import flow previews the diff then applies explicitly', async ({ page }) => {

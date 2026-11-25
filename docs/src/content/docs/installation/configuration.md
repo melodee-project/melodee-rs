@@ -5,12 +5,11 @@ sidebar:
   order: 2
 ---
 
-Melodee reads settings from layered sources. Environment variables and the optional config file
-always win over database-backed settings.
+Melodee reads its deployment configuration on startup. Administrators can override ordinary settings in **System → Settings → Configuration**.
 
 ## Configuration sources
 
-Effective values resolve through four layers, highest precedence first:
+An explicit per-setting Admin UI override takes precedence for editable keys. Without one, registry values resolve through these layers, highest precedence first:
 
 1. environment variables (`MELODEE__*` — the documented keys below, plus any registry key as
    `MELODEE__` + the key with `.` replaced by `__`, uppercased);
@@ -22,10 +21,12 @@ Effective values resolve through four layers, highest precedence first:
    API);
 4. built-in defaults (the legacy registry's seeded values).
 
-Only documented keys are supported. The database layer covers the 209-key legacy settings
-registry plus the Rust provider runtime settings (including provider endpoints, timeouts, cache
-freshness, and enrichment controls); the fixed keys in the tables below (worker, ingestion,
-search, auth, and email transport plumbing) remain environment-driven.
+Worker and other startup controls read their saved tuning overrides, then the environment, then
+their defaults. A change takes effect when the server restarts. The Settings page shows the
+source and any value pending restart. PostgreSQL, credentials used to sign sessions, storage
+roots, media executable paths, and other deployment controls remain host-managed. To recover
+from an incorrect worker override while the service is stopped, an operator can delete that
+key from `server_startup_overrides` in the installation database and restart the service.
 
 ## Database-backed settings
 
@@ -363,7 +364,7 @@ completion flow and its token-handling protections.
 Notification templates (subject, plain-text and HTML bodies with `{{placeholder}}` substitution)
 are stored in the database and managed through the
 [admin API](../api/admin-api/) or `melodee-cli notifications templates list`. The email keys above are
-also part of the database-backed settings layer (registry keys `email.*`): environment and
+also part of the database-backed settings layer (registry keys `email.*`): absent an explicit Admin UI override, environment and
 config-file values still win over database rows.
 
 ### Last.fm scrobbling

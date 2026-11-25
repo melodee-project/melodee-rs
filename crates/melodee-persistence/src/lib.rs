@@ -32,6 +32,7 @@ mod providers;
 mod radio;
 mod review_delete;
 pub use review_delete::ReviewDeletionAuthorization;
+pub mod runtime_settings;
 mod scripts;
 mod search;
 mod settings;
@@ -175,7 +176,7 @@ pub use search::{
 };
 pub use settings::{
     CONFIG_EXPORT_FORMAT, CONFIG_EXPORT_WARNING, ConfigExportDocument, ConfigImportPlan,
-    ENV_CONFIG_FILE, KNOWN_SETTINGS, KnownSetting, MAX_IMPORT_AUDIT_ENTRIES,
+    ENV_CONFIG_FILE, EffectiveSettingEntry, KNOWN_SETTINGS, KnownSetting, MAX_IMPORT_AUDIT_ENTRIES,
     MAX_IMPORT_DOCUMENT_BYTES, MAX_IMPORT_KEYS, MAX_SETTING_KEY_CHARS, MAX_SETTING_VALUE_BYTES,
     MAX_SETTINGS_LIST, OnboardingState, OnboardingStore, ResolvedSetting, SECRET_REDACTION_MARKER,
     ServerSetting, SettingKind, SettingSource, SettingValueView, SettingsError, SettingsResolver,

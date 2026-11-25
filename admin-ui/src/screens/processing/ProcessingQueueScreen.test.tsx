@@ -116,6 +116,23 @@ describe('ProcessingQueueScreen', () => {
     expect(within(group).getByRole('button', { name: /Failed/ })).toHaveTextContent('3');
   });
 
+  it('distinguishes a staged Release waiting for a publisher from active publication', async () => {
+    mockListWorkItems.mockResolvedValue({
+      items: [
+        makeWorkItem({ state: 'staged', phase: 'publishing', releaseTitle: 'Waiting Release' }),
+        makeWorkItem({ id: '22222222-2222-4222-8222-222222222222', state: 'publishing', phase: 'publishing', releaseTitle: 'Claimed Release' }),
+      ],
+      total: 2, limit: 50, offset: 0,
+    });
+    renderScreen();
+    const waiting = await screen.findByRole('row', { name: /Waiting Release/ });
+    expect(within(waiting).getByText('Waiting for publisher')).toBeVisible();
+    expect(within(waiting).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '70');
+    const publishing = screen.getByRole('row', { name: /Claimed Release/ });
+    expect(within(publishing).getByText('Publishing')).toBeVisible();
+    expect(within(publishing).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '80');
+  });
+
   it('applies the phase pill filter to the API call and the URL', async () => {
     renderScreen();
     const group = await screen.findByRole('group', { name: 'Filter by phase' });

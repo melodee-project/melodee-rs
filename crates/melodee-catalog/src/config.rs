@@ -1,6 +1,6 @@
 //! Bounded catalog-import configuration.
 
-use std::env;
+use melodee_persistence::runtime_settings::var as config_var;
 
 use thiserror::Error;
 use time::Duration;
@@ -36,7 +36,7 @@ impl CatalogConfig {
 
     /// Read catalog settings from their documented environment variables.
     pub fn from_env() -> Result<Self, CatalogConfigError> {
-        let enabled = env::var(ENV_CATALOG_ENABLED)
+        let enabled = config_var(ENV_CATALOG_ENABLED)
             .ok()
             .map(|value| parse_bool(ENV_CATALOG_ENABLED, &value))
             .transpose()?
@@ -90,7 +90,7 @@ fn parse_bool(key: &'static str, value: &str) -> Result<bool, CatalogConfigError
 }
 
 fn parse_positive_u32_env(key: &'static str, default: u32) -> Result<u32, CatalogConfigError> {
-    env::var(key)
+    config_var(key)
         .ok()
         .map(|value| parse_positive_u32(key, &value))
         .transpose()
@@ -109,7 +109,7 @@ fn parse_positive_u32(key: &'static str, value: &str) -> Result<u32, CatalogConf
 }
 
 fn parse_positive_i64_env(key: &'static str, default: i64) -> Result<i64, CatalogConfigError> {
-    env::var(key)
+    config_var(key)
         .ok()
         .map(|value| parse_positive_i64(key, &value))
         .transpose()

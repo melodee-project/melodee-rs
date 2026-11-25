@@ -23,6 +23,7 @@ pub mod shares;
 pub mod system;
 pub mod users;
 
+use melodee_persistence::runtime_settings::var as config_var;
 use std::sync::Arc;
 
 use axum::{
@@ -85,7 +86,7 @@ const ENV_DOWNLOADS_ENABLED: &str = "MELODEE__OPENSUBSONIC__DOWNLOADS_ENABLED";
 const ENV_JUKEBOX_ENABLED: &str = "MELODEE__OPENSUBSONIC__JUKEBOX_ENABLED";
 
 fn env_flag(name: &str, default: bool) -> Result<bool, &'static str> {
-    match std::env::var(name) {
+    match config_var(name) {
         Ok(value) => match value.to_ascii_lowercase().as_str() {
             "true" | "1" | "yes" => Ok(true),
             "false" | "0" | "no" => Ok(false),
@@ -123,7 +124,7 @@ impl OsState {
             })
             .collect();
         if ingestion.storage_root.is_some() {
-            let storage_id = match std::env::var(ENV_STORAGE_LIBRARY_ID) {
+            let storage_id = match config_var(ENV_STORAGE_LIBRARY_ID) {
                 Ok(value) => Uuid::parse_str(&value)
                     .map_err(|_| "MELODEE__OPENSUBSONIC__STORAGE_LIBRARY_ID must be a UUID")?,
                 // Documented default for the canonical storage music folder;
@@ -141,7 +142,7 @@ impl OsState {
             pool,
             server_version: env!("CARGO_PKG_VERSION").to_string(),
             public_origin,
-            base_url_host: std::env::var(ENV_BASE_URL_HOST)
+            base_url_host: config_var(ENV_BASE_URL_HOST)
                 .ok()
                 .filter(|value| !value.is_empty()),
             legacy_auth_bypass: env_flag(ENV_LEGACY_AUTH_BYPASS, false)

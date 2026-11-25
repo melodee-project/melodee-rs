@@ -4,6 +4,7 @@
 //! indiscriminate absorption of every process environment variable is
 //! deliberately NOT reproduced.
 
+use crate::runtime_settings::var as config_var;
 use melodee_domain::RetryPolicy;
 use thiserror::Error;
 use time::Duration;
@@ -175,7 +176,7 @@ where
     T: std::str::FromStr,
     T::Err: std::error::Error + Send + Sync + 'static,
 {
-    std::env::var(key)
+    config_var(key)
         .ok()
         .map(|value| {
             value

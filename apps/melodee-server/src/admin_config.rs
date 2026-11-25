@@ -11,7 +11,7 @@
 //!   keys, with every secret value replaced by the fixed redaction marker
 //!   and a header warning. Environment/config-file overlays are deployment
 //!   concerns and are deliberately not captured (import writes DB rows;
-//!   env/file keep winning at runtime — see `melodee-persistence`
+//!   individual override preferences retain their precedence — see `melodee-persistence`
 //!   `settings` module docs).
 //! - `POST /api/admin/v1/config/import?preview=…&allowUnknown=…` validates a
 //!   document against the 209-key registry classification (kinds, numeric
@@ -22,12 +22,14 @@
 //!   unless `allowUnknown=true`. Applied imports commit their rows and their
 //!   bounded audit entry (in the onboarding evidence) atomically.
 
+mod entries;
+
 use axum::{
     Json, Router,
     extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use melodee_persistence::{
     MAX_IMPORT_DOCUMENT_BYTES, SettingsError, SettingsStore, apply_config_import, export_config,
@@ -71,8 +73,12 @@ fn settings_error(error: SettingsError) -> Response {
         SettingsError::ConfigFile(_) => (StatusCode::BAD_REQUEST, "invalid_document"),
         SettingsError::InvalidOnboarding(_) => (StatusCode::BAD_REQUEST, "invalid_request"),
         SettingsError::Database(_) => {
-            tracing::error!(%error, "admin config store failure");
-            (StatusCode::INTERNAL_SERVER_ERROR, "store_error")
+            tracing::error!("admin config store failure");
+            return admin_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "store_error",
+                "configuration store unavailable".into(),
+            );
         }
     };
     // Validation messages name keys and expected shapes only — never
@@ -107,6 +113,8 @@ pub struct ConfigImportResponse {
 
 pub fn router() -> Router<AdminAccessState> {
     Router::new()
+        .route("/api/admin/v1/config/entries",get(entries::list))
+        .route("/api/admin/v1/config/entries/{key}",put(entries::update))
         .route("/api/admin/v1/config/export", get(export_settings))
         .route("/api/admin/v1/config/import", post(import_settings))
         // Import documents are bounded (settings ≤ 64 KiB each, ≤ 1000 keys).
@@ -140,6 +148,24 @@ async fn import_settings(
         Ok(plan) => plan,
         Err(error) => return settings_error(error),
     };
+    if let Some(key) = plan
+        .added
+        .iter()
+        .chain(&plan.changed)
+        .chain(&plan.secrets_reentered)
+        .chain(&plan.unknown)
+        .find(|k| {
+            k.as_str() == melodee_persistence::runtime_settings::PODCAST_REGISTRY_KEY
+                || melodee_persistence::runtime_settings::host_registry_key(k)
+                || melodee_persistence::runtime_settings::reserved_alias(k)
+        })
+    {
+        return settings_error(SettingsError::InvalidValue {
+            key: key.clone(),
+            reason: "managed on the deployment host or through the individual tuning control"
+                .into(),
+        });
+    }
     if params.preview {
         return Json(ConfigImportResponse {
             applied: false,

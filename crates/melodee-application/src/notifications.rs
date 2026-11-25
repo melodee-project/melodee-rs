@@ -158,7 +158,7 @@ impl EmailSettings {
     }
 
     /// Builds settings through layered resolution (PRD-CONFIG-003):
-    /// `MELODEE__EMAIL__*` environment keys, then the optional config file,
+    /// Individual administrator overrides, then `MELODEE__EMAIL__*` environment keys, the optional config file,
     /// then `server_settings` DB rows, then the legacy seeded defaults. The
     /// resolver produces typed values per the inventory classification, so
     /// extraction here never re-parses text. `validate` remains the single

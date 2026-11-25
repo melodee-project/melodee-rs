@@ -52,8 +52,20 @@ pub fn router() -> Router<AdminSystemState> {
 pub struct StatsDto {
     pub generated_at: String,
     pub library: LibraryStatsDto,
+    pub processing: ProcessingStatsDto,
     pub listening: ListeningStatsDto,
     pub database: DatabaseStatsDto,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessingStatsDto {
+    pub waiting_for_publication: i64,
+    pub awaiting_review: i64,
+    pub published_last_hour: i64,
+    pub published_last_day: i64,
+    pub imported_last_hour: i64,
+    pub imported_last_day: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -179,9 +191,35 @@ async fn build_stats(pool: &sqlx::PgPool) -> Result<StatsDto, sqlx::Error> {
             .format(&Rfc3339)
             .unwrap_or_else(|_| String::from("1970-01-01T00:00:00Z")),
         library,
+        processing: processing_stats(pool, now).await?,
         listening,
         database,
     })
+}
+
+async fn processing_stats(
+    pool: &sqlx::PgPool,
+    as_of: OffsetDateTime,
+) -> Result<ProcessingStatsDto, sqlx::Error> {
+    // Receipts and imports are unique per work item. Retries and later state changes
+    // must not inflate completions or remove a Release from its original time window.
+    sqlx::query_as(
+        "SELECT queue.*, publication.*, catalog.* FROM
+          (SELECT count(*) FILTER (WHERE state = 'staged') AS waiting_for_publication,
+                  count(*) FILTER (WHERE state = 'needs_review') AS awaiting_review
+             FROM release_work_items WHERE state IN ('staged', 'needs_review')) AS queue
+          CROSS JOIN (SELECT count(*) FILTER (WHERE published_at > $2) AS published_last_hour,
+                             count(*) AS published_last_day
+                        FROM release_publication_receipts WHERE published_at > $3 AND published_at <= $1) AS publication
+          CROSS JOIN (SELECT count(*) FILTER (WHERE imported_at > $2) AS imported_last_hour,
+                             count(*) AS imported_last_day
+                        FROM catalog_imports WHERE imported_at > $3 AND imported_at <= $1) AS catalog",
+    )
+    .bind(as_of)
+    .bind(as_of - time::Duration::hours(1))
+    .bind(as_of - time::Duration::days(1))
+    .fetch_one(pool)
+    .await
 }
 
 async fn library_stats(pool: &sqlx::PgPool) -> Result<LibraryStatsDto, sqlx::Error> {

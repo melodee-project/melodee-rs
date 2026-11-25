@@ -1,6 +1,6 @@
 ---
 title: Stats
-description: Library, playback, and database statistics for a Melodee instance.
+description: Release processing throughput, library totals, playback activity, and database statistics.
 sidebar:
   order: 8
 ---
@@ -11,6 +11,13 @@ the server in bounded aggregate queries (`GET /api/admin/v1/stats`) — the page
 re-aggregates client-side, so what you see matches `melodee-cli` and SQL.
 
 ![The Stats page in the light appearance](./images/stats-light.png)
+
+## Release processing
+
+**Published in the last hour** counts Releases with a completed library publication receipt.
+**Imported in the last hour** counts completed catalog imports. Each card also shows the
+trailing 24-hour total. A Release can publish and reach the catalog at different times.
+Select **Waiting for publication** or **Awaiting review** to open the corresponding queue.
 
 ## Media library
 

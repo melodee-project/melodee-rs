@@ -1,4 +1,4 @@
-use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
+use std::{error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{Router, routing::get};
 use melodee_catalog::{CatalogConfig, CatalogSchedulerHandle, start_catalog_loop};
@@ -6,6 +6,7 @@ use melodee_ingestion::{
     IngestionConfig, SchedulerHandle, start_inspection_loop, start_normalization_loop,
     start_publication_loop, start_reconciliation_loop, start_validation_loop,
 };
+use melodee_persistence::runtime_settings::var as config_var;
 use melodee_persistence::{CatalogStore, DatabasePoolConfig, WorkEngineConfig, migrate};
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
@@ -95,7 +96,7 @@ async fn stop_enrichment_worker(handle: Option<enrichment_worker::EnrichmentSche
 }
 
 fn database_url() -> String {
-    match env::var(melodee_persistence::ENV_DATABASE_URL) {
+    match config_var(melodee_persistence::ENV_DATABASE_URL) {
         Ok(url) if !url.is_empty() => url,
         _ => {
             eprintln!(
@@ -116,7 +117,8 @@ const DEFAULT_SHUTDOWN_GRACE_SECONDS: u64 = 30;
 const MAX_SHUTDOWN_GRACE_SECONDS: u64 = 600;
 
 fn native_public_origin(address: SocketAddr) -> Result<String, &'static str> {
-    let value = env::var(ENV_NATIVE_PUBLIC_ORIGIN).unwrap_or_else(|_| format!("http://{address}"));
+    let value =
+        config_var(ENV_NATIVE_PUBLIC_ORIGIN).unwrap_or_else(|_| format!("http://{address}"));
     validate_public_origin(&value)?;
     Ok(value.trim_end_matches('/').to_string())
 }
@@ -219,7 +221,6 @@ fn site_name_value(value: Option<&serde_json::Value>) -> String {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = dotenvy::dotenv();
-    logging::init()?;
 
     // install the process bounded-resource registry before any
     // instrumented service is constructed (several resolve the global
@@ -232,6 +233,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let db_pool_config = DatabasePoolConfig::from_env()?;
     let pool = db_pool_config.pool_options().connect(&database_url).await?;
     migrate(&pool).await?;
+    melodee_persistence::runtime_settings::initialize(&pool).await?;
+    logging::init()?;
 
     let ingestion_config = match IngestionConfig::from_env() {
         Ok(config) => config,
@@ -405,9 +408,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     // notification render/delivery service over layered settings resolution
-    // settings (PRD-CONFIG-003): MELODEE__EMAIL__* env keys and the optional
-    // config file win over DB-backed server_settings rows, which win over
-    // the legacy seeded defaults. Delivery is fail-degraded and audited
+    // settings (PRD-CONFIG-003), including individual administrator overrides. Delivery is fail-degraded and audited
     // (PRD-NOTIF-002).
     let settings_resolver = melodee_persistence::SettingsResolver::from_env(&pool)
         .map_err(|error| format!("invalid settings configuration: {error}"))?;
@@ -447,8 +448,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     );
     let native_cors = native::auth::cors_from_env()?;
     let trusted_proxies = native_stream::configured_trusted_proxies(
-        env::var("MELODEE__SERVER__TRUSTED_PROXIES").ok().as_deref(),
-        env::var("MELODEE__NATIVE__TRUSTED_PROXIES").ok().as_deref(),
+        config_var("MELODEE__SERVER__TRUSTED_PROXIES")
+            .ok()
+            .as_deref(),
+        config_var("MELODEE__NATIVE__TRUSTED_PROXIES")
+            .ok()
+            .as_deref(),
     )?;
     // Direct-play admission (`streaming.maxConcurrentStreams.global` /
     // `.perUser`, legacy `StreamingLimiter`). Legacy `0` means unlimited; the
@@ -456,7 +461,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // semaphore, and the environment override
     // (`MELODEE__NATIVE__STREAM_CONCURRENCY`) remains available for operators
     // who need a process-level cap below the setting.
-    let env_stream_concurrency = env::var(ENV_NATIVE_STREAM_CONCURRENCY)
+    let env_stream_concurrency = config_var(ENV_NATIVE_STREAM_CONCURRENCY)
         .ok()
         .map(|value| parse_native_stream_concurrency(&value))
         .transpose()
@@ -496,7 +501,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         per_user_stream_cap = per_user_stream_limit,
         "direct-play admission configured"
     );
-    let shutdown_grace_seconds = env::var(ENV_SHUTDOWN_GRACE_SECONDS)
+    let shutdown_grace_seconds = config_var(ENV_SHUTDOWN_GRACE_SECONDS)
         .map_or_else(
             |_| Ok(DEFAULT_SHUTDOWN_GRACE_SECONDS),
             |value| parse_shutdown_grace_seconds(&value),
@@ -598,7 +603,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
     let opensubsonic_app = opensubsonic::configured_router_with_cors(
         opensubsonic_state,
-        &env::var(opensubsonic::cors::ENV_ALLOWED_ORIGINS).unwrap_or_default(),
+        &config_var(opensubsonic::cors::ENV_ALLOWED_ORIGINS).unwrap_or_default(),
     )?;
     let jellyfin_state = jellyfin::JfState {
         pool: pool.clone(),

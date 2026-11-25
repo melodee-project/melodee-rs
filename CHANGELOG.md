@@ -7,6 +7,15 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+The Processing Queue identifies Releases waiting for a publisher. Inspection, normalization,
+validation and publication workers now use their own concurrency limits to decide when to
+start the next batch. The Admin UI serves the Melodee browser icon.
+
+System Stats shows Release publication and catalog import throughput over the last hour and
+24 hours, with links to Releases waiting for publication or review. System Settings lets
+administrators edit worker limits and other tuning controls, see pending restarts, and inspect
+the source of host-managed deployment settings.
+
 Administrators and editors can delete a Release awaiting review even when validation stopped
 before catalog import. Type the confirmation shown in Release Review. A reason is optional.
 

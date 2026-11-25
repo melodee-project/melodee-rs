@@ -6,6 +6,7 @@
 //! used; only ownership-validated, path-checked removal under this root is
 //! permitted.
 
+use melodee_persistence::runtime_settings::var as config_var;
 use std::path::{Path, PathBuf};
 
 use melodee_mql::Bounds;
@@ -339,7 +340,7 @@ pub fn is_inside_root(root: &Path, child: &Path) -> bool {
 }
 
 fn parse_bool(name: &str, default: bool) -> Result<bool, String> {
-    match std::env::var(name) {
+    match config_var(name) {
         Ok(value) => match value.as_str() {
             "true" | "1" => Ok(true),
             "false" | "0" => Ok(false),
@@ -351,7 +352,7 @@ fn parse_bool(name: &str, default: bool) -> Result<bool, String> {
 }
 
 fn parse_u64(name: &str, default: u64) -> Result<u64, String> {
-    match std::env::var(name) {
+    match config_var(name) {
         Ok(value) => value
             .parse()
             .map_err(|_| format!("{name} must be an unsigned integer")),
@@ -361,7 +362,7 @@ fn parse_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 fn parse_u32(name: &str, default: u32) -> Result<u32, String> {
-    match std::env::var(name) {
+    match config_var(name) {
         Ok(value) => value
             .parse()
             .map_err(|_| format!("{name} must be an unsigned integer")),
@@ -371,7 +372,7 @@ fn parse_u32(name: &str, default: u32) -> Result<u32, String> {
 }
 
 fn parse_usize(name: &str, default: usize) -> Result<usize, String> {
-    match std::env::var(name) {
+    match config_var(name) {
         Ok(value) => value
             .parse()
             .map_err(|_| format!("{name} must be a non-negative integer")),

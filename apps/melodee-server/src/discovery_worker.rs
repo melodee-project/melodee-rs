@@ -4,7 +4,8 @@
 //! listening/catalog facts in bounded, idempotent, set-based batches. The
 //! pass only reconciles PostgreSQL projections; it never opens media.
 
-use std::{env, fmt, time::Duration};
+use melodee_persistence::runtime_settings::var as config_var;
+use std::{fmt, time::Duration};
 
 use melodee_persistence::{
     NativeDiscoveryMaintenanceStats, NativeDiscoveryStore, NativeDiscoveryStoreError,
@@ -44,24 +45,24 @@ impl DiscoveryWorkerConfig {
     /// Loads and validates only the documented discovery-worker environment
     /// keys.
     pub fn from_env() -> Result<Self, DiscoveryWorkerConfigError> {
-        let enabled = env::var(ENV_DISCOVERY_WORKER_ENABLED)
+        let enabled = config_var(ENV_DISCOVERY_WORKER_ENABLED)
             .ok()
             .map(|raw| parse_bool(ENV_DISCOVERY_WORKER_ENABLED, &raw))
             .transpose()?
             .unwrap_or(true);
-        let poll_seconds = env::var(ENV_DISCOVERY_WORKER_POLL_INTERVAL_SECONDS)
+        let poll_seconds = config_var(ENV_DISCOVERY_WORKER_POLL_INTERVAL_SECONDS)
             .ok()
             .map(|raw| {
                 parse_bounded_u64(ENV_DISCOVERY_WORKER_POLL_INTERVAL_SECONDS, &raw, 1, 86_400)
             })
             .transpose()?
             .unwrap_or(DEFAULT_POLL_INTERVAL_SECONDS);
-        let batch_size = env::var(ENV_DISCOVERY_WORKER_BATCH_SIZE)
+        let batch_size = config_var(ENV_DISCOVERY_WORKER_BATCH_SIZE)
             .ok()
             .map(|raw| parse_bounded_u32(ENV_DISCOVERY_WORKER_BATCH_SIZE, &raw, 1, 10_000))
             .transpose()?
             .unwrap_or(DEFAULT_BATCH_SIZE);
-        let max_batches_per_pass = env::var(ENV_DISCOVERY_WORKER_MAX_BATCHES_PER_PASS)
+        let max_batches_per_pass = config_var(ENV_DISCOVERY_WORKER_MAX_BATCHES_PER_PASS)
             .ok()
             .map(|raw| {
                 parse_bounded_u32(ENV_DISCOVERY_WORKER_MAX_BATCHES_PER_PASS, &raw, 1, 10_000)

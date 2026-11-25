@@ -260,6 +260,8 @@ export function ProcessingQueueScreen() {
     () =>
       (pageData?.items ?? []).map((item) => {
         const title = item.releaseTitle ?? workItemDisplayName(item);
+        const phase = item.phase ?? phaseForState(item.state);
+        const waitingForPublisher = item.state === 'staged';
         return {
           id: item.id,
           cells: {
@@ -276,8 +278,9 @@ export function ProcessingQueueScreen() {
                 {/* The semantic label an operator triages on. "Active" means a
                     client can already see and play it. */}
                 <StatusChip
-                  kind={phaseStatusKind(item.phase ?? phaseForState(item.state))}
-                  label={t(`phase.${item.phase ?? phaseForState(item.state)}`)}
+                  kind={waitingForPublisher ? 'pending' : phaseStatusKind(phase)}
+                  label={waitingForPublisher ? t('queue.state.staged') : t(`phase.${phase}`)}
+                  description={waitingForPublisher ? t('queue.waitingForPublisherDescription') : undefined}
                 />
                 <span className="melodee-cell-stack__secondary">{item.state}</span>
               </>

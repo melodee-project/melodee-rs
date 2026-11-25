@@ -6,6 +6,7 @@ use std::{
     sync::Mutex,
 };
 
+use melodee_persistence::runtime_settings::var as config_var;
 use thiserror::Error;
 use time::{Date, OffsetDateTime};
 use tracing_subscriber::{
@@ -45,7 +46,7 @@ pub(crate) enum LoggingError {
 }
 
 pub(crate) fn init() -> Result<(), LoggingError> {
-    let configured_level = env::var(ENV_LOGGING_LEVEL).ok();
+    let configured_level = config_var(ENV_LOGGING_LEVEL).ok();
     let (filter, filter_description) = match configured_level.as_deref() {
         Some(level) => {
             let directive = level_directive(level)?;
@@ -56,7 +57,7 @@ pub(crate) fn init() -> Result<(), LoggingError> {
         }
         None => match EnvFilter::try_from_default_env() {
             Ok(filter) => {
-                let description = env::var("RUST_LOG").unwrap_or_else(|_| filter.to_string());
+                let description = config_var("RUST_LOG").unwrap_or_else(|_| filter.to_string());
                 (filter, description)
             }
             Err(_) => {
@@ -83,7 +84,7 @@ pub(crate) fn init() -> Result<(), LoggingError> {
         None => (BoxMakeWriter::new(std::io::stderr), None),
     };
 
-    let format = env::var(ENV_LOGGING_FORMAT)
+    let format = config_var(ENV_LOGGING_FORMAT)
         .ok()
         .map(|value| value.trim().to_ascii_lowercase())
         .unwrap_or_else(|| DEFAULT_LOGGING_FORMAT.to_string());

@@ -1040,6 +1040,14 @@ export interface Dashboard {
  * and never re-aggregates.
  */
 export interface Stats {
+  processing: {
+    waitingForPublication: number;
+    awaitingReview: number;
+    publishedLastHour: number;
+    publishedLastDay: number;
+    importedLastHour: number;
+    importedLastDay: number;
+  };
   generatedAt: string;
   library: {
     artists: number;
@@ -1697,3 +1705,21 @@ export interface ThemeImportResult {
   themeId: string;
   message: string;
 }
+
+export interface ConfigEntry {
+  key: string;
+  envName: string;
+  source: 'environment' | 'default' | 'database' | 'config-file' | 'unset';
+  value: unknown;
+  savedValue: unknown;
+  savedSource: ConfigEntry['source'];
+  pendingRestart: boolean;
+  canReset: boolean;
+  editable: boolean;
+  secret: boolean;
+  usage: 'startup' | 'registry' | 'legacy' | 'custom';
+  kind: 'boolean' | 'integer' | 'number' | 'choice' | 'text' | 'json';
+  options: string[];
+}
+
+export type ConfigChange = { action: 'set'; value: unknown } | { action: 'reset' };

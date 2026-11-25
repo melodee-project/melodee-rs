@@ -1,5 +1,6 @@
 //! Ingestion configuration and source definitions.
 
+use melodee_persistence::runtime_settings::var as config_var;
 use std::{
     env, fs,
     io::ErrorKind,
@@ -138,7 +139,7 @@ impl IngestionConfig {
     /// Read configuration only from the documented environment variables.
     pub fn from_env() -> Result<Self, IngestionSourceParseError> {
         let sources = parse_sources()?;
-        let enabled = env::var(ENV_INGEST_ENABLED)
+        let enabled = config_var(ENV_INGEST_ENABLED)
             .ok()
             .map(|value| parse_bool(ENV_INGEST_ENABLED, &value))
             .transpose()?;
@@ -164,7 +165,7 @@ impl IngestionConfig {
                 ENV_SETTLING_QUIET_SECONDS,
                 DEFAULT_SETTLING_QUIET_SECONDS,
             )?,
-            ready_marker_name: env::var(ENV_READY_MARKER_NAME)
+            ready_marker_name: config_var(ENV_READY_MARKER_NAME)
                 .unwrap_or_else(|_| DEFAULT_READY_MARKER.to_owned()),
             ready_marker_shortcut: parse_non_negative_duration_seconds(
                 ENV_READY_MARKER_SHORTCUT_SECONDS,
@@ -174,7 +175,7 @@ impl IngestionConfig {
                 ENV_INSPECTION_CONCURRENCY,
                 DEFAULT_INSPECTION_CONCURRENCY,
             )?,
-            ffprobe_path: env::var(ENV_FFPROBE_PATH)
+            ffprobe_path: config_var(ENV_FFPROBE_PATH)
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("ffprobe")),
             ffprobe_timeout: parse_positive_duration_seconds(
@@ -185,14 +186,14 @@ impl IngestionConfig {
                 ENV_NORMALIZATION_CONCURRENCY,
                 DEFAULT_NORMALIZATION_CONCURRENCY,
             )?,
-            ffmpeg_path: env::var(ENV_FFMPEG_PATH)
+            ffmpeg_path: config_var(ENV_FFMPEG_PATH)
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("ffmpeg")),
             ffmpeg_timeout: parse_positive_duration_seconds(
                 ENV_FFMPEG_TIMEOUT_SECONDS,
                 DEFAULT_FFMPEG_TIMEOUT_SECONDS,
             )?,
-            fpcalc_path: env::var(ENV_FPCALC_PATH)
+            fpcalc_path: config_var(ENV_FPCALC_PATH)
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("fpcalc")),
             fpcalc_timeout: parse_positive_duration_seconds(
@@ -200,7 +201,7 @@ impl IngestionConfig {
                 DEFAULT_FPCALC_TIMEOUT_SECONDS,
             )?,
             staging_root,
-            work_area_base: env::var(ENV_WORK_AREA_BASE)
+            work_area_base: config_var(ENV_WORK_AREA_BASE)
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from(DEFAULT_WORK_AREA_BASE)),
             validation_concurrency: parse_positive_u32(
@@ -369,7 +370,7 @@ impl std::fmt::Display for IngestionSourceParseError {
 impl std::error::Error for IngestionSourceParseError {}
 
 fn parse_sources() -> Result<Vec<InboundSource>, IngestionSourceParseError> {
-    if let Ok(raw) = env::var(ENV_SOURCES_JSON) {
+    if let Ok(raw) = config_var(ENV_SOURCES_JSON) {
         let source_configs =
             serde_json::from_str::<Vec<InboundSourceConfig>>(&raw).map_err(|error| {
                 IngestionSourceParseError {
@@ -385,12 +386,12 @@ fn parse_sources() -> Result<Vec<InboundSource>, IngestionSourceParseError> {
             .collect();
     }
 
-    if let Ok(raw_root) = env::var(ENV_SOURCE_ROOT) {
+    if let Ok(raw_root) = config_var(ENV_SOURCE_ROOT) {
         let root = PathBuf::from(raw_root);
-        let id = env::var(ENV_SOURCE_LIBRARY_ID)
+        let id = config_var(ENV_SOURCE_LIBRARY_ID)
             .ok()
             .and_then(|value| Uuid::parse_str(&value).ok());
-        let name = env::var(ENV_SOURCE_LIBRARY_NAME).ok();
+        let name = config_var(ENV_SOURCE_LIBRARY_NAME).ok();
         return Ok(vec![InboundSource::from_root(root, id, name)?]);
     }
 
@@ -408,7 +409,7 @@ fn parse_positive_duration_seconds(
     key: &str,
     default: i64,
 ) -> Result<Duration, IngestionSourceParseError> {
-    let raw = env::var(key).unwrap_or_else(|_| default.to_string());
+    let raw = config_var(key).unwrap_or_else(|_| default.to_string());
     let value = raw.parse::<i64>().map_err(|_| IngestionSourceParseError {
         detail: format!("{key} must be a positive integer"),
     })?;
@@ -424,7 +425,7 @@ fn parse_non_negative_duration_seconds(
     key: &str,
     default: i64,
 ) -> Result<Duration, IngestionSourceParseError> {
-    let raw = env::var(key).unwrap_or_else(|_| default.to_string());
+    let raw = config_var(key).unwrap_or_else(|_| default.to_string());
     let value = raw.parse::<i64>().map_err(|_| IngestionSourceParseError {
         detail: format!("{key} must be a non-negative integer"),
     })?;
@@ -437,7 +438,7 @@ fn parse_non_negative_duration_seconds(
 }
 
 fn parse_positive_u32(key: &str, default: u32) -> Result<u32, IngestionSourceParseError> {
-    let raw = env::var(key).unwrap_or_else(|_| default.to_string());
+    let raw = config_var(key).unwrap_or_else(|_| default.to_string());
     let value = raw.parse::<u32>().map_err(|_| IngestionSourceParseError {
         detail: format!("{key} must be a positive integer"),
     })?;

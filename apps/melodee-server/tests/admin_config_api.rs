@@ -408,3 +408,171 @@ async fn administrator_gate_rejects_anonymous_and_non_admin() {
     }
     db.drop().await;
 }
+
+#[tokio::test]
+async fn administrator_tunes_workers_and_host_settings_cannot_be_changed() {
+    use melodee_persistence::runtime_settings as runtime;
+    let db = common::TestDb::create("admin_worker_edit").await;
+    let fixture = seed(&db).await;
+    let app = app(db.pool.clone());
+    let entries = "/api/admin/v1/config/entries";
+    let key = "MELODEE__INSPECTION__CONCURRENCY";
+    let path = format!("{entries}/{key}");
+    let admin = Some(fixture.admin_token.as_str());
+    let value = |v: Value| Some(json!({"action":"set","value":v}));
+    assert_eq!(
+        call(app.clone(), "GET", entries, None, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            &path,
+            value(json!(7)),
+            Some(&fixture.plain_token)
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(app.clone(), "PUT", &path, value(json!(7)), admin)
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+    let (status, rows) = call(app.clone(), "GET", entries, None, admin).await;
+    assert_eq!(status, StatusCode::OK, "{rows}");
+    let entry = |key: &str| {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["key"] == key)
+            .unwrap()
+    };
+    assert_eq!(entry(key)["savedValue"], "7");
+    assert_eq!(entry(key)["savedSource"], "database");
+    assert_eq!(
+        entry(key)["pendingRestart"],
+        entry(key)["value"] != "7" || entry(key)["source"] != "database"
+    );
+    assert_eq!(entry(key)["canReset"], true);
+    let db_url = entry("MELODEE__DATABASE__URL");
+    assert_eq!(db_url["editable"], false);
+    assert!(db_url["value"].is_null() || db_url["value"] == SECRET_REDACTION_MARKER);
+    let loaded = runtime::load(&db.pool).await.unwrap();
+    let config = runtime::preview(loaded, melodee_ingestion::IngestionConfig::from_env).unwrap();
+    assert_eq!(config.inspection_concurrency, 7);
+
+    for (key, bad) in [
+        (key, json!(0)),
+        ("MELODEE__NATIVE__AUTH__JWT_KEY", json!("replacement")),
+        (
+            "MELODEE__NORMALIZATION__FFMPEG_PATH",
+            json!("/different/tool"),
+        ),
+        ("MELODEE__STORAGE__ROOT", json!("/different/library")),
+        ("database.url", json!("secret")),
+        ("MELODEE__WORK__RETRY_BASE_SECONDS", json!(4000000000_i64)),
+    ] {
+        let (status, _) = call(
+            app.clone(),
+            "PUT",
+            &format!("{entries}/{key}"),
+            value(bad),
+            admin,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{key}");
+    }
+    assert_eq!(runtime::load(&db.pool).await.unwrap().len(), 1);
+    let import =
+        json!({"format":"melodee-config-export/v1","settings":{"mpv.path":"/different/tool"}});
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            "/api/admin/v1/config/import?preview=false&allowUnknown=true",
+            Some(import),
+            admin
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            &path,
+            Some(json!({"action":"reset"})),
+            admin
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert!(runtime::load(&db.pool).await.unwrap().is_empty());
+
+    // An individually valid boolean still cannot enable a broken SMTP configuration.
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            &format!("{entries}/email.enabled"),
+            value(json!(true)),
+            admin
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert!(
+        SettingsStore::new()
+            .read_raw_value(&db.pool, "email.enabled")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let path = format!("{entries}/email.smtpPassword");
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            &path,
+            value(json!("synthetic-test-only")),
+            admin
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (_, rows) = call(app.clone(), "GET", entries, None, admin).await;
+    assert!(!rows.to_string().contains("synthetic-test-only"));
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["key"] == "email.smtpPassword")
+        .unwrap();
+    assert_eq!(row["value"], SECRET_REDACTION_MARKER);
+    let env =
+        |name: &str| (name == "MELODEE__EMAIL__SMTP_PASSWORD").then(|| "host-test-value".into());
+    let resolver = melodee_persistence::SettingsResolver::with_env_reader(&db.pool, &env);
+    assert_eq!(
+        resolver.resolve("email.smtpPassword").await.unwrap().source,
+        melodee_persistence::SettingSource::Database
+    );
+    assert_eq!(
+        call(app, "PUT", &path, Some(json!({"action":"reset"})), admin)
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        resolver.resolve("email.smtpPassword").await.unwrap().source,
+        melodee_persistence::SettingSource::Environment
+    );
+    db.drop().await;
+}

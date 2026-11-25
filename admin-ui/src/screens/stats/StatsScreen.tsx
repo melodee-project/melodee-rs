@@ -92,7 +92,7 @@ export function StatsScreen() {
     return <Loading description={t('common.loading')} withOverlay={false} />;
   }
 
-  const { library, listening, database } = stats;
+  const { library, processing, listening, database } = stats;
   const losslessShare =
     library.tracks > 0 ? Math.round((library.losslessTracks / library.tracks) * 100) : 0;
   const totalHours = Math.floor(library.totalDurationMs / 3_600_000);
@@ -193,6 +193,19 @@ export function StatsScreen() {
               labelFor={(decade) => `${decade}s`}
             />
           </div>
+        </div>
+      </Surface>
+
+      <Surface title={t('stats.processing.title')} headingId="stats-processing">
+        <div className="melodee-metric-grid">
+          <MetricCard label={t('stats.processing.published')} value={formatNumber(processing.publishedLastHour)}
+            hint={t('stats.processing.lastDay', { value: formatNumber(processing.publishedLastDay) })} />
+          <MetricCard label={t('stats.processing.imported')} value={formatNumber(processing.importedLastHour)}
+            hint={t('stats.processing.lastDay', { value: formatNumber(processing.importedLastDay) })} />
+          <MetricCard label={t('stats.processing.waiting')} value={formatNumber(processing.waitingForPublication)}
+            to="/processing/queue?state=staged" />
+          <MetricCard label={t('stats.processing.review')} value={formatNumber(processing.awaitingReview)}
+            to="/processing/review?state=needs_review" />
         </div>
       </Surface>
 

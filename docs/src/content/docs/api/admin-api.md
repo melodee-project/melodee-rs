@@ -355,6 +355,25 @@ audit row — including `skipped` when delivery is disabled and `failed` when th
 Template placeholders that a triggering event would supply (for example `resetUrl`) render
 verbatim in test sends.
 
+### Release processing statistics
+
+`GET /api/admin/v1/stats` includes a `processing` object. `publishedLastHour` and
+`publishedLastDay` count completed filesystem publications. `importedLastHour` and
+`importedLastDay` count completed catalog imports. Both use rolling windows ending at
+`generatedAt`. `waitingForPublication` and `awaitingReview` count current work items in the
+`staged` and `needs_review` states. The endpoint requires an administrator.
+
+### Effective configuration and individual edits
+
+Administrators can list configuration with `GET /api/admin/v1/config/entries`. Each entry includes
+its key and environment variable, value and source, editability, secret status, and supported
+input type. Startup entries also include the next-start value and source and a pending-restart flag.
+Secret values use the fixed redaction marker.
+
+Send `PUT /api/admin/v1/config/entries/{key}` with `{"action":"set","value":3}` to save an
+override or `{"action":"reset"}` to remove one. Success returns 204. Validation errors return
+400. Host-managed deployment keys reject changes, including edits through configuration import.
+
 ### Configuration export/import
 
 ```http

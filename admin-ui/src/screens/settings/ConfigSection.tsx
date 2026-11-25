@@ -8,38 +8,15 @@ import {
   InlineNotification,
   Loading,
   Modal,
-  Search,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@carbon/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { exportConfig, importConfig } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type { ConfigExport, ConfigImportResult } from '../../api/types';
-import { StatusTag } from '../../components/StatusTag';
-import { formatDateTime, formatNumber } from '../../i18n/format';
-
-/**
- * Configuration browser + export/import (PRD-CONFIG-001/002).
- *
- * Honesty contract: the admin API exposes exactly two configuration
- * mutations — export and the preview-then-apply import flow. There is no
- * per-key mutation endpoint, so individual settings are read-only here and
- * the screen says so instead of faking inline editors. Secret values arrive
- * as the fixed redaction marker, render as a redacted tag, and are never
- * editable; re-entering secrets happens only through an import document the
- * operator supplies.
- */
-
-/** Fixed marker substituted for every stored secret (melodee-persistence). */
-const SECRET_REDACTION_MARKER = '__MELODEE_SECRET_REDACTED__';
+import { SettingsEditor } from './SettingsEditor';
+import { formatNumber } from '../../i18n/format';
 
 interface Notice {
   kind: 'success' | 'error' | 'info' | 'warning';
@@ -70,46 +47,12 @@ function importErrorText(
   return t('settings.import.error.generic', { message: error.message });
 }
 
-interface SettingRow {
-  key: string;
-  value: unknown;
-  redacted: boolean;
-}
-
-/** Groups registry keys by their first dotted segment for browsing. */
-function groupSettings(settings: Record<string, unknown>): Map<string, SettingRow[]> {
-  const groups = new Map<string, SettingRow[]>();
-  for (const key of Object.keys(settings).sort()) {
-    const value = settings[key];
-    const group = key.split('.')[0] ?? key;
-    const row: SettingRow = {
-      key,
-      value,
-      redacted: value === SECRET_REDACTION_MARKER,
-    };
-    const list = groups.get(group) ?? [];
-    list.push(row);
-    groups.set(group, list);
-  }
-  return groups;
-}
-
-function renderValue(value: unknown): string {
-  if (value === null) {
-    return 'null';
-  }
-  if (typeof value === 'string') {
-    return value;
-  }
-  return JSON.stringify(value);
-}
-
 export function ConfigSection() {
   const { t } = useTranslation();
   const [document, setDocument] = useState<ConfigExport | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [searchText, setSearchText] = useState('');
+  const [revision, setRevision] = useState(0);
 
   const [pendingDocument, setPendingDocument] = useState<unknown>(null);
   const [pendingName, setPendingName] = useState<string | null>(null);
@@ -204,7 +147,7 @@ export function ConfigSection() {
       .then((result) => {
         setPreview(result);
         setNotice({ kind: 'success', text: t('settings.import.applied') });
-        // The browser reflects durable state; refresh after an apply.
+        setRevision((previous) => previous + 1);
         void fetchExport({ cancelled: false });
       })
       .catch((cause: unknown) => {
@@ -215,20 +158,6 @@ export function ConfigSection() {
         setApplyConfirmOpen(false);
       });
   };
-
-  const groups = useMemo(() => {
-    if (!document) {
-      return new Map<string, SettingRow[]>();
-    }
-    const query = searchText.trim().toLowerCase();
-    const filtered: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(document.settings)) {
-      if (!query || key.toLowerCase().includes(query)) {
-        filtered[key] = value;
-      }
-    }
-    return groupSettings(filtered);
-  }, [document, searchText]);
 
   return (
     <div>
@@ -249,13 +178,6 @@ export function ConfigSection() {
           hideCloseButton
         />
       ) : null}
-      <InlineNotification
-        kind="info"
-        lowContrast
-        title={t('settings.readOnlyTitle')}
-        subtitle={t('settings.readOnlyNote')}
-        hideCloseButton
-      />
       {loadError ? (
         <ActionableNotification
           inline
@@ -378,62 +300,7 @@ export function ConfigSection() {
         </section>
       ) : null}
 
-      {document === null && !loadError ? (
-        <Loading description={t('common.loading')} withOverlay={false} />
-      ) : null}
-      {document ? (
-        <>
-          <Search
-            size="md"
-            labelText={t('settings.searchLabel')}
-            placeholder={t('settings.searchLabel')}
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            onClear={() => setSearchText('')}
-          />
-          <p className="melodee-panel__subtitle">
-            {t('settings.exportedAt', { time: formatDateTime(document.exportedAt) })}
-          </p>
-          {[...groups.entries()].map(([group, rows]) => (
-            <section key={group} className="melodee-panel" aria-label={group}>
-              <Heading className="melodee-panel__title">{group}</Heading>
-              <TableContainer title={group}>
-                <Table size="sm" aria-label={group}>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>{t('settings.column.key')}</TableHeader>
-                      <TableHeader>{t('settings.column.value')}</TableHeader>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {rows.map((row) => (
-                      <TableRow key={row.key}>
-                        <TableCell>
-                          <code>{row.key}</code>
-                        </TableCell>
-                        <TableCell>
-                          {row.redacted ? (
-                            <StatusTag
-                              kind="neutral"
-                              label={t('settings.redacted')}
-                              description={t('settings.redactedDescription')}
-                            />
-                          ) : (
-                            <code>{renderValue(row.value)}</code>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </section>
-          ))}
-          {groups.size === 0 ? (
-            <p className="melodee-panel__subtitle">{t('empty.noResults')}</p>
-          ) : null}
-        </>
-      ) : null}
+      <SettingsEditor revision={revision} onSaved={() => void fetchExport({ cancelled: false })} />
 
       {applyConfirmOpen ? (
         <Modal

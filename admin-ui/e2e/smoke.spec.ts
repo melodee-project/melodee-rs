@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -64,6 +65,17 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem('melodee.locale', 'en-US');
   });
+});
+
+test('serves the Melodee favicon from a nested Admin URL', async ({ page }) => {
+  await page.goto('/admin/processing/queue');
+  const icon = page.locator('head link[rel="icon"]');
+  await expect(icon).toHaveAttribute('href', '/admin/favicon.ico');
+  const response = await page.request.get('/admin/favicon.ico');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toMatch(/^image\/(x-icon|vnd\.microsoft\.icon)\b/);
+  const original = await readFile(new URL('../../assets/icons/icon.ico', import.meta.url));
+  expect((await response.body()).equals(original)).toBe(true);
 });
 
 test('renders the shell navigation groups in English', async ({ page }) => {

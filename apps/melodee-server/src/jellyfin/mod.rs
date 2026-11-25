@@ -33,6 +33,7 @@ pub mod playlists;
 pub mod sessions;
 pub mod userstate;
 
+use melodee_persistence::runtime_settings::var as config_var;
 use std::sync::Arc;
 
 use axum::{
@@ -129,7 +130,7 @@ impl SecretPepper {
 
 /// Loads the required Jellyfin token pepper without exposing it in errors.
 pub fn token_pepper_from_env() -> Result<SecretPepper, TokenConfigError> {
-    let pepper = std::env::var(ENV_TOKEN_PEPPER).map_err(|_| TokenConfigError::MissingPepper)?;
+    let pepper = config_var(ENV_TOKEN_PEPPER).map_err(|_| TokenConfigError::MissingPepper)?;
     SecretPepper::new(pepper.into_bytes())
 }
 
@@ -146,7 +147,7 @@ pub fn parse_token_expiry_hours(value: &str) -> Result<i64, TokenConfigError> {
 
 /// Loads the configured expiry, retaining ADR-0131's 168-hour default.
 pub fn token_expiry_hours_from_env() -> Result<i64, TokenConfigError> {
-    match std::env::var(ENV_TOKEN_EXPIRES_AFTER_HOURS) {
+    match config_var(ENV_TOKEN_EXPIRES_AFTER_HOURS) {
         Ok(value) => parse_token_expiry_hours(&value),
         Err(std::env::VarError::NotPresent) => Ok(DEFAULT_TOKEN_EXPIRES_AFTER_HOURS),
         Err(std::env::VarError::NotUnicode(_)) => Err(TokenConfigError::InvalidExpiry),

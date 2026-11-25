@@ -1,8 +1,8 @@
 //! Bounded podcast feed refresh and enclosure download lifecycle.
 
+use melodee_persistence::runtime_settings::var as config_var;
 use std::{
     collections::HashMap,
-    env,
     net::{IpAddr, SocketAddr},
     path::{Component, Path, PathBuf},
     time::Duration,
@@ -121,7 +121,7 @@ impl PodcastConfig {
     pub fn from_env() -> Result<Self, PodcastConfigError> {
         let enabled = env_bool("MELODEE__PODCAST__ENABLED", true)?;
         let worker_enabled = env_bool("MELODEE__PODCAST__WORKER__ENABLED", false)?;
-        let storage_root = env::var("MELODEE__PODCAST__STORAGE_ROOT")
+        let storage_root = config_var("MELODEE__PODCAST__STORAGE_ROOT")
             .ok()
             .filter(|value| !value.trim().is_empty())
             .map(PathBuf::from);
@@ -130,7 +130,7 @@ impl PodcastConfig {
         }
         let config = Self {
             enabled,
-            discovery_endpoint: env::var("MELODEE__PODCAST__DISCOVERY_ENDPOINT")
+            discovery_endpoint: config_var("MELODEE__PODCAST__DISCOVERY_ENDPOINT")
                 .unwrap_or_else(|_| "https://itunes.apple.com/".to_owned()),
             worker_enabled,
             storage_root,
@@ -243,7 +243,7 @@ impl Default for PodcastConfig {
 }
 
 fn env_bool(key: &'static str, default: bool) -> Result<bool, PodcastConfigError> {
-    match env::var(key) {
+    match config_var(key) {
         Err(_) => Ok(default),
         Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "yes" | "on" => Ok(true),
@@ -254,7 +254,7 @@ fn env_bool(key: &'static str, default: bool) -> Result<bool, PodcastConfigError
 }
 
 fn env_u64(key: &'static str, default: u64, min: u64, max: u64) -> Result<u64, PodcastConfigError> {
-    let value = env::var(key)
+    let value = config_var(key)
         .ok()
         .map(|raw| raw.parse())
         .transpose()
@@ -267,7 +267,7 @@ fn env_u64(key: &'static str, default: u64, min: u64, max: u64) -> Result<u64, P
 }
 
 fn env_i32(key: &'static str, default: i32, min: i32, max: i32) -> Result<i32, PodcastConfigError> {
-    let value = env::var(key)
+    let value = config_var(key)
         .ok()
         .map(|raw| raw.parse())
         .transpose()

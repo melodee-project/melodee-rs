@@ -11,16 +11,25 @@ contract lives in [Configuration](../installation/configuration/).
 
 ## Configuration
 
-The configuration tab shows the effective server configuration with its source layer. There is
-**no per-key editing** in the UI by design — settings change through environment/configuration
-files and restart, or through the validated import flow:
+Search by setting name or environment variable. The first six rows control Release throughput.
+For example, search for `MELODEE__INSPECTION__CONCURRENCY`, select **Edit**, enter the
+worker count, then select **Save**. The Value column shows what this server process started with.
+**After restart** shows the value it will use next. Restart the Melodee service on the host
+when ready, then reload Settings to confirm the change.
 
-- **Export** writes the redacted export document. Secrets render as a fixed redaction marker and
-  are never shown or editable.
-- **Import** is preview-first: the server validates the document and shows the proposed changes
-  before anything is applied. Applying rejects the redaction marker as a value, unknown keys
-  (unless explicitly allowed), and invalid values with stable error codes. Re-entering secrets
-  happens only through an import document you author, never in the browser.
+- **Source** shows whether a value comes from the host environment, configuration file,
+  database, or a built-in default. Saving an editable setting creates a database override.
+  **Remove saved override** restores the underlying configuration on the next read.
+- For registry settings, components read changes on their own schedule. Restart the service to
+  refresh components that load settings at startup. Legacy settings without a runtime effect are labeled.
+- **Managed on host** identifies PostgreSQL connection settings, signing keys, storage roots,
+  media-tool paths, and other deployment controls. Secret values appear as **Redacted**.
+  For an editable secret, type its replacement into the empty field to change it.
+- **Export** downloads the registry's redacted database/default values. **Import** previews the
+  changes before applying them. The server skips redacted secrets and rejects changes to
+  host-managed settings. Individual worker overrides are stored separately and survive restarts.
+  The podcast startup switch appears once under its registry name, `podcast.enabled`. Use its
+  individual editor to change `MELODEE__PODCAST__ENABLED`.
 
 The CLI equivalents are `melodee-cli config list|validate|export|import`; the API contract is
 [Admin API — Configuration export/import](../api/admin-api/#configuration-exportimport) and the

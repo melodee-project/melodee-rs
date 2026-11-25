@@ -319,12 +319,25 @@ async fn resolution_layers_env_over_file_over_database_over_default() {
         "melodee-wp08-config-{}.json",
         uuid::Uuid::now_v7().simple()
     ));
-    std::fs::write(&file_path, r#"{"magic.enabled": true}"#).expect("write config file");
+    std::fs::write(
+        &file_path,
+        r#"{"magic.enabled": true, "plugin.token":"synthetic-file-secret"}"#,
+    )
+    .expect("write config file");
     let resolver =
         SettingsResolver::with_config_file(&db.pool, &file_path, no_env).expect("file resolver");
     let resolved = resolver.resolve("magic.enabled").await.expect("resolve");
     assert_eq!(resolved.value, Some(json!(true)));
     assert_eq!(resolved.source, SettingSource::ConfigFile);
+    let custom = resolver
+        .resolve_all()
+        .await
+        .expect("list file configuration")
+        .into_iter()
+        .find(|setting| setting.key == "plugin.token")
+        .expect("file-only custom key");
+    assert_eq!(custom.source, SettingSource::ConfigFile);
+    assert_eq!(custom.to_redacted_json(), json!(SECRET_REDACTION_MARKER));
     // A malformed file fails closed.
     std::fs::write(&file_path, "not json").expect("write broken file");
     assert!(matches!(

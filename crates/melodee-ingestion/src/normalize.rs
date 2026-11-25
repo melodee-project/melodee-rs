@@ -510,13 +510,15 @@ pub fn start_normalization_loop(
         }
         let interval = TokioDuration::try_from(ingestion.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
-        let claim_batch_size = work_config.claim_batch_size as u64;
+        let claim_batch_size = u64::from(ingestion.normalization_concurrency);
         let mut ticker = time::interval(interval);
         let mut results = Vec::new();
+        let stop_requested = notifier.notified();
+        tokio::pin!(stop_requested);
         loop {
             let should_run = tokio::select! {
                 _ = ticker.tick() => true,
-                _ = notifier.notified() => false,
+                _ = &mut stop_requested => false,
             };
             if !should_run {
                 break;
@@ -537,14 +539,14 @@ pub fn start_normalization_loop(
                 tokio::pin!(batch);
                 let (interrupted, result) = tokio::select! {
                     result = &mut batch => (false, result),
-                    _ = notifier.notified() => {
+                    _ = &mut stop_requested => {
                         shutdown.store(true, Ordering::SeqCst);
                         (true, batch.await)
                     }
                 };
                 let full_batch = match result {
                     Ok(stats) => {
-                        let full_batch = stats.claimed >= claim_batch_size;
+                        let full_batch = stats.errors == 0 && stats.claimed >= claim_batch_size;
                         results.push(ReconcileResult {
                             source: "normalization".to_owned(),
                             stats: ReconcileStats {

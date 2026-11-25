@@ -27,6 +27,8 @@ vi.mock('../../api/themes', () => ({
 
 vi.mock('../../api/admin', () => ({
   exportConfig: vi.fn(),
+  listConfigEntries: vi.fn(),
+  updateConfigEntry: vi.fn(),
   importConfig: vi.fn(),
   listNotificationTemplates: vi.fn(),
   putNotificationTemplate: vi.fn(),
@@ -80,6 +82,12 @@ const EXPORT_DOC: ConfigExport = {
     'smtp.password': '__MELODEE_SECRET_REDACTED__',
   },
 };
+
+const ENTRIES = Object.entries(EXPORT_DOC.settings).map(([key,value]) => ({
+  key, envName: key.toUpperCase().replaceAll('.', '__'), value, savedValue: value, options: [], pendingRestart: false,
+  source: 'environment' as const, savedSource: 'environment' as const, usage: 'startup' as const, canReset: false,
+  kind: 'integer' as const, secret: key === 'smtp.password', editable: key !== 'smtp.password',
+}));
 
 const PREVIEW: ConfigImportResult = {
   applied: false,
@@ -183,6 +191,7 @@ describe('SettingsScreen configuration tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExportConfig.mockResolvedValue(EXPORT_DOC);
+    vi.mocked(admin.listConfigEntries).mockResolvedValue(ENTRIES);
     stubAllSections();
   });
 
@@ -193,8 +202,24 @@ describe('SettingsScreen configuration tab', () => {
     expect(screen.getByText('smtp.password')).toBeInTheDocument();
     expect(screen.getByText('8080')).toBeInTheDocument();
     // The honesty note: no per-key mutation endpoint exists.
-    expect(screen.getByText('Settings are read-only here')).toBeInTheDocument();
+    expect(screen.getByText('Managed on host')).toBeInTheDocument();
     expect(screen.getByText('Secrets are redacted.')).toBeInTheDocument();
+  });
+
+  it('saves a typed override and distinguishes it from the running value', async () => {
+    vi.mocked(admin.updateConfigEntry).mockResolvedValue(undefined);
+    vi.mocked(admin.listConfigEntries).mockResolvedValueOnce(ENTRIES).mockResolvedValueOnce(
+      ENTRIES.map((row) => row.key === 'server.port' ? { ...row, pendingRestart: true, savedValue: 9090 } : row),
+    );
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit server.port' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit server.port' });
+    fireEvent.change(within(dialog).getByLabelText('Value'), {target: {value: '9090'}});
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
+    expect(await screen.findByText('After restart: 9090')).toBeInTheDocument();
+    expect(screen.getByText('8080')).toBeInTheDocument();
+    expect(admin.updateConfigEntry).toHaveBeenCalledWith('server.port', {action: 'set', value: 9090});
+    expect(screen.queryByRole('button', {name: 'Edit smtp.password'})).toBeNull();
   });
 
   it('filters the browser by key substring', async () => {
@@ -280,6 +305,7 @@ describe('SettingsScreen notifications tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExportConfig.mockResolvedValue(EXPORT_DOC);
+    vi.mocked(admin.listConfigEntries).mockResolvedValue(ENTRIES);
     stubAllSections();
   });
 
@@ -335,6 +361,7 @@ describe('SettingsScreen scripts tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExportConfig.mockResolvedValue(EXPORT_DOC);
+    vi.mocked(admin.listConfigEntries).mockResolvedValue(ENTRIES);
     stubAllSections();
   });
 
@@ -378,6 +405,7 @@ describe('SettingsScreen radio tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExportConfig.mockResolvedValue(EXPORT_DOC);
+    vi.mocked(admin.listConfigEntries).mockResolvedValue(ENTRIES);
     stubAllSections();
   });
 
@@ -407,6 +435,7 @@ describe('SettingsScreen device profiles tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExportConfig.mockResolvedValue(EXPORT_DOC);
+    vi.mocked(admin.listConfigEntries).mockResolvedValue(ENTRIES);
     stubAllSections();
   });
 

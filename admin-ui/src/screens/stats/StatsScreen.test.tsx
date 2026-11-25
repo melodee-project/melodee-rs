@@ -15,6 +15,7 @@ const mockGetStats = vi.mocked(getStats);
 function makeStats(overrides: Partial<Stats> = {}): Stats {
   return {
     generatedAt: '2026-08-14T12:00:00Z',
+    processing: { waitingForPublication: 84, awaitingReview: 7, publishedLastHour: 43, publishedLastDay: 258, importedLastHour: 40, importedLastDay: 256 },
     library: {
       artists: 417,
       releases: 128,
@@ -90,6 +91,10 @@ describe('StatsScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Media library' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Playback activity' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Database' })).toBeInTheDocument();
+
+    expect(screen.getByRole('heading', { name: 'Release processing' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Waiting for publication.*84/ })).toHaveAttribute('href', '/processing/queue?state=staged');
+    expect(screen.getByText('258 in the last 24 hours')).toBeInTheDocument();
 
     // Headline numbers come straight from the server aggregates (locale-grouped).
     expect(screen.getAllByText('1,632').length).toBeGreaterThan(0);

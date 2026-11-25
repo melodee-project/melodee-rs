@@ -1,6 +1,6 @@
 //! Validated policy configuration and safe disposition preferences.
 
-use std::env;
+use melodee_persistence::runtime_settings::var as config_var;
 use std::str::FromStr;
 
 use melodee_domain::Disposition;
@@ -156,7 +156,7 @@ impl PolicyConfig {
 }
 
 fn parse_usize(name: &'static str, default: usize) -> Result<usize, String> {
-    env::var(name)
+    config_var(name)
         .ok()
         .map(|value| usize::from_str(&value).map_err(|_| value))
         .transpose()
@@ -164,7 +164,7 @@ fn parse_usize(name: &'static str, default: usize) -> Result<usize, String> {
 }
 
 fn parse_u16(name: &'static str, default: u16) -> Result<u16, String> {
-    env::var(name)
+    config_var(name)
         .ok()
         .map(|value| u16::from_str(&value).map_err(|_| value))
         .transpose()
@@ -172,7 +172,7 @@ fn parse_u16(name: &'static str, default: u16) -> Result<u16, String> {
 }
 
 fn parse_u32(name: &'static str, default: u32) -> Result<u32, String> {
-    env::var(name)
+    config_var(name)
         .ok()
         .map(|value| u32::from_str(&value).map_err(|_| value))
         .transpose()
@@ -183,7 +183,7 @@ fn parse_disposition(
     name: &'static str,
     default: Disposition,
 ) -> Result<Disposition, PolicyConfigError> {
-    let Some(value) = env::var(name).ok() else {
+    let Some(value) = config_var(name).ok() else {
         return Ok(default);
     };
     Disposition::parse(&value).ok_or(PolicyConfigError::Disposition { field: name, value })

@@ -19,7 +19,8 @@ use melodee_ingestion::PublicationCopyTestBarrier;
 use melodee_ingestion::{
     InboundSource, IngestionConfig, PublicationBundle, PublicationOutcome, inspect_ready_once,
     normalize_once, owned_source_root, publish_canonical_bundle, publish_once,
-    reconcile_all_sources, start_normalization_loop, validate_once,
+    reconcile_all_sources, start_inspection_loop, start_normalization_loop, start_publication_loop,
+    start_validation_loop, validate_once,
 };
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId};
 use time::{Duration, OffsetDateTime};
@@ -470,6 +471,77 @@ async fn assert_batch_progress(
             "{phase} stalled before reaching {target}: claimed={claimed} completed={completed} needs_review={needs_review} adopted={adopted} failed={failed} errors={errors} total={total}; {extra}; {diagnostics}"
         );
     }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn stage_workers_drain_their_own_full_batch_before_the_idle_tick() {
+    let mut scenario = Scenario::new("stage_drain").await;
+    scenario.enable_publication();
+    scenario.config.reconciliation_interval = Duration::minutes(5);
+    scenario.config.inspection_concurrency = 1;
+    scenario.config.normalization_concurrency = 1;
+    scenario.config.validation_concurrency = 1;
+    scenario.config.publication_concurrency = 1;
+    for name in ["first", "second"] {
+        let release = scenario.root.join(name);
+        fs::create_dir(&release).unwrap();
+        generate_tagged_mp3(&release.join("track.mp3"));
+    }
+    for now in [common::T0, common::T0 + Duration::seconds(1)] {
+        reconcile_all_sources(&scenario.config, &WorkItemStore, &scenario.pool, now)
+            .await
+            .unwrap();
+    }
+
+    let work = WorkEngineConfig {
+        claim_batch_size: 4,
+        ..WorkEngineConfig::default()
+    };
+    for target in [
+        IngestionState::Normalizing,
+        IngestionState::Validating,
+        IngestionState::Staged,
+        IngestionState::Published,
+    ] {
+        let config = scenario.config.clone();
+        let pool = scenario.pool.clone();
+        let worker = match target {
+            IngestionState::Normalizing => {
+                start_inspection_loop(config, pool, WorkItemStore, work, None)
+            }
+            IngestionState::Validating => {
+                start_normalization_loop(config, pool, WorkItemStore, work)
+            }
+            IngestionState::Staged => start_validation_loop(config, pool, WorkItemStore, work),
+            IngestionState::Published => start_publication_loop(config, pool, WorkItemStore, work),
+            _ => unreachable!(),
+        };
+        let deadline = std::time::Duration::from_secs(30);
+        let drained = tokio::time::timeout(deadline, async {
+            loop {
+                let count: i64 =
+                    sqlx::query_scalar("SELECT count(*) FROM release_work_items WHERE state = $1")
+                        .bind(target.as_str())
+                        .fetch_one(&scenario.pool)
+                        .await
+                        .unwrap();
+                if count == 2 {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+        tokio::time::timeout(deadline, worker.stop())
+            .await
+            .expect("worker stopped");
+        assert!(
+            drained.is_ok(),
+            "second Release should reach {target:?} before the idle tick"
+        );
+    }
+    scenario.finish().await;
 }
 
 #[cfg(unix)]

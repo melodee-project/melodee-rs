@@ -1,6 +1,7 @@
 //! Frozen native-v1 authentication and refresh lifecycle (ADR-0124).
 
-use std::{env, fmt, net::SocketAddr, sync::Arc};
+use melodee_persistence::runtime_settings::var as config_var;
+use std::{fmt, net::SocketAddr, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -351,15 +352,15 @@ impl NativeAuthService {
     /// Loads configuration without ever including the secret value in errors.
     pub fn from_env() -> Result<Self, NativeAuthConfigError> {
         let key =
-            env::var(ENV_NATIVE_JWT_KEY).map_err(|_| NativeAuthConfigError::MissingSigningKey)?;
-        let max_session_days = env::var(ENV_NATIVE_MAX_SESSION_DAYS)
+            config_var(ENV_NATIVE_JWT_KEY).map_err(|_| NativeAuthConfigError::MissingSigningKey)?;
+        let max_session_days = config_var(ENV_NATIVE_MAX_SESSION_DAYS)
             .ok()
             .map(|value| value.parse::<i64>())
             .transpose()
             .map_err(|_| NativeAuthConfigError::InvalidSessionDays)?
             .unwrap_or(90);
         let mut service = Self::new(key, max_session_days)?;
-        service.development_reset_tokens = env::var(ENV_NATIVE_DEVELOPMENT_RESET_TOKENS)
+        service.development_reset_tokens = config_var(ENV_NATIVE_DEVELOPMENT_RESET_TOKENS)
             .ok()
             .map(|value| value.parse::<bool>())
             .transpose()
@@ -368,18 +369,18 @@ impl NativeAuthService {
         service.rate_attempts = env_i32(ENV_NATIVE_RATE_ATTEMPTS, 10, 1, 10_000)?;
         service.rate_window_seconds = env_i64(ENV_NATIVE_RATE_WINDOW_SECONDS, 60, 1, 86_400)?;
         service.rate_max_keys = env_i64(ENV_NATIVE_RATE_MAX_KEYS, 100_000, 1, 10_000_000)?;
-        if env::var(ENV_GOOGLE_ENABLED)
+        if config_var(ENV_GOOGLE_ENABLED)
             .ok()
             .map(|value| value.parse::<bool>())
             .transpose()
             .map_err(|_| NativeAuthConfigError::InvalidGoogleConfig)?
             .unwrap_or(false)
         {
-            let audience = env::var(ENV_GOOGLE_CLIENT_ID)
+            let audience = config_var(ENV_GOOGLE_CLIENT_ID)
                 .map_err(|_| NativeAuthConfigError::InvalidGoogleConfig)?;
-            let url = env::var(ENV_GOOGLE_JWKS_URL)
+            let url = config_var(ENV_GOOGLE_JWKS_URL)
                 .unwrap_or_else(|_| "https://www.googleapis.com/oauth2/v3/certs".to_string());
-            let hosted_domain_config = env::var(ENV_GOOGLE_HOSTED_DOMAINS).unwrap_or_default();
+            let hosted_domain_config = config_var(ENV_GOOGLE_HOSTED_DOMAINS).unwrap_or_default();
             if hosted_domain_config.len() > MAX_CORS_CONFIG_BYTES {
                 return Err(NativeAuthConfigError::InvalidGoogleConfig);
             }
@@ -472,7 +473,7 @@ pub enum NativeAuthConfigError {
 }
 
 fn env_i64(name: &str, default: i64, min: i64, max: i64) -> Result<i64, NativeAuthConfigError> {
-    let value = env::var(name)
+    let value = config_var(name)
         .ok()
         .map(|value| value.parse::<i64>())
         .transpose()
@@ -497,7 +498,7 @@ fn env_i32(name: &str, default: i32, min: i32, max: i32) -> Result<i32, NativeAu
 /// Builds strict native API CORS from a comma-delimited explicit origin list.
 /// Empty configuration allows no cross-origin requests.
 pub fn cors_from_env() -> Result<tower_http::cors::CorsLayer, NativeAuthConfigError> {
-    let raw = env::var(ENV_NATIVE_CORS_ORIGINS).unwrap_or_default();
+    let raw = config_var(ENV_NATIVE_CORS_ORIGINS).unwrap_or_default();
     cors_from_origins(&raw)
 }
 

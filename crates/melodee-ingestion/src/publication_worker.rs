@@ -859,7 +859,11 @@ fn start_stage_loop(
         if !ingestion.publication_enabled() {
             return Vec::new();
         }
-        let claim_batch_size = work_config.claim_batch_size as u64;
+        let claim_batch_size = u64::from(if validation {
+            ingestion.validation_concurrency
+        } else {
+            ingestion.publication_concurrency
+        });
         let interval = TokioDuration::try_from(ingestion.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
         let mut ticker = time::interval(interval);
@@ -870,10 +874,12 @@ fn start_stage_loop(
             TokioDuration::try_from(work_config.retry_policy.max_delay).unwrap_or(retry_base);
         let mut retry_delay = retry_base;
         let mut results = Vec::new();
+        let stop_requested = notifier.notified();
+        tokio::pin!(stop_requested);
         loop {
             let should_run = tokio::select! {
                 _ = ticker.tick() => true,
-                _ = notifier.notified() => false,
+                _ = &mut stop_requested => false,
             };
             if !should_run {
                 break;
@@ -898,7 +904,11 @@ fn start_stage_loop(
                             (
                                 stats.duration_ms,
                                 stats.errors,
-                                AfterBatch::from_claims(stats.claimed, claim_batch_size),
+                                if stats.errors > 0 {
+                                    AfterBatch::Poll
+                                } else {
+                                    AfterBatch::from_claims(stats.claimed, claim_batch_size)
+                                },
                             )
                         })
                     } else {
@@ -926,7 +936,7 @@ fn start_stage_loop(
                 tokio::pin!(batch);
                 let (interrupted, result) = tokio::select! {
                     result = &mut batch => (false, result),
-                    _ = notifier.notified() => {
+                    _ = &mut stop_requested => {
                         shutdown.store(true, Ordering::SeqCst);
                         (true, batch.await)
                     }

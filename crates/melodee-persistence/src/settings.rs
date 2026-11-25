@@ -4,9 +4,8 @@
 //!
 //! # Layered resolution (PRD-CONFIG-003)
 //!
-//! Effective setting values resolve through four layers, highest precedence
-//! first (matching the legacy `MelodeeConfigurationFactory` direction: the
-//! environment overlays the database, never the reverse):
+//! An explicitly saved individual administrator override takes priority for editable keys
+//! (ADR-0207). Otherwise registry values resolve through four layers, highest precedence first:
 //!
 //! 1. **Environment** — `MELODEE__*` variables. Keys with an established
 //!    server convention map explicitly (the `email.*` group uses the
@@ -780,7 +779,7 @@ impl SettingsStore {
             "INSERT INTO server_settings (key, value, is_secret, updated_at) \
              VALUES ($1, $2, $3, $4) \
              ON CONFLICT (key) DO UPDATE SET \
-               value = EXCLUDED.value, is_secret = EXCLUDED.is_secret, \
+               value = EXCLUDED.value, is_secret = server_settings.is_secret OR EXCLUDED.is_secret, \
                updated_at = EXCLUDED.updated_at \
              RETURNING key, value, is_secret, updated_at",
         )
@@ -1015,12 +1014,23 @@ impl ResolvedSetting {
     }
 }
 
+/// The effective value (subject to the same redaction rules as `ResolvedSetting`)
+/// together with the presence and precedence of its database row.
+pub struct EffectiveSettingEntry {
+    pub setting: ResolvedSetting,
+    pub has_row: bool,
+    pub admin_override: bool,
+}
+
+type StoredLayers = (serde_json::Value, bool, bool);
+
 /// Layered settings resolution (see module docs for precedence). Borrows
 /// the pool; the optional config-file layer is loaded at construction. The
 /// environment layer is read through `env_reader` — the process environment
 /// by default, injectable for tests and embedded runners (environment
 /// mutation is `unsafe` under edition 2024, so tests inject instead).
 pub struct SettingsResolver<'a> {
+    snapshot: BTreeMap<String, Option<StoredLayers>>,
     pool: &'a PgPool,
     file_values: BTreeMap<String, serde_json::Value>,
     env_reader: &'a (dyn Fn(&str) -> Option<String> + Send + Sync),
@@ -1038,6 +1048,7 @@ impl<'a> SettingsResolver<'a> {
     pub const fn new(pool: &'a PgPool) -> Self {
         Self {
             pool,
+            snapshot: BTreeMap::new(),
             file_values: BTreeMap::new(),
             env_reader: &process_env,
         }
@@ -1051,6 +1062,7 @@ impl<'a> SettingsResolver<'a> {
     ) -> Self {
         Self {
             pool,
+            snapshot: BTreeMap::new(),
             file_values: BTreeMap::new(),
             env_reader,
         }
@@ -1100,16 +1112,78 @@ impl<'a> SettingsResolver<'a> {
         }
         Ok(Self {
             pool,
+            snapshot: BTreeMap::new(),
             file_values,
             env_reader,
         })
     }
 
-    /// Resolves one key through env → file → DB → default. Environment and
+    /// True for an explicitly configured file entry, including a custom operator key.
+    pub fn configured_in_file(&self, key: &str) -> bool {
+        self.file_values.contains_key(key)
+    }
+
+    /// Freeze a group of registered keys in one transaction, e.g. to run startup validation
+    /// against a proposed SMTP edit before committing it. Includes absent rows and overlays.
+    pub async fn snapshot_group<'e>(
+        &mut self,
+        db: impl PgExecutor<'e>,
+        prefix: &str,
+    ) -> Result<(), SettingsError> {
+        let keys: Vec<_> = KNOWN_SETTINGS
+            .iter()
+            .map(|k| k.key)
+            .filter(|key| key.starts_with(prefix))
+            .collect();
+        let rows = sqlx::query_as::<_, (String, serde_json::Value, bool, bool)>(
+            "SELECT key, value, is_secret, admin_preferred FROM server_settings WHERE key=ANY($1)",
+        )
+        .bind(&keys)
+        .fetch_all(db)
+        .await?;
+        self.snapshot
+            .extend(keys.into_iter().map(|key| (key.to_owned(), None)));
+        for (key, value, secret, preferred) in rows {
+            self.snapshot.insert(key, Some((value, secret, preferred)));
+        }
+        Ok(())
+    }
+
+    /// Resolves one key through admin override → env → file → DB → default. Environment and
     /// file values that fail the key's kind validation are hard errors
     /// (fail closed; a misconfigured deployment must not silently fall
     /// through to a lower layer).
     pub async fn resolve(&self, key: &str) -> Result<ResolvedSetting, SettingsError> {
+        if let Some(row) = self.snapshot.get(key) {
+            return self.resolve_layers(key, row.clone());
+        }
+        let stored = sqlx::query_as::<_, StoredLayers>(
+            "SELECT value, is_secret, admin_preferred FROM server_settings WHERE key = $1",
+        )
+        .bind(key)
+        .fetch_optional(self.pool)
+        .await?;
+        self.resolve_layers(key, stored)
+    }
+
+    fn resolve_layers(
+        &self,
+        key: &str,
+        stored: Option<(serde_json::Value, bool, bool)>,
+    ) -> Result<ResolvedSetting, SettingsError> {
+        let is_secret = is_secret_key(key)
+            || crate::runtime_settings::reserved_alias(key)
+            || stored.as_ref().is_some_and(|row| row.1);
+        if let Some((value, _, true)) = &stored
+            && !crate::runtime_settings::host_registry_key(key)
+        {
+            return Ok(ResolvedSetting {
+                key: key.into(),
+                value: Some(value.clone()),
+                source: SettingSource::Database,
+                is_secret,
+            });
+        }
         let known = known_setting(key);
         let kind = known.map_or(SettingKind::Text, |known| known.kind);
         let env_name = env_var_name(key);
@@ -1126,7 +1200,7 @@ impl<'a> SettingsResolver<'a> {
                 key: key.to_string(),
                 value: Some(value),
                 source: SettingSource::Environment,
-                is_secret: is_secret_key(key),
+                is_secret: is_secret || known.is_none(),
             });
         }
         if let Some(value) = self.file_values.get(key) {
@@ -1134,12 +1208,10 @@ impl<'a> SettingsResolver<'a> {
                 key: key.to_string(),
                 value: Some(value.clone()),
                 source: SettingSource::ConfigFile,
-                is_secret: is_secret_key(key),
+                is_secret: is_secret || known.is_none(),
             });
         }
-        if let Some((value, is_secret)) =
-            SettingsStore::new().read_raw_value(self.pool, key).await?
-        {
+        if let Some((value, _, _)) = stored {
             return Ok(ResolvedSetting {
                 key: key.to_string(),
                 value: Some(value),
@@ -1151,27 +1223,55 @@ impl<'a> SettingsResolver<'a> {
             key: key.to_string(),
             value: known.and_then(KnownSetting::default_value),
             source: SettingSource::Default,
-            is_secret: is_secret_key(key),
+            is_secret,
         })
     }
 
     /// Resolves every known key plus every custom DB row, sorted by key.
     pub async fn resolve_all(&self) -> Result<Vec<ResolvedSetting>, SettingsError> {
-        let mut keys: Vec<String> = KNOWN_SETTINGS
+        Ok(self
+            .list_effective()
+            .await?
+            .into_iter()
+            .map(|entry| entry.setting)
+            .collect())
+    }
+
+    /// Include storage provenance from the same query as the values. Bound custom keys
+    /// independently so a large plugin inventory cannot hide a registered setting.
+    pub async fn list_effective(&self) -> Result<Vec<EffectiveSettingEntry>, SettingsError> {
+        let known_keys: Vec<_> = KNOWN_SETTINGS.iter().map(|setting| setting.key).collect();
+        let rows = sqlx::query_as::<_, (String, serde_json::Value, bool, bool)>(
+            "SELECT key, value, is_secret, admin_preferred FROM server_settings WHERE key=ANY($1)
+             UNION ALL (SELECT key, value, is_secret, admin_preferred FROM server_settings
+                         WHERE NOT (key=ANY($1)) ORDER BY key LIMIT $2)",
+        )
+        .bind(&known_keys)
+        .bind(i64::from(MAX_SETTINGS_LIST))
+        .fetch_all(self.pool)
+        .await?;
+        let mut entries: BTreeMap<_, _> = KNOWN_SETTINGS
             .iter()
-            .map(|known| known.key.to_string())
+            .map(|known| (known.key.to_owned(), None))
             .collect();
-        for key in SettingsStore::new().list_raw(self.pool).await?.keys() {
-            if known_setting(key).is_none() {
-                keys.push(key.clone());
-            }
+        for key in self.file_values.keys() {
+            entries.entry(key.clone()).or_default();
         }
-        let mut resolved = Vec::with_capacity(keys.len());
-        for key in keys {
-            resolved.push(self.resolve(&key).await?);
+        for (key, value, secret, preferred) in rows {
+            entries.insert(key, Some((value, secret, preferred)));
         }
-        resolved.sort_by(|left, right| left.key.cmp(&right.key));
-        Ok(resolved)
+        entries
+            .into_iter()
+            .map(|(key, stored)| {
+                let has_row = stored.is_some();
+                let admin_override = stored.as_ref().is_some_and(|row| row.2);
+                Ok(EffectiveSettingEntry {
+                    setting: self.resolve_layers(&key, stored)?,
+                    has_row,
+                    admin_override,
+                })
+            })
+            .collect()
     }
 }
 
@@ -1190,7 +1290,7 @@ pub struct ConfigExportDocument {
 /// known key with its stored value (or built-in default when unset) plus
 /// every custom stored key. Environment/config-file overlays are deployment
 /// concerns and are deliberately not captured — importing this document
-/// writes DB rows, and env/file values keep winning over them at runtime
+/// writes registry rows without changing their layer preference
 /// (see module docs). Secret values are always the redaction marker; secret
 /// keys appear only when a row was actually stored (an operator set one).
 pub async fn export_config(
