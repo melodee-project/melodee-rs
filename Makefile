@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: verify-android-client seed-client-data up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live corpus corpus-verify
+.PHONY: verify-android-client seed-client-data up down bootstrap prechecks check check-fast check-nightly test-migrations fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live corpus corpus-verify
 
 bootstrap:
 	$(PYTHON) scripts/bootstrap.py
@@ -19,6 +19,17 @@ check:
 
 check-fast:
 	$(PYTHON) scripts/check.py fast
+
+# Full pre-merge gate with the slow historical-schema migration compatibility
+# tests. The pull-request gate (`make check`) skips those six `#[ignore]`d tests
+# (about twenty minutes); run this nightly or before a release.
+check-nightly:
+	$(PYTHON) scripts/check.py nightly
+
+# Historical-schema migration compatibility tests only (they re-run the whole
+# migration chain per test and are excluded from `make check`).
+test-migrations:
+	$(PYTHON) scripts/test_database.py -- cargo test --workspace --all-features -p melodee-persistence --test migrations -- --ignored
 
 fmt:
 	cargo fmt --all

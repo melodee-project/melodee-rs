@@ -181,6 +181,7 @@ fn migrations_0024_through_0029_canonical_checksums_are_frozen() {
 }
 
 #[tokio::test]
+#[ignore = "slow historical-schema compatibility; run with `make test-migrations` (nightly gate)"]
 async fn migrations_0024_through_0029_accept_exact_comment_only_histories() {
     for (index, lineage) in COMMENT_ONLY_HISTORICAL_LINEAGES.iter().enumerate() {
         let db = TestDb::create_unmigrated(&format!("migration_comment_history_{index}")).await;
@@ -932,6 +933,7 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
 /// `releases.original_release_date` appear, and no pre-existing row content
 /// is altered by the upgrade.
 #[tokio::test]
+#[ignore = "slow historical-schema compatibility; run with `make test-migrations` (nightly gate)"]
 async fn migration_0032_forward_from_prior_schema_preserves_existing_data() {
     use melodee_persistence::MIGRATOR;
     use sqlx::migrate::Migrator;
@@ -1033,6 +1035,7 @@ async fn migration_0032_forward_from_prior_schema_preserves_existing_data() {
 /// identity is redirected to the sole exact matching Release Artist without
 /// discarding either raw observation or the prior append-only decision.
 #[tokio::test]
+#[ignore = "slow historical-schema compatibility; run with `make test-migrations` (nightly gate)"]
 async fn migration_0034_repairs_only_the_same_release_artist_identity() {
     use melodee_persistence::MIGRATOR;
     use sqlx::migrate::Migrator;
@@ -1224,6 +1227,7 @@ async fn migration_0034_repairs_only_the_same_release_artist_identity() {
 /// Release Artist observations matches. The second billing identity and all
 /// immutable observation/decision evidence remain intact.
 #[tokio::test]
+#[ignore = "slow historical-schema compatibility; run with `make test-migrations` (nightly gate)"]
 async fn migration_0040_repairs_a_unique_match_on_a_multi_artist_release() {
     use melodee_persistence::MIGRATOR;
     use sqlx::migrate::Migrator;
@@ -1443,6 +1447,7 @@ async fn migration_0040_repairs_a_unique_match_on_a_multi_artist_release() {
 /// POL-UNKNOWN decision is reconciled to Accept. A custom Unknown review
 /// decision remains pending and withheld.
 #[tokio::test]
+#[ignore = "slow historical-schema compatibility; run with `make test-migrations` (nightly gate)"]
 async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
     use melodee_domain::{
         Disposition, IngestionState, PolicyActor, PolicyRule, PolicyRuleSet, PolicyRuleSetId,
@@ -1750,6 +1755,7 @@ async fn legacy_migration_schema_enforces_the_run_contract() {
 }
 
 #[tokio::test]
+#[ignore = "slow historical-schema compatibility; run with `make test-migrations` (nightly gate)"]
 async fn all_six_legacy_file_owners_survive_an_interrupted_upgrade() {
     use melodee_persistence::asset_files;
     let db = TestDb::create_unmigrated("external_assets").await;

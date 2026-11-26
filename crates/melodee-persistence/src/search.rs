@@ -439,18 +439,35 @@ impl SearchProjectionStore {
         if status == "requested" {
             // `max(id)` cannot prove completeness once processed detail has
             // been pruned; the durable per-projection watermark participates.
-            let high_water_mark = sqlx::query_scalar::<_, i64>(
-                "SELECT GREATEST(
-                            COALESCE((SELECT max(id) FROM catalog_projection_outbox
-                                       WHERE projection_name = $1), 0),
-                            COALESCE((SELECT highest_pruned_id
-                                        FROM search_outbox_maintenance
-                                       WHERE projection_name = $1), 0)
-                        )",
+            // A database migrated from a historical schema may not have the
+            // maintenance table yet, so the read falls back to the raw maximum.
+            let maintenance_available: bool = sqlx::query_scalar(
+                "SELECT to_regclass('public.search_outbox_maintenance') IS NOT NULL",
             )
-            .bind(SEARCH_PROJECTION_NAME)
             .fetch_one(&mut *tx)
             .await?;
+            let high_water_mark = if maintenance_available {
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT GREATEST(
+                                COALESCE((SELECT max(id) FROM catalog_projection_outbox
+                                           WHERE projection_name = $1), 0),
+                                COALESCE((SELECT highest_pruned_id
+                                            FROM search_outbox_maintenance
+                                           WHERE projection_name = $1), 0)
+                            )",
+                )
+                .bind(SEARCH_PROJECTION_NAME)
+                .fetch_one(&mut *tx)
+                .await?
+            } else {
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COALESCE((SELECT max(id) FROM catalog_projection_outbox
+                                       WHERE projection_name = $1), 0)",
+                )
+                .bind(SEARCH_PROJECTION_NAME)
+                .fetch_one(&mut *tx)
+                .await?
+            };
             let new_generation_id = Uuid::now_v7();
             sqlx::query(
                 "INSERT INTO search_generations (
@@ -1388,6 +1405,38 @@ impl SearchProjectionStore {
         pool: &PgPool,
         since: OffsetDateTime,
     ) -> Result<Vec<HourlyCompletionCount>, SearchStoreError> {
+        if !search_outbox_maintenance_available(pool).await? {
+            let raw: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
+                "WITH spine AS (
+                   SELECT generate_series(
+                            date_trunc('hour', $2::timestamptz),
+                            date_trunc('hour', now()),
+                            interval '1 hour'
+                          ) AS hour
+                 ),
+                 counted AS (
+                   SELECT date_trunc('hour', processed_at) AS hour,
+                          COUNT(DISTINCT entity_id)::bigint AS count
+                     FROM catalog_projection_outbox
+                    WHERE projection_name = $1
+                      AND entity_type = 'track'
+                      AND processed_at IS NOT NULL
+                      AND processed_at >= $2
+                    GROUP BY 1
+                 )
+                 SELECT spine.hour, COALESCE(counted.count, 0)
+                   FROM spine LEFT JOIN counted USING (hour)
+                  ORDER BY 1",
+            )
+            .bind(SEARCH_PROJECTION_NAME)
+            .bind(since)
+            .fetch_all(pool)
+            .await?;
+            return Ok(raw
+                .into_iter()
+                .map(|(hour, count)| HourlyCompletionCount { hour, count })
+                .collect());
+        }
         let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
             "WITH spine AS (
                SELECT generate_series(
@@ -1438,20 +1487,41 @@ impl SearchProjectionStore {
 
     pub async fn max_outbox_id(pool: &PgPool) -> Result<i64, SearchStoreError> {
         // ADR-0214: after pruning, the highest existing id is no longer the
-        // highest id that ever existed. The pruned watermark supplies the rest.
+        // highest id that ever existed. The pruned watermark supplies the rest
+        // where the maintenance table exists (historical schemas may not).
+        if search_outbox_maintenance_available(pool).await? {
+            return Ok(sqlx::query_scalar::<_, i64>(
+                "SELECT GREATEST(
+                            COALESCE((SELECT max(id) FROM catalog_projection_outbox
+                                       WHERE projection_name = $1), 0),
+                            COALESCE((SELECT highest_pruned_id
+                                        FROM search_outbox_maintenance
+                                       WHERE projection_name = $1), 0)
+                        )",
+            )
+            .bind(SEARCH_PROJECTION_NAME)
+            .fetch_one(pool)
+            .await?);
+        }
         Ok(sqlx::query_scalar::<_, i64>(
-            "SELECT GREATEST(
-                        COALESCE((SELECT max(id) FROM catalog_projection_outbox
-                                   WHERE projection_name = $1), 0),
-                        COALESCE((SELECT highest_pruned_id
-                                    FROM search_outbox_maintenance
-                                   WHERE projection_name = $1), 0)
-                    )",
+            "SELECT COALESCE(max(id), 0) FROM catalog_projection_outbox
+              WHERE projection_name = $1",
         )
         .bind(SEARCH_PROJECTION_NAME)
         .fetch_one(pool)
         .await?)
     }
+}
+
+/// True when the ADR-0214 maintenance table exists. Historical-schema
+/// compatibility tests migrate a database to an earlier version and still call
+/// the rebuild/status paths, so those reads must not assume the table.
+async fn search_outbox_maintenance_available(pool: &PgPool) -> Result<bool, SearchStoreError> {
+    Ok(
+        sqlx::query_scalar("SELECT to_regclass('public.search_outbox_maintenance') IS NOT NULL")
+            .fetch_one(pool)
+            .await?,
+    )
 }
 
 async fn lock_rebuild_job(

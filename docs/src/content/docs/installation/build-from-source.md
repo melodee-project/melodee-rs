@@ -38,11 +38,13 @@ For a database-free checkout validation, run `make bootstrap`. It runs repositor
 tests, formatting checks, Rust library/binary unit tests, and database-free application, domain, MQL,
 policy, and media integration targets. Media tools are required for the media
 tests. PostgreSQL-backed integration tests are available through
-`make test-integration` and are part of the full `make check` gate. They require the development
+`make test-integration` and are part of the nightly `make check-nightly` gate (`make check` is the
+short pre-merge gate: repository, Python and Admin UI checks plus a full fmt/clippy compile, with no
+Rust test execution). They require the development
 database or an explicitly configured test administrator connection. Install PostgreSQL client tools
 (`psql`) for the test runner. `MELODEE_TEST_DATABASE_URL` selects the administrator database;
 tests create their own UUID-named databases and verify each target before applying migrations.
-The full gate and `make test-integration` use a disposable migrated template to reduce setup cost;
+`make check-nightly` and `make test-integration` use a disposable migrated template to reduce setup cost;
 forward-migration tests still start with an empty database. Created databases are cleaned up after
 normal completion and test failures. `python3 scripts/test_database.py --benchmark` compares fresh
 migration and template cloning on the configured test PostgreSQL instance.

@@ -17,7 +17,9 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 async fn wait_for_outbox_insert_waiter(db: &TestDb) {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    // The whole binary runs this test beside other PostgreSQL-heavy tests; the
+    // waiter must be observable under that load, not only on an idle machine.
+    tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let waiters: i64 = sqlx::query_scalar(
                 "SELECT count(*)
@@ -42,7 +44,7 @@ async fn wait_for_outbox_insert_waiter(db: &TestDb) {
 }
 
 async fn wait_for_outbox_share_lock_granted(db: &TestDb) {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let share_locks: i64 = sqlx::query_scalar(
                 "SELECT count(*) FROM pg_locks l

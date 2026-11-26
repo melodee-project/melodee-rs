@@ -56,20 +56,33 @@ class DeveloperCommandTests(unittest.TestCase):
             ("cargo", "test", "--workspace", "--all-features", "--lib", "--bins"),
         )
 
-    def test_check_modes_preserve_database_scope(self) -> None:
-        with mock.patch.object(self.check, "run") as run:
-            self.check.run_checks("fast")
-        commands = [call.args[0] for call in run.call_args_list]
-        self.assertIn(list(self.bootstrap.UNIT_TEST_COMMAND), commands)
-        self.assertNotIn(["cargo", "test", "--workspace", "--all-features"], commands)
+    def test_check_modes_keep_test_execution_in_the_nightly_tier(self) -> None:
+        # The development and pre-merge gates are lint/compile/repository
+        # gates; every Rust test suite runs in the nightly/release tier.
+        for mode in ("fast", "full"):
+            with (
+                mock.patch.object(self.check, "run") as run,
+                mock.patch.object(self.check.shutil, "which", return_value=None),
+            ):
+                self.check.run_checks(mode)
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertNotIn(list(self.bootstrap.UNIT_TEST_COMMAND), commands)
+            self.assertNotIn(
+                ["cargo", "test", "--workspace", "--all-features"],
+                commands,
+            )
 
         with (
             mock.patch.object(self.check, "run") as run,
             mock.patch.object(self.check.shutil, "which", return_value=None),
         ):
-            self.check.run_checks("full")
+            self.check.run_checks("nightly")
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertIn([sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"], commands)
+        self.assertIn(list(self.bootstrap.UNIT_TEST_COMMAND), commands)
+        self.assertIn(
+            [sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"],
+            commands,
+        )
 
     def test_makefile_uses_explicit_check_and_test_scope_names(self) -> None:
         lines = (ROOT / "Makefile").read_text().splitlines()
@@ -91,6 +104,8 @@ class DeveloperCommandTests(unittest.TestCase):
                 "corpus-verify",
                 "check",
                 "check-fast",
+                "check-nightly",
+                "test-migrations",
                 "deny",
                 "docs",
                 "docs-site-check",

@@ -48,7 +48,12 @@ python3 scripts/do-prechecks.py
 
 `make prechecks` is the same entry point. The script checks unstaged and staged Git diffs,
 runs the full `make check` gate, and validates/builds the documentation site. It streams
-output, reports timings, and stops at the first failure. It requires pnpm and cargo-deny
+output, reports timings, and stops at the first failure. Use `make check-fast` while iterating
+and `make check` before opening a PR. `make check` is the pre-merge tier: repository, Python and
+Admin UI gates plus a full fmt/clippy workspace compile, with no Rust test execution. **All Rust
+test suites are the nightly/release tier**: `make check-nightly` runs them, the scheduled CI
+workflow runs them (and pushes to `main`), and `make test-migrations` runs just the historical
+migration compatibility tests. It requires pnpm and cargo-deny
 instead of accepting the full gate's local tool skips. Install the pinned Rust toolchain,
 Node.js/pnpm, cargo-deny, FFmpeg/ffprobe, and fpcalc first, and prepare the development/test
 PostgreSQL instance as described in [the source-build guide](docs/src/content/docs/installation/build-from-source.md).

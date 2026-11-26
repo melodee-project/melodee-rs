@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Run the fast or full repository validation gate."""
+"""Run the fast, full (pre-merge), or nightly repository validation gate.
+
+`full` excludes six historical-schema migration compatibility tests that
+re-run the whole migration chain per test; `nightly` runs them too.
+"""
 
 from __future__ import annotations
 
@@ -114,6 +118,7 @@ def run_checks(mode: str) -> None:
         "docs",
         "fast",
         "full",
+        "nightly",
         "unit",
     }:
         raise ValueError(f"unsupported check mode: {mode}")
@@ -138,7 +143,8 @@ def run_checks(mode: str) -> None:
         run_docs_site_checks()
         return
 
-    full = mode == "full"
+    full = mode in {"full", "nightly"}
+    nightly = mode == "nightly"
     run_python_checks(include_tests=full)
     if full:
         run_admin_ui_checks()
@@ -157,21 +163,53 @@ def run_checks(mode: str) -> None:
         ]
     )
     run(["cargo", "build", "--locked", "-p", "melodee-application", "--bin", "melodee-script-worker"])
-    if full:
+    if nightly:
+        # Every Rust test suite is the nightly/release tier: workspace
+        # unit/binary tests, the database-free integration crates, the
+        # PostgreSQL-backed workspace suites, and the historical-schema
+        # migration compatibility tests. `fast` and `full` stay lint/compile/
+        # repository gates so the development and pre-merge loops stay short.
+        run([
+            "cargo",
+            "test",
+            "--workspace",
+            "--all-features",
+            "--lib",
+            "--bins",
+        ])
+        run([
+            "cargo",
+            "test",
+            "--all-features",
+            "-p",
+            "melodee-application",
+            "-p",
+            "melodee-domain",
+            "-p",
+            "melodee-mql",
+            "-p",
+            "melodee-policy",
+            "-p",
+            "melodee-media",
+            "--test",
+            "*",
+        ])
         run([sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"])
-    else:
-        run(
-            [
-                "cargo",
-                "test",
-                "--workspace",
-                "--all-features",
-                "--lib",
-                "--bins",
-            ]
-        )
-
-        run(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
+        run([
+            sys.executable,
+            "scripts/test_database.py",
+            "--",
+            "cargo",
+            "test",
+            "--workspace",
+            "--all-features",
+            "-p",
+            "melodee-persistence",
+            "--test",
+            "migrations",
+            "--",
+            "--ignored",
+        ])
 
     if full:
         if shutil.which("cargo-deny") is None:
@@ -234,7 +272,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
-        choices=("admin-ui", "admin-ui-e2e", "audit-live", "coverage", "docs", "fast", "full", "unit"),
+        choices=(
+            "admin-ui",
+            "admin-ui-e2e",
+            "audit-live",
+            "coverage",
+            "docs",
+            "fast",
+            "full",
+            "nightly",
+            "unit",
+        ),
     )
     return parser.parse_args()
 

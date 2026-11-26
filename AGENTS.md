@@ -20,14 +20,23 @@ template.
   library/binary tests and database-free application, domain, MQL, policy, and media integration targets.
   It intentionally excludes PostgreSQL integration, compatibility captures, UI
   static builds, and dependency auditing.
-- **Full local gate: `make check`** (`python3 scripts/check.py full`). Runs, in
+- **Pre-merge gate: `make check`** (`python3 scripts/check.py full`). Runs, in
   order: repository/doc validation → requirements index check → Python tests → admin-ui gate
   (pnpm install --frozen-lockfile, typecheck, lint, i18n check, unit tests, build; skipped
   locally if pnpm is absent) → `cargo fmt --check` → `clippy -D warnings` →
-  `cargo test --workspace --all-features` → `cargo deny check` (skipped locally if cargo-deny is
-  absent; full CI installs both pnpm and cargo-deny). Run this before considering work done.
-  Admin UI work additionally runs Playwright e2e/visual tests via `make admin-ui-e2e`
-  (CI: `.github/workflows/admin-ui.yml`).
+  `cargo deny check` (skipped locally if cargo-deny is absent; full CI installs both pnpm and
+  cargo-deny). It compiles the workspace but intentionally runs **no Rust test suite**, so the
+  loop stays short. Use `make check-fast` (`python3 scripts/check.py fast`) as the inner
+  development loop (repository validation + fmt + clippy + the script-worker build for the
+  changed code).
+- **Nightly/release gate: `make check-nightly`** (`python3 scripts/check.py nightly`) runs
+  everything `full` does **plus every Rust suite**: workspace unit/binary tests, the
+  database-free application/domain/MQL/policy/media integration targets, the PostgreSQL-backed
+  workspace suites, and the six historical-schema migration compatibility tests. `make
+  test-migrations` runs only those migration tests. PR CI runs `full`; pushes to `main`, the
+  scheduled workflow and manual dispatches run `nightly`. Do not claim a behavior change is
+  verified until the relevant suite has passed in the nightly tier. Admin UI work additionally runs Playwright e2e/visual tests via
+  `make admin-ui-e2e` (CI: `.github/workflows/admin-ui.yml`).
 - **Run `cargo fmt --all` before `make check`.** `fmt --check` is a hard gate and fails on
   non-canonical formatting.
 - **Runtime audit:** `make audit` runs read-only consistency invariants against the development

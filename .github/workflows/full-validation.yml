@@ -29,7 +29,7 @@ jobs:
   validate:
     name: Full repository validation
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     services:
       # `uuidv7()` is a PostgreSQL 18 built-in used by current migrations and
@@ -81,5 +81,15 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.20.2 --locked
 
-      - name: Run full gate
+      # Pull requests use the short pre-merge gate: repository, Python and
+      # Admin UI gates plus a full fmt/clippy workspace compile, with no Rust
+      # test execution. Every Rust test suite (unit, integration, PostgreSQL
+      # and historical migration compatibility) is the nightly tier and runs
+      # for pushes to main, the schedule and manual dispatches.
+      - name: Run pre-merge gate
+        if: github.event_name == 'pull_request'
         run: python3 scripts/check.py full
+
+      - name: Run nightly gate (includes PostgreSQL integration)
+        if: github.event_name != 'pull_request'
+        run: python3 scripts/check.py nightly
