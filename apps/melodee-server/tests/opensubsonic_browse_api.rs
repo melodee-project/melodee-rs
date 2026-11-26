@@ -687,6 +687,99 @@ async fn get_artists_matches_the_captured_shape() {
         .expect("rated aurora");
     assert_eq!(aurora_entry["userRating"], 5);
     assert_eq!(aurora_entry["userStarred"], "2026-08-07T00:00:00Z");
+
+    let (_, _, jsonp) = respond(
+        state,
+        enforced_get(&authed(
+            "/rest/getArtists.view?f=jsonp&callback=render&v=1.16.1&c=phase0",
+        )),
+    )
+    .await;
+    let jsonp = String::from_utf8(jsonp).unwrap();
+    let inner = jsonp
+        .strip_prefix("render(")
+        .unwrap()
+        .strip_suffix(')')
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(inner).unwrap(),
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn artist_index_average_excludes_the_caller_and_zero_ratings() {
+    let db = common::TestDb::create("os_browse_artist_ratings").await;
+    let state = state(&db).await;
+    let seeded = seed_index_fixture(&db).await;
+    let aurora = seeded
+        .iter()
+        .find(|(name, _, _)| name == "Aurora Fields")
+        .unwrap()
+        .2;
+    let now = OffsetDateTime::now_utc();
+    for (name, rating) in [("other-positive", 3), ("other-zero", 0)] {
+        let id = Uuid::now_v7();
+        let normalized = name.to_uppercase();
+        let email = format!("{name}@example.test");
+        let normalized_email = email.to_uppercase();
+        AuthStore::new()
+            .import_user(
+                &db.pool,
+                &NativeUserImport {
+                    id,
+                    public_api_id: Uuid::now_v7(),
+                    username: name,
+                    normalized_username: &normalized,
+                    email: &email,
+                    normalized_email: &normalized_email,
+                    password_hash: "fixture",
+                    password_hash_algorithm: PasswordHashAlgorithm::Bcrypt,
+                    stream_signing_key: "test-key",
+                    is_admin: false,
+                    is_editor: false,
+                    enabled: true,
+                    locked: false,
+                    blacklisted: false,
+                    preferred_language: None,
+                    preferred_theme: None,
+                    auth_revision: 1,
+                    roles: &[],
+                    created_at: now,
+                    updated_at: now,
+                },
+            )
+            .await
+            .unwrap();
+        NativeUserStateStore::mutate_artist(
+            &db.pool,
+            id,
+            aurora,
+            NativeUserStateMutation::Rating(rating),
+            now,
+        )
+        .await
+        .unwrap();
+    }
+    for endpoint in ["getArtists", "getIndexes"] {
+        let path = format!("/rest/{endpoint}.view?f=json&v=1.16.1&c=phase0");
+        let (_, _, body) = respond(state.clone(), enforced_get(&authed(&path))).await;
+        let env = envelope(&body);
+        let key = if endpoint == "getArtists" {
+            "artists"
+        } else {
+            "indexes"
+        };
+        let entry = env[key]["index"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|group| group["artist"].as_array().unwrap().iter())
+            .find(|artist| artist["id"] == format!("artist_{aurora}"))
+            .unwrap();
+        assert_eq!(entry["userRating"], 5);
+        assert_eq!(entry["averageRating"], 3.0);
+    }
 }
 
 #[tokio::test]
@@ -705,6 +798,12 @@ async fn get_artists_xml_matches_the_captured_bytes() {
         headers.get(header::CONTENT_TYPE).unwrap(),
         "application/xml"
     );
+    let (_, _, fallback) = respond(
+        state,
+        enforced_get(&authed("/rest/getArtists.view?f=jsonp&v=1.16.1&c=phase0")),
+    )
+    .await;
+    assert_eq!(fallback, body);
     let xml = String::from_utf8(body).unwrap();
     // The captured envelope shell with the six-decimal averageRating and the
     // starred attributes (Aurora only).

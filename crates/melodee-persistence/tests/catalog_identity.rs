@@ -60,6 +60,371 @@ fn frozen_artist_public_id(slug: &str) -> Uuid {
     Uuid::parse_str(value).expect("valid frozen Artist public UUID")
 }
 
+async fn wait_for_identity_lock(pool: &PgPool, fragment: &str) {
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE $1)")
+                .bind(format!("%{fragment}%")).fetch_one(pool).await.expect("inspect identity lock");
+            if waiting { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("identity operation reaches expected lock");
+}
+
+#[tokio::test]
+async fn confirmed_match_revalidates_current_decision_after_parent_lock_wait() {
+    let db = TestDb::create("match_lock_binding_race").await;
+    let fixture = seed_published_release(
+        &db,
+        7611,
+        CatalogFixturePresentation {
+            release_title: "Binding Race",
+            release_artist: "Binding Artist",
+            track_title: "Binding Track",
+            track_artist: "Binding Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let store = CatalogStore;
+    let worker = WorkerId::new();
+    let now = OffsetDateTime::now_utc();
+    store
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixture");
+    store
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("binding-lock-test", "test"),
+            now,
+        )
+        .await
+        .expect("import fixture");
+    let observation: Uuid = sqlx::query_scalar("SELECT observed_artist_id FROM track_artists WHERE track_id=(SELECT id FROM tracks WHERE release_id=$1) AND role='primary' LIMIT 1")
+        .bind(fixture.release_id.into_uuid()).fetch_one(&db.pool).await.expect("read observation");
+    let candidate = Uuid::now_v7();
+    insert_artist(
+        &db.pool,
+        candidate,
+        Uuid::now_v7(),
+        "Binding Candidate",
+        "binding candidate",
+        "group",
+        None,
+    )
+    .await
+    .expect("insert candidate");
+    let decision = ArtistMatchDecision::new(
+        NewArtistMatchDecision {
+            id: ArtistMatchDecisionId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(observation),
+            artist_id: ArtistId::from_uuid(candidate),
+            outcome: ArtistMatchOutcome::Confirmed,
+            authority: DecisionAuthority::Administrator {
+                actor: "test-admin".to_owned(),
+            },
+            locked: false,
+            reason: "confirm after binding race".to_owned(),
+            decided_at: now + Duration::seconds(2),
+        },
+        &[],
+    )
+    .expect("decision");
+    let expected = decision.id().into_uuid();
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(candidate)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock candidate before Observation");
+    let pool = db.pool.clone();
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .record_artist_match_decision(
+                &pool,
+                &decision,
+                Confidence::new(10_000).expect("confidence"),
+                serde_json::json!({}),
+            )
+            .await
+    });
+    wait_for_identity_lock(&db.pool, "SELECT id FROM artists WHERE id=ANY").await;
+    let previous: Uuid = sqlx::query_scalar(
+        "SELECT decision_id FROM artist_match_current WHERE observed_artist_id=$1",
+    )
+    .bind(observation)
+    .fetch_one(&mut *blocker)
+    .await
+    .expect("current decision");
+    let intervening = Uuid::now_v7();
+    sqlx::query("INSERT INTO artist_match_decisions(id,observed_artist_id,artist_id,outcome,authority,confidence,reason,is_locked,predecessor_decision_id,payload,created_at) VALUES($1,$2,$3,'confirmed','admin',10000,'intervening decision',false,$4,'{}'::jsonb,now())")
+        .bind(intervening).bind(observation).bind(candidate).bind(previous).execute(&mut *blocker).await.expect("insert intervening decision");
+    sqlx::query("UPDATE artist_match_current SET decision_id=$2,updated_at=now() WHERE observed_artist_id=$1")
+        .bind(observation).bind(intervening).execute(&mut *blocker).await.expect("advance current decision");
+    blocker.commit().await.expect("commit intervening binding");
+    tokio::time::timeout(std::time::Duration::from_secs(15), task)
+        .await
+        .expect("decision resumes")
+        .expect("join decision")
+        .expect("revalidated decision succeeds");
+    let current: Uuid = sqlx::query_scalar(
+        "SELECT decision_id FROM artist_match_current WHERE observed_artist_id=$1",
+    )
+    .bind(observation)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read current decision");
+    assert_eq!(current, expected);
+    let predecessor: Uuid = sqlx::query_scalar(
+        "SELECT predecessor_decision_id FROM artist_match_decisions WHERE id=$1",
+    )
+    .bind(expected)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read decision predecessor");
+    assert_eq!(
+        predecessor, intervening,
+        "retry must extend the committed chain"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn confirmed_match_locks_other_participation_artists_before_release() {
+    let db = TestDb::create("match_participation_parent").await;
+    let fixture = seed_published_release(
+        &db,
+        7612,
+        CatalogFixturePresentation {
+            release_title: "Parent Closure",
+            release_artist: "Other Billed Artist",
+            track_title: "Closure Track",
+            track_artist: "Current Track Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("closure-race", "test"),
+            now,
+        )
+        .await
+        .expect("import fixture");
+    let release = fixture.release_id.into_uuid();
+    let observation: Uuid = sqlx::query_scalar("SELECT observed_artist_id FROM track_artists WHERE track_id=(SELECT id FROM tracks WHERE release_id=$1) AND role='primary' LIMIT 1")
+        .bind(release).fetch_one(&db.pool).await.expect("read observation");
+    let other: Uuid = sqlx::query_scalar(
+        "SELECT artist_id FROM release_artists WHERE release_id=$1 AND role='primary' LIMIT 1",
+    )
+    .bind(release)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read other Artist");
+    let candidate = Uuid::now_v7();
+    insert_artist(
+        &db.pool,
+        candidate,
+        Uuid::now_v7(),
+        "Candidate",
+        "candidate",
+        "group",
+        None,
+    )
+    .await
+    .expect("insert candidate");
+    let decision = ArtistMatchDecision::new(
+        NewArtistMatchDecision {
+            id: ArtistMatchDecisionId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(observation),
+            artist_id: ArtistId::from_uuid(candidate),
+            outcome: ArtistMatchOutcome::Confirmed,
+            authority: DecisionAuthority::Administrator {
+                actor: "test".into(),
+            },
+            locked: false,
+            reason: "closure race".into(),
+            decided_at: now,
+        },
+        &[],
+    )
+    .expect("decision");
+    let mut blocker = db.pool.begin().await.expect("begin Artist blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(other)
+        .execute(&mut *blocker)
+        .await
+        .expect("hold other Artist");
+    let pool = db.pool.clone();
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .record_artist_match_decision(
+                &pool,
+                &decision,
+                Confidence::new(10_000).expect("confidence"),
+                serde_json::json!({}),
+            )
+            .await
+    });
+    wait_for_identity_lock(&db.pool, "SELECT id FROM artists WHERE id=ANY").await;
+    // A concurrent merge holding this Artist can still acquire the Release:
+    // the match must not be holding it while waiting on the Artist.
+    sqlx::query("SELECT id FROM releases WHERE id=$1 FOR UPDATE NOWAIT")
+        .bind(release)
+        .execute(&mut *blocker)
+        .await
+        .expect("Release is not held by waiting match");
+    blocker.commit().await.expect("release blocker");
+    tokio::time::timeout(std::time::Duration::from_secs(15), task)
+        .await
+        .expect("match completes")
+        .expect("join")
+        .expect("record match");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn negative_assertion_create_and_revoke_lock_artist_before_observation() {
+    let db = TestDb::create("negative_parent_lock").await;
+    let fixture = seed_published_release(
+        &db,
+        7612,
+        CatalogFixturePresentation {
+            release_title: "Negative Race",
+            release_artist: "Negative Artist",
+            track_title: "Negative Track",
+            track_artist: "Negative Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("negative-lock-test", "test"),
+            now,
+        )
+        .await
+        .expect("import fixture");
+    let observation: Uuid = sqlx::query_scalar("SELECT observed_artist_id FROM track_artists WHERE track_id=(SELECT id FROM tracks WHERE release_id=$1) AND role='primary' LIMIT 1")
+        .bind(fixture.release_id.into_uuid()).fetch_one(&db.pool).await.expect("read observation");
+    let candidate = Uuid::now_v7();
+    insert_artist(
+        &db.pool,
+        candidate,
+        Uuid::now_v7(),
+        "Negative Candidate",
+        "negative candidate",
+        "group",
+        None,
+    )
+    .await
+    .expect("insert candidate");
+    let assertion_id = ArtistNegativeAssertionId::new();
+    let assertion = ArtistNegativeAssertion {
+        id: assertion_id,
+        observed_artist_id: ObservedArtistId::from_uuid(observation),
+        rejected_artist_id: ArtistId::from_uuid(candidate),
+        authority: DecisionAuthority::Administrator {
+            actor: "test-admin".to_owned(),
+        },
+        locked: true,
+        reason: "reject candidate".to_owned(),
+        decided_at: now,
+    };
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(candidate)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock Artist");
+    let pool = db.pool.clone();
+    let create = tokio::spawn(async move {
+        CatalogStore
+            .record_artist_negative_assertion(&pool, &assertion)
+            .await
+    });
+    wait_for_identity_lock(&db.pool, "SELECT id FROM artists WHERE id=$1 FOR KEY SHARE").await;
+    sqlx::query("SELECT id FROM observed_artists WHERE id=$1 FOR UPDATE")
+        .bind(observation)
+        .execute(&mut *blocker)
+        .await
+        .expect("Observation is not locked behind Artist");
+    blocker.commit().await.expect("release create blocker");
+    create
+        .await
+        .expect("join create")
+        .expect("create assertion");
+
+    let mut blocker = db.pool.begin().await.expect("begin revoke blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(candidate)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock Artist");
+    let pool = db.pool.clone();
+    let predecessor = assertion_id.into_uuid();
+    let revoke = tokio::spawn(async move {
+        CatalogStore
+            .revoke_artist_negative_assertion(
+                &pool,
+                predecessor,
+                &DecisionAuthority::Administrator {
+                    actor: "test-admin".to_owned(),
+                },
+                "revoke",
+                now,
+            )
+            .await
+    });
+    wait_for_identity_lock(&db.pool, "SELECT id FROM artists WHERE id=$1 FOR KEY SHARE").await;
+    sqlx::query("SELECT id FROM observed_artists WHERE id=$1 FOR UPDATE")
+        .bind(observation)
+        .execute(&mut *blocker)
+        .await
+        .expect("Observation remains unlocked while revoke waits");
+    blocker.commit().await.expect("release revoke blocker");
+    revoke
+        .await
+        .expect("join revoke")
+        .expect("revoke assertion");
+    assert!(matches!(
+        CatalogStore
+            .revoke_artist_negative_assertion(
+                &db.pool,
+                predecessor,
+                &DecisionAuthority::Administrator {
+                    actor: "test-admin".to_owned()
+                },
+                "stale revoke",
+                now
+            )
+            .await,
+        Err(CatalogStoreError::MutationConflict)
+    ));
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn exact_same_names_coexist_with_distinct_internal_and_legacy_public_ids() {
     let db = TestDb::create("catalog_exact_same_artist_names").await;
@@ -792,6 +1157,24 @@ async fn aliases_manual_decisions_and_negative_assertions_are_durable_and_scoped
         )
         .await
         .expect("append audited assertion reversal through CatalogStore");
+    let (local_seeds, provider_seeds): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE artist_id=$2),
+                count(*) FILTER (WHERE external_provider='fake-authority' AND external_id='candidate-404')
+         FROM catalog_identity_reconciliation_seed WHERE observed_artist_id=$1",
+    )
+    .bind(first_observation.into_uuid())
+    .bind(rejected_artist_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read negative assertion identity seeds");
+    assert!(
+        local_seeds >= 2,
+        "local assertion and revocation must both seed reconciliation"
+    );
+    assert!(
+        provider_seeds >= 1,
+        "provider assertion must seed its exact identity key"
+    );
     assert!(
         !store
             .artist_candidate_is_suppressed(

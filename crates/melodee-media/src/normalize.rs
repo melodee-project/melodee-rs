@@ -8,6 +8,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
+    io::Read,
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
     sync::Arc,
@@ -273,8 +274,9 @@ pub fn normalize_release(
             }
             ObservedFileKind::Artwork => {
                 let source = resolve_source_file(source_root, &file.relative_path)?;
-                verify_observed_source(file, &source)?;
-                match process_external_artwork(file, &source, &work_dir, options) {
+                let result = preflight_artwork(file, &source, options)
+                    .and_then(|()| process_external_artwork(file, &source, &work_dir, options));
+                match result {
                     Ok(Some(art)) if artwork_paths.insert(art.output_path.clone()) => {
                         normalized_artwork.push(art);
                     }
@@ -282,6 +284,11 @@ pub fn normalize_release(
                     Err(NormalizationError::Canceled) => {
                         return Err(NormalizationError::Canceled);
                     }
+                    Err(
+                        error @ (NormalizationError::SourceChanged(_)
+                        | NormalizationError::SourceMissing(_)
+                        | NormalizationError::SourceUnreadable { .. }),
+                    ) => return Err(error),
                     Err(error) => findings.push(artwork_failure(file, &error)),
                 }
                 verify_observed_source(file, &source)?;
@@ -289,7 +296,9 @@ pub fn normalize_release(
             _ => {}
         }
 
-        if file.kind == ObservedFileKind::Audio {
+        // Both audio paths just checked the source hash after processing. A
+        // further check is needed only if artwork extraction reads it again.
+        if file.kind == ObservedFileKind::Audio && !file.embedded_artwork.is_empty() {
             // Embedded artwork extraction from audio files.
             for (picture_index, embedded) in file.embedded_artwork.iter().enumerate() {
                 if is_canceled(options) {
@@ -1154,7 +1163,6 @@ fn process_external_artwork(
     work_dir: &Path,
     options: &NormalizationOptions,
 ) -> Result<Option<NormalizedArtwork>, NormalizationError> {
-    preflight_artwork(source, options)?;
     let output_path = output_path_for(work_dir, "artwork/external", &file.relative_path, "jpg")?;
     ensure_output_absent(&output_path)?;
 
@@ -1237,6 +1245,7 @@ struct VerifiedArtwork {
 }
 
 fn preflight_artwork(
+    observed: &ObservedFile,
     source: &Path,
     options: &NormalizationOptions,
 ) -> Result<(), NormalizationError> {
@@ -1253,17 +1262,34 @@ fn preflight_artwork(
         })?
         .len();
     if size == 0 || size > options.max_artwork_bytes as u64 {
+        // Even rejected artwork must be checked against the inspection
+        // evidence before its failure is treated as a nonfatal finding.
+        verify_observed_source(observed, source)?;
         return Err(NormalizationError::Verification(format!(
             "artwork byte size {} is outside 1..={} bytes",
             size, options.max_artwork_bytes
         )));
     }
-    let bytes = read_limited(file, options.max_artwork_bytes).map_err(|error| {
-        NormalizationError::SourceUnreadable {
+    let limit = options.max_artwork_bytes.saturating_add(1);
+    let bytes = read_limited(file.take(u64::try_from(limit).unwrap_or(u64::MAX)), limit).map_err(
+        |error| NormalizationError::SourceUnreadable {
             path: source.to_path_buf(),
             message: error.to_string(),
-        }
-    })?;
+        },
+    )?;
+    if bytes.len() > options.max_artwork_bytes {
+        verify_observed_source(observed, source)?;
+        return Err(NormalizationError::Verification(format!(
+            "artwork grew beyond the {} byte limit",
+            options.max_artwork_bytes
+        )));
+    }
+    let actual = blake3::hash(&bytes).to_hex().to_string();
+    if observed.content_hash.as_deref() != Some(actual.as_str()) {
+        return Err(NormalizationError::SourceChanged(
+            observed.relative_path.clone(),
+        ));
+    }
     let (width, height) = image_dimensions(&bytes).ok_or_else(|| {
         NormalizationError::Verification("unsupported or malformed artwork header".to_owned())
     })?;
@@ -1285,21 +1311,27 @@ fn verify_normalized_artwork(
     work_dir: &Path,
     options: &NormalizationOptions,
 ) -> Result<VerifiedArtwork, NormalizationError> {
-    let (byte_hash, size) = hash_file(output).map_err(|error| {
-        NormalizationError::Verification(format!("normalized artwork could not be hashed: {error}"))
-    })?;
-    if size == 0 || size > options.max_artwork_bytes as u64 {
-        return Err(NormalizationError::Verification(format!(
-            "normalized artwork byte size {size} is outside 1..={} bytes",
-            options.max_artwork_bytes
-        )));
-    }
     let file = secure_fs::open_read(output).map_err(|error| {
         NormalizationError::Verification(format!("normalized artwork could not be opened: {error}"))
     })?;
-    let bytes = read_limited(file, options.max_artwork_bytes).map_err(|error| {
-        NormalizationError::Verification(format!("normalized artwork could not be read: {error}"))
-    })?;
+    // Hash the exact bytes inspected below, rather than opening the output a
+    // second time: an output may change between two independent reads.
+    let limit = options.max_artwork_bytes.saturating_add(1);
+    let bytes = read_limited(file.take(u64::try_from(limit).unwrap_or(u64::MAX)), limit).map_err(
+        |error| {
+            NormalizationError::Verification(format!(
+                "normalized artwork could not be read: {error}"
+            ))
+        },
+    )?;
+    if bytes.is_empty() || bytes.len() > options.max_artwork_bytes {
+        return Err(NormalizationError::Verification(format!(
+            "normalized artwork byte size {} is outside 1..={} bytes",
+            bytes.len(),
+            options.max_artwork_bytes
+        )));
+    }
+    let byte_hash = blake3::hash(&bytes).to_hex().to_string();
     if !bytes.starts_with(&[0xff, 0xd8]) {
         return Err(NormalizationError::Verification(
             "normalized artwork is not JPEG".to_owned(),
@@ -3379,15 +3411,72 @@ mod tests {
     fn artwork_preflight_rejects_byte_oversized_input() {
         let temp = test_temp_dir();
         let artwork = temp.join("oversized.jpg");
-        fs::write(&artwork, [0xff, 0xd8, 0xff, 0xd9, 0, 0, 0, 0]).unwrap();
+        let bytes = [0xff, 0xd8, 0xff, 0xd9, 0, 0, 0, 0];
+        fs::write(&artwork, bytes).unwrap();
+        let observed = artwork_observation(&bytes);
         let options = NormalizationOptions {
             max_artwork_bytes: 4,
             ..NormalizationOptions::default()
         };
         assert!(matches!(
-            preflight_artwork(&artwork, &options),
+            preflight_artwork(&observed, &artwork, &options),
             Err(NormalizationError::Verification(_))
         ));
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    fn artwork_observation(bytes: &[u8]) -> ObservedFile {
+        ObservedFile {
+            relative_path: "cover.jpg".to_owned(),
+            kind: ObservedFileKind::Artwork,
+            size_bytes: bytes.len() as u64,
+            modified_at: None,
+            content_hash: Some(blake3::hash(bytes).to_hex().to_string()),
+            mime_type: None,
+            kind_code: None,
+            metadata: None,
+            audio: None,
+            findings: Vec::new(),
+            embedded_artwork: Vec::new(),
+            sidecar_type: None,
+            bytes_read_errors: false,
+        }
+    }
+
+    #[test]
+    fn artwork_preflight_detects_same_size_source_replacement() {
+        let temp = test_temp_dir();
+        let artwork = temp.join("cover.jpg");
+        let observed = artwork_observation(b"before");
+        fs::write(&artwork, b"after!").unwrap();
+        for max_artwork_bytes in [4, 1024] {
+            let options = NormalizationOptions {
+                max_artwork_bytes,
+                ..NormalizationOptions::default()
+            };
+            assert!(matches!(
+                preflight_artwork(&observed, &artwork, &options),
+                Err(NormalizationError::SourceChanged(_))
+            ));
+        }
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn normalized_artwork_rejects_empty_oversized_and_corrupt_bytes() {
+        let temp = test_temp_dir();
+        let artwork = temp.join("output.jpg");
+        let options = NormalizationOptions {
+            max_artwork_bytes: 4,
+            ..NormalizationOptions::default()
+        };
+        for contents in [&b""[..], &b"12345"[..], &b"nope"[..]] {
+            fs::write(&artwork, contents).unwrap();
+            assert!(matches!(
+                verify_normalized_artwork(&artwork, &temp, &options),
+                Err(NormalizationError::Verification(_))
+            ));
+        }
         fs::remove_dir_all(temp).unwrap();
     }
 

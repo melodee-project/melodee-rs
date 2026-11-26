@@ -43,6 +43,46 @@ impl Fixture {
     }
 }
 
+#[tokio::test]
+async fn large_range_crosses_read_batches_and_disconnect_releases_admission() {
+    let mut fixture = Fixture::new(1);
+    let content: Vec<u8> = (0..(700 * 1024)).map(|i| (i % 251) as u8).collect();
+    fs::write(
+        fixture._temp.path().join("releases/01/media/asset.flac"),
+        &content,
+    )
+    .unwrap();
+    fixture.asset.byte_size = content.len() as u64;
+    let start = 1023;
+    let end = content.len() - 17;
+    let mut body = fixture
+        .service
+        .stream_range(&fixture.asset, start as u64, end as u64, None)
+        .await
+        .unwrap();
+    let mut received = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.unwrap();
+        if let Ok(data) = frame.into_data() {
+            assert!(data.len() <= 64 * 1024);
+            received.extend_from_slice(&data);
+        }
+    }
+    assert_eq!(received, content[start..=end]);
+    drop(body);
+    assert_eq!(fixture.service.available_permits(), 1);
+
+    let mut body = fixture
+        .service
+        .stream_full(&fixture.asset, None)
+        .await
+        .unwrap();
+    assert!(body.frame().await.unwrap().is_ok());
+    assert_eq!(fixture.service.available_permits(), 0);
+    drop(body);
+    assert_eq!(fixture.service.available_permits(), 1);
+}
+
 #[test]
 fn captured_token_is_url_safe_timed_client_bound_and_replayable_for_seeks() {
     let codec = StreamTokenCodec;

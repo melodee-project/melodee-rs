@@ -5,7 +5,7 @@
 //! inserts the normalized catalog, semantic overlay, audit/outbox evidence,
 //! and `Cataloged` work-item transition.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use melodee_domain::{
     ArtistId, AudioIdentityId, CatalogImportId, CatalogSemanticOverlay, CatalogSemanticOverlayId,
@@ -18,7 +18,7 @@ use melodee_domain::{
     parse_slash_artist_billing,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
+use sqlx::{Acquire, PgPool, Postgres, QueryBuilder, Transaction};
 use thiserror::Error;
 use time::{Date, Month, OffsetDateTime};
 use tracing::{info, instrument, warn};
@@ -363,6 +363,51 @@ struct ReleaseMovedObservation {
     merged_ordinal: i32,
 }
 
+// Preserve the SQL's per-Track observation order without rescanning every
+// observation for each Track; a large box set can carry thousands of both.
+fn prepare_release_move(
+    source_tracks: &[(Uuid, i32)],
+    source_observations: &[(Uuid, Uuid, i32)],
+    target_max: i32,
+    target_observation_max: i32,
+) -> Result<Vec<ReleaseMovedTrack>, CatalogStoreError> {
+    let mut by_track: HashMap<Uuid, Vec<(Uuid, i32)>> = HashMap::new();
+    for &(observation_id, track_id, ordinal) in source_observations {
+        by_track
+            .entry(track_id)
+            .or_default()
+            .push((observation_id, ordinal));
+    }
+    let mut next_observation_ordinal = target_observation_max;
+    let mut moved = Vec::with_capacity(source_tracks.len());
+    for (index, &(track_id, original_ordinal)) in source_tracks.iter().enumerate() {
+        let merged_ordinal = target_max
+            .checked_add(i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?)
+            .ok_or(CatalogStoreError::NumericOverflow)?;
+        let mut observations = Vec::new();
+        if let Some(group) = by_track.remove(&track_id) {
+            observations.reserve(group.len());
+            for (observation_id, original_ordinal) in group {
+                next_observation_ordinal = next_observation_ordinal
+                    .checked_add(1)
+                    .ok_or(CatalogStoreError::NumericOverflow)?;
+                observations.push(ReleaseMovedObservation {
+                    observation_id,
+                    original_ordinal,
+                    merged_ordinal: next_observation_ordinal,
+                });
+            }
+        }
+        moved.push(ReleaseMovedTrack {
+            track_id,
+            original_ordinal,
+            merged_ordinal,
+            observations,
+        });
+    }
+    Ok(moved)
+}
+
 /// Stored exact-once import receipt for diagnostics and retry comparison.
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct StoredCatalogImport {
@@ -441,11 +486,16 @@ impl CatalogStore {
         // a background workload class. Combined with the request-path metric it
         // shows acquisition contention separately from query time.
         let acquire_started = std::time::Instant::now();
-        let mut tx = pool.begin().await?;
+        let _hold;
+        let mut connection = pool.acquire().await?;
+        let acquire_duration = acquire_started.elapsed();
+        _hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::CatalogClaimHold);
+        crate::metrics::observe(crate::metrics::Metric::PoolAcquire, acquire_duration);
         crate::metrics::observe(
-            crate::metrics::Metric::PoolAcquire,
-            acquire_started.elapsed(),
+            crate::metrics::Metric::CatalogClaimAcquire,
+            acquire_duration,
         );
+        let mut tx = (&mut *connection).begin().await?;
         let candidates =
             crate::processing::claim_candidates(&mut tx, "catalog", config, now).await?;
         let mut claimed = Vec::with_capacity(candidates.len());
@@ -514,6 +564,8 @@ impl CatalogStore {
             claimed.push(item);
         }
         tx.commit().await?;
+        drop(connection);
+        drop(_hold);
         Ok(claimed)
     }
 
@@ -847,33 +899,86 @@ impl CatalogStore {
         request: &CatalogImportRequest,
         now: OffsetDateTime,
     ) -> Result<CatalogImportResult, CatalogStoreError> {
+        self.import_manifest_v3_cancellable(pool, work_item_id, worker, request, now, || false)
+            .await?
+            .ok_or(CatalogStoreError::InvalidRequest)
+    }
+
+    /// Prepare and import a manifest, allowing cancellation until its fenced
+    /// transaction starts. Once admitted to that transaction it completes or
+    /// rolls back atomically; `None` means cancellation won beforehand.
+    pub async fn import_manifest_v3_cancellable(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        worker: &WorkerId,
+        request: &CatalogImportRequest,
+        now: OffsetDateTime,
+        is_cancelled: impl Fn() -> bool + Sync,
+    ) -> Result<Option<CatalogImportResult>, CatalogStoreError> {
         request.validate()?;
-        let mut tx = pool.begin().await?;
+        // Read filesystem evidence before acquiring a write connection or row
+        // lock. A stale or missing snapshot is handled after checking for an
+        // already completed import under the transaction below.
+        let Some(preloaded) = run_before_catalog_cancellation(
+            load_manifest_binding_snapshot(pool, work_item_id),
+            &is_cancelled,
+        )
+        .await
+        else {
+            return Ok(None);
+        };
+        let acquire_started = std::time::Instant::now();
+        let _hold;
+        let Some(connection) = run_before_catalog_cancellation(pool.acquire(), &is_cancelled).await
+        else {
+            return Ok(None);
+        };
+        let mut connection = connection?;
+        let acquire_duration = acquire_started.elapsed();
+        _hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::CatalogImportHold);
+        crate::metrics::observe(
+            crate::metrics::Metric::CatalogImportAcquire,
+            acquire_duration,
+        );
+        let Some(tx) =
+            run_before_catalog_cancellation((&mut *connection).begin(), &is_cancelled).await
+        else {
+            return Ok(None);
+        };
+        let mut tx = tx?;
         let item = lock_for_update(&mut tx, work_item_id).await?;
 
         if item.state == IngestionState::Cataloged {
             let existing = load_existing_result(&mut tx, work_item_id, request).await?;
             tx.commit().await?;
-            return existing.ok_or(CatalogStoreError::ImportConflict(work_item_id));
+            drop(connection);
+            drop(_hold);
+            return existing
+                .map(Some)
+                .ok_or(CatalogStoreError::ImportConflict(work_item_id));
         }
-        ensure_active_lease(&item, worker, now)?;
+        let database_now: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
+            .fetch_one(&mut *tx)
+            .await?;
+        ensure_active_lease(&item, worker, now.max(database_now))?;
         if item.state != IngestionState::Cataloging {
             return Err(WorkStoreError::InvalidState(work_item_id, item.state).into());
         }
 
-        // PERF-008 / RM-10: prepare the (potentially large, filesystem-read)
-        // evidence outside the write transaction, then revalidate every binding
-        // field inside the transaction before using it. A metadata change
-        // between phases discards the prepared evidence and re-reads it under
-        // the transaction, so stale evidence can never be imported.
-        let preloaded = load_manifest_binding_snapshot(pool, work_item_id).await;
+        // Revalidate all prepared bindings while holding their row locks. A
+        // changed snapshot must be retried outside this transaction.
         let metadata = load_manifest_binding_metadata(&mut tx, work_item_id).await?;
         let binding = match preloaded {
             Ok(Some(snapshot)) if snapshot.metadata.compatible_with(&metadata) => {
-                let payload = metadata.inline_payload.clone().unwrap_or(snapshot.payload);
-                metadata.into_binding(payload)
+                metadata.into_binding(snapshot.payload)
             }
-            _ => load_manifest_binding(&mut tx, work_item_id).await?,
+            Ok(_) => {
+                return Err(CatalogStoreError::ManifestEvidence(
+                    "manifest binding changed during preparation; retry".to_owned(),
+                ));
+            }
+            Err(error) => return Err(error),
         };
         if let Some(existing) = load_existing_release_result(
             &mut tx,
@@ -916,13 +1021,17 @@ impl CatalogStore {
             )
             .await?;
             tx.commit().await?;
-            return Ok(existing);
+            drop(connection);
+            drop(_hold);
+            return Ok(Some(existing));
         }
         let prepared = PreparedImport::build(work_item_id, binding, request, now)?;
         let result = persist_prepared_import(&mut tx, &prepared, &item, worker, now).await?;
         tx.commit().await?;
+        drop(connection);
+        drop(_hold);
         info!(work_item_id = %work_item_id, release_id = %result.release_id, "manifest v3 cataloged");
-        Ok(result)
+        Ok(Some(result))
     }
 
     /// Default performance participation or the explicit all-credit view.
@@ -958,18 +1067,62 @@ impl CatalogStore {
         pool: &PgPool,
         limit: i64,
     ) -> Result<Vec<StrongArtistMergeCandidate>, CatalogStoreError> {
+        self.strong_artist_merge_candidates_inner(pool, None, limit)
+            .await
+    }
+
+    /// Finds complete strong-ID groups related to captured affected seeds.
+    pub async fn seeded_strong_artist_merge_candidates(
+        &self,
+        pool: &PgPool,
+        seed_ids: &[i64],
+        limit: i64,
+    ) -> Result<Vec<StrongArtistMergeCandidate>, CatalogStoreError> {
+        self.strong_artist_merge_candidates_inner(pool, Some(seed_ids), limit)
+            .await
+    }
+
+    async fn strong_artist_merge_candidates_inner(
+        &self,
+        pool: &PgPool,
+        seed_ids: Option<&[i64]>,
+        limit: i64,
+    ) -> Result<Vec<StrongArtistMergeCandidate>, CatalogStoreError> {
         if !(1..=1_000).contains(&limit) {
             return Err(CatalogStoreError::InvalidRequest);
         }
-        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String, String)>(
+        let scope = if seed_ids.is_some() {
+            "AND (evidence.provider, evidence.external_id) IN (
+                SELECT seed.external_provider, seed.external_id
+                FROM catalog_identity_reconciliation_seed seed
+                WHERE seed.id = ANY($2)
+                  AND seed.external_provider IS NOT NULL AND seed.external_id IS NOT NULL
+                UNION
+                SELECT identity.provider, identity.external_id
+                FROM catalog_identity_reconciliation_seed seed
+                JOIN artist_external_identities identity ON identity.artist_id=seed.artist_id
+                WHERE seed.id = ANY($2)
+                UNION
+                SELECT identity.provider, identity.external_id
+                FROM catalog_identity_reconciliation_seed seed
+                JOIN artist_match_current current ON current.observed_artist_id=seed.observed_artist_id
+                JOIN artist_match_decisions decision ON decision.id=current.decision_id
+                JOIN artist_external_identities identity ON identity.artist_id=decision.artist_id
+                WHERE seed.id = ANY($2)
+            )"
+        } else {
+            ""
+        };
+        let query = format!(
             "WITH distinct_evidence AS (
                  SELECT DISTINCT evidence.provider, evidence.external_id, evidence.artist_id
                  FROM artist_external_identities evidence
                  JOIN artists artist ON artist.id=evidence.artist_id
                  WHERE evidence.provider='musicbrainz'
                    AND evidence.confidence >= 9000
-                   AND evidence.external_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                   AND evidence.external_id ~* '^[0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{12}}$'
                    AND artist.status NOT IN ('merged','deprecated')
+                   {scope}
              ), groups AS (
                  SELECT provider, external_id
                  FROM distinct_evidence
@@ -1041,29 +1194,37 @@ impl CatalogStore {
              )
              ORDER BY groups.provider, groups.external_id, source.artist_id, target.artist_id
              LIMIT $1",
+        );
+        // The scope fragment is selected from static SQL above; IDs are bound.
+        let mut query = sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String, String)>(
+            sqlx::AssertSqlSafe(query),
         )
-        .bind(limit)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(
-            |(
-                source_artist_id,
-                source_public_api_id,
-                target_artist_id,
-                target_public_api_id,
-                provider,
-                external_id,
-            )| StrongArtistMergeCandidate {
-                source_artist_id,
-                source_public_api_id,
-                target_artist_id,
-                target_public_api_id,
-                provider,
-                external_id,
-            },
-        )
-        .collect())
+        .bind(limit);
+        if let Some(seed_ids) = seed_ids {
+            query = query.bind(seed_ids);
+        }
+        Ok(query
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(
+                |(
+                    source_artist_id,
+                    source_public_api_id,
+                    target_artist_id,
+                    target_public_api_id,
+                    provider,
+                    external_id,
+                )| StrongArtistMergeCandidate {
+                    source_artist_id,
+                    source_public_api_id,
+                    target_artist_id,
+                    target_public_api_id,
+                    provider,
+                    external_id,
+                },
+            )
+            .collect())
     }
 
     /// Returns bounded ADR-0173 candidates for repeated structured Track
@@ -1078,11 +1239,59 @@ impl CatalogStore {
         pool: &PgPool,
         limit: i64,
     ) -> Result<Vec<SameReleaseTrackArtistMergeCandidate>, CatalogStoreError> {
+        self.same_release_track_artist_merge_candidates_inner(pool, None, limit)
+            .await
+    }
+
+    /// Scans all current observations and Releases in affected name groups.
+    pub async fn seeded_same_release_track_artist_merge_candidates(
+        &self,
+        pool: &PgPool,
+        seed_ids: &[i64],
+        limit: i64,
+    ) -> Result<Vec<SameReleaseTrackArtistMergeCandidate>, CatalogStoreError> {
+        self.same_release_track_artist_merge_candidates_inner(pool, Some(seed_ids), limit)
+            .await
+    }
+
+    async fn same_release_track_artist_merge_candidates_inner(
+        &self,
+        pool: &PgPool,
+        seed_ids: Option<&[i64]>,
+        limit: i64,
+    ) -> Result<Vec<SameReleaseTrackArtistMergeCandidate>, CatalogStoreError> {
         if !(1..=1_000).contains(&limit) {
             return Err(CatalogStoreError::InvalidRequest);
         }
-        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, Uuid, String)>(
-            "WITH eligible_releases AS (
+        let (names_cte, release_scope, name_scope) = if seed_ids.is_some() {
+            (
+                "affected_names AS MATERIALIZED (
+                    SELECT seed.normalized_name FROM catalog_identity_reconciliation_seed seed
+                     WHERE seed.id=ANY($2) AND seed.normalized_name IS NOT NULL
+                    UNION
+                    SELECT artist.normalized_name FROM catalog_identity_reconciliation_seed seed
+                     JOIN artists artist ON artist.id=seed.artist_id WHERE seed.id=ANY($2)
+                    UNION
+                    SELECT owner.normalized_name FROM catalog_identity_reconciliation_seed seed
+                     JOIN artist_match_current current ON current.observed_artist_id=seed.observed_artist_id
+                     JOIN artist_match_decisions decision ON decision.id=current.decision_id
+                     JOIN artists owner ON owner.id=decision.artist_id WHERE seed.id=ANY($2)
+                ),",
+                "AND release.id IN (
+                    SELECT observed.release_id FROM affected_names names
+                    JOIN artists artist ON artist.normalized_name=names.normalized_name
+                    JOIN artist_match_decisions decision ON decision.artist_id=artist.id
+                    JOIN artist_match_current current ON current.decision_id=decision.id
+                         AND current.observed_artist_id=decision.observed_artist_id
+                    JOIN observed_artists observed ON observed.id=current.observed_artist_id
+                )",
+                "AND normalized_name IN (SELECT normalized_name FROM affected_names)",
+            )
+        } else {
+            ("", "", "")
+        };
+        let query = format!(
+            "WITH {names_cte} eligible_releases AS (
                  SELECT release.id
                  FROM releases release
                  JOIN release_artists release_credit
@@ -1090,6 +1299,7 @@ impl CatalogStore {
                  JOIN artists release_artist
                    ON release_artist.id=release_credit.artist_id
                  WHERE release.status='active'
+                   {release_scope}
                  GROUP BY release.id
                  HAVING count(DISTINCT release_credit.artist_id)
                             FILTER (WHERE release_credit.role='primary')=1
@@ -1116,6 +1326,7 @@ impl CatalogStore {
                  SELECT normalized_name
                  FROM artists
                  WHERE status='active'
+                   {name_scope}
                  GROUP BY normalized_name
                  HAVING count(*) > 1
              ), track_only_identities AS (
@@ -1282,29 +1493,36 @@ impl CatalogStore {
              WHERE source.id <> target.id
              ORDER BY source.normalized_name, source.release_id, source.id
              LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(
-            |(
-                source_artist_id,
-                source_public_api_id,
-                target_artist_id,
-                target_public_api_id,
-                release_id,
-                normalized_name,
-            )| SameReleaseTrackArtistMergeCandidate {
-                source_artist_id,
-                source_public_api_id,
-                target_artist_id,
-                target_public_api_id,
-                release_id,
-                normalized_name,
-            },
-        )
-        .collect())
+        );
+        // Only fixed SQL fragments are interpolated; seed IDs are bound.
+        let mut query =
+            sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, Uuid, String)>(sqlx::AssertSqlSafe(query))
+                .bind(limit);
+        if let Some(seed_ids) = seed_ids {
+            query = query.bind(seed_ids);
+        }
+        Ok(query
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(
+                |(
+                    source_artist_id,
+                    source_public_api_id,
+                    target_artist_id,
+                    target_public_api_id,
+                    release_id,
+                    normalized_name,
+                )| SameReleaseTrackArtistMergeCandidate {
+                    source_artist_id,
+                    source_public_api_id,
+                    target_artist_id,
+                    target_public_api_id,
+                    release_id,
+                    normalized_name,
+                },
+            )
+            .collect())
     }
 
     /// Returns bounded candidates for repeated exact primary Artist billing
@@ -1503,16 +1721,54 @@ impl CatalogStore {
         pool: &PgPool,
         limit: i64,
     ) -> Result<Vec<RepeatedPrimaryReleaseArtistMergeCandidate>, CatalogStoreError> {
+        self.repeated_artist_credit_merge_candidates_inner(pool, None, limit)
+            .await
+    }
+
+    /// Evaluates complete repeated-credit groups for captured affected names.
+    pub async fn seeded_repeated_artist_credit_merge_candidates(
+        &self,
+        pool: &PgPool,
+        seed_ids: &[i64],
+        limit: i64,
+    ) -> Result<Vec<RepeatedPrimaryReleaseArtistMergeCandidate>, CatalogStoreError> {
+        self.repeated_artist_credit_merge_candidates_inner(pool, Some(seed_ids), limit)
+            .await
+    }
+
+    async fn repeated_artist_credit_merge_candidates_inner(
+        &self,
+        pool: &PgPool,
+        seed_ids: Option<&[i64]>,
+        limit: i64,
+    ) -> Result<Vec<RepeatedPrimaryReleaseArtistMergeCandidate>, CatalogStoreError> {
         if !(1..=1_000).contains(&limit) {
             return Err(CatalogStoreError::InvalidRequest);
         }
-        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String)>(
+        let scope = if seed_ids.is_some() {
+            "AND artist.normalized_name IN (
+                SELECT seed.normalized_name FROM catalog_identity_reconciliation_seed seed
+                 WHERE seed.id=ANY($2) AND seed.normalized_name IS NOT NULL
+                UNION
+                SELECT owner.normalized_name FROM catalog_identity_reconciliation_seed seed
+                 JOIN artists owner ON owner.id=seed.artist_id WHERE seed.id=ANY($2)
+                UNION
+                SELECT owner.normalized_name FROM catalog_identity_reconciliation_seed seed
+                 JOIN artist_match_current current ON current.observed_artist_id=seed.observed_artist_id
+                 JOIN artist_match_decisions decision ON decision.id=current.decision_id
+                 JOIN artists owner ON owner.id=decision.artist_id WHERE seed.id=ANY($2)
+            )"
+        } else {
+            ""
+        };
+        let query = format!(
             "WITH active_artists AS (
                  SELECT artist.id, artist.public_api_id, artist.normalized_name,
                         artist.artist_type, artist.begin_date, artist.end_date
                  FROM artists artist
                  WHERE artist.status IN ('active','verified')
                    AND btrim(artist.normalized_name) <> ''
+                   {scope}
              ), eligible_artists AS (
                  SELECT active.*
                  FROM active_artists active
@@ -1656,27 +1912,34 @@ impl CatalogStore {
              WHERE source.id <> target.id
              ORDER BY source.normalized_name, source.id
              LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(
-            |(
-                source_artist_id,
-                source_public_api_id,
-                target_artist_id,
-                target_public_api_id,
-                normalized_name,
-            )| RepeatedPrimaryReleaseArtistMergeCandidate {
-                source_artist_id,
-                source_public_api_id,
-                target_artist_id,
-                target_public_api_id,
-                normalized_name,
-            },
-        )
-        .collect())
+        );
+        // Only fixed SQL fragments are interpolated; seed IDs are bound.
+        let mut query =
+            sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String)>(sqlx::AssertSqlSafe(query))
+                .bind(limit);
+        if let Some(seed_ids) = seed_ids {
+            query = query.bind(seed_ids);
+        }
+        Ok(query
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(
+                |(
+                    source_artist_id,
+                    source_public_api_id,
+                    target_artist_id,
+                    target_public_api_id,
+                    normalized_name,
+                )| RepeatedPrimaryReleaseArtistMergeCandidate {
+                    source_artist_id,
+                    source_public_api_id,
+                    target_artist_id,
+                    target_public_api_id,
+                    normalized_name,
+                },
+            )
+            .collect())
     }
 
     /// Returns bounded exact-name candidates for non-authoritative review
@@ -1690,10 +1953,50 @@ impl CatalogStore {
         pool: &PgPool,
         limit: i64,
     ) -> Result<Vec<NameOnlyArtistMatchProposalCandidate>, CatalogStoreError> {
+        self.name_only_artist_match_proposal_candidates_inner(pool, None, limit)
+            .await
+    }
+
+    /// Restricts name-proposal discovery to complete name groups affected by
+    /// the captured seeds. Names are observations, never identity keys.
+    pub async fn seeded_name_only_artist_match_proposal_candidates(
+        &self,
+        pool: &PgPool,
+        seed_ids: &[i64],
+        limit: i64,
+    ) -> Result<Vec<NameOnlyArtistMatchProposalCandidate>, CatalogStoreError> {
+        self.name_only_artist_match_proposal_candidates_inner(pool, Some(seed_ids), limit)
+            .await
+    }
+
+    async fn name_only_artist_match_proposal_candidates_inner(
+        &self,
+        pool: &PgPool,
+        seed_ids: Option<&[i64]>,
+        limit: i64,
+    ) -> Result<Vec<NameOnlyArtistMatchProposalCandidate>, CatalogStoreError> {
         if !(1..=1_000).contains(&limit) {
             return Err(CatalogStoreError::InvalidRequest);
         }
-        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, String)>(
+        let scope = if seed_ids.is_some() {
+            "AND owner.normalized_name IN (
+                SELECT seed.normalized_name FROM catalog_identity_reconciliation_seed seed
+                 WHERE seed.id = ANY($2) AND seed.normalized_name IS NOT NULL
+                UNION
+                SELECT artist.normalized_name FROM catalog_identity_reconciliation_seed seed
+                  JOIN artists artist ON artist.id=seed.artist_id
+                 WHERE seed.id = ANY($2)
+                UNION
+                SELECT owner.normalized_name FROM catalog_identity_reconciliation_seed seed
+                  JOIN artist_match_current current ON current.observed_artist_id=seed.observed_artist_id
+                  JOIN artist_match_decisions decision ON decision.id=current.decision_id
+                  JOIN artists owner ON owner.id=decision.artist_id
+                 WHERE seed.id = ANY($2)
+            )"
+        } else {
+            ""
+        };
+        let query = format!(
             "WITH current_observations AS (
                  SELECT observed.id AS observed_artist_id,
                         owner.id AS current_artist_id,
@@ -1709,6 +2012,7 @@ impl CatalogStore {
                    AND current_decision.authority='automated'
                    AND NOT current_decision.is_locked
                    AND btrim(owner.normalized_name) <> ''
+                   {scope}
              )
              SELECT source.observed_artist_id, source.current_artist_id,
                     candidate.id, source.normalized_name
@@ -1741,22 +2045,29 @@ impl CatalogStore {
                )
              ORDER BY source.normalized_name, source.observed_artist_id, candidate.id
              LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(
-            |(observed_artist_id, current_artist_id, candidate_artist_id, normalized_name)| {
-                NameOnlyArtistMatchProposalCandidate {
-                    observed_artist_id,
-                    current_artist_id,
-                    candidate_artist_id,
-                    normalized_name,
-                }
-            },
-        )
-        .collect())
+        );
+        // The only interpolated fragment is selected from the two static
+        // strings above; seed IDs remain bound parameters.
+        let mut query =
+            sqlx::query_as::<_, (Uuid, Uuid, Uuid, String)>(sqlx::AssertSqlSafe(query)).bind(limit);
+        if let Some(seed_ids) = seed_ids {
+            query = query.bind(seed_ids);
+        }
+        Ok(query
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(
+                |(observed_artist_id, current_artist_id, candidate_artist_id, normalized_name)| {
+                    NameOnlyArtistMatchProposalCandidate {
+                        observed_artist_id,
+                        current_artist_id,
+                        candidate_artist_id,
+                        normalized_name,
+                    }
+                },
+            )
+            .collect())
     }
 
     /// Returns duplicate active Releases with the same trusted provider ID.
@@ -1811,6 +2122,54 @@ impl CatalogStore {
         .collect())
     }
 
+    /// Finds strong Release candidates whose external-identity key is attached
+    /// to a captured durable seed. Both lookups use the existing release and
+    /// provider/key indexes; unrelated catalog keys are not enumerated.
+    pub async fn seeded_strong_release_merge_candidates(
+        &self,
+        pool: &PgPool,
+        seed_ids: &[i64],
+        limit: i64,
+    ) -> Result<Vec<StrongReleaseMergeCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, String, String)>(
+            "WITH affected_keys AS MATERIALIZED (
+                 SELECT DISTINCT evidence.provider, evidence.external_id
+                 FROM catalog_identity_reconciliation_seed seed
+                 JOIN release_external_identities evidence ON evidence.release_id=seed.release_id
+                 WHERE seed.id = ANY($1) AND evidence.trusted
+             )
+             SELECT DISTINCT source.release_id, target.release_id, keys.provider, keys.external_id
+             FROM affected_keys keys
+             JOIN release_external_identities source
+               ON source.provider=keys.provider AND source.external_id=keys.external_id AND source.trusted
+             JOIN release_external_identities target
+               ON target.provider=keys.provider AND target.external_id=keys.external_id AND target.trusted
+              AND source.release_id < target.release_id
+             JOIN releases source_release ON source_release.id=source.release_id
+             JOIN releases target_release ON target_release.id=target.release_id
+             WHERE source_release.status='active' AND target_release.status='active'
+             ORDER BY keys.provider, keys.external_id, source.release_id, target.release_id
+             LIMIT $2",
+        )
+        .bind(seed_ids)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|(source_release_id, target_release_id, provider, external_id)| {
+            StrongReleaseMergeCandidate {
+                source_release_id,
+                target_release_id,
+                provider,
+                external_id,
+            }
+        })
+        .collect())
+    }
+
     /// Merges one Release into a redirect tombstone without deleting source
     /// observations or media assets. Track ordinals are appended to the target
     /// and recorded for the reversible split operation.
@@ -1855,6 +2214,56 @@ impl CatalogStore {
         let mut ordered = merges.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|merge| merge.source_release_id);
         let mut tx = pool.begin().await?;
+        let mut release_ids = ordered
+            .iter()
+            .map(|merge| merge.source_release_id)
+            .collect::<Vec<_>>();
+        release_ids.push(merges[0].target_release_id);
+        let locked = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        )
+        .bind(&release_ids)
+        .fetch_all(&mut *tx)
+        .await?;
+        if locked.len() != release_ids.len() {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let source_ids = ordered
+            .iter()
+            .map(|merge| merge.source_release_id)
+            .collect::<Vec<_>>();
+        let track_limit = i64::try_from(MAX_CATALOG_CORRECTION_TRACKS)
+            .map_err(|_| CatalogStoreError::NumericOverflow)?;
+        let oversized: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM unnest($1::uuid[]) source(id)
+                 WHERE (SELECT count(*) FROM (
+                     SELECT 1 FROM tracks WHERE release_id=source.id LIMIT $2
+                 ) limited) > $3
+             )",
+        )
+        .bind(&source_ids)
+        .bind(track_limit + 1)
+        .bind(track_limit)
+        .fetch_one(&mut *tx)
+        .await?;
+        if oversized {
+            return Err(CatalogStoreError::CorrectionScopeExceeded {
+                dimension: CatalogCorrectionDimension::Tracks,
+                limit: MAX_CATALOG_CORRECTION_TRACKS,
+            });
+        }
+        // Lock the complete transaction's Track union before any individual
+        // merge takes a recommendation lock. execute drains rows without an
+        // application-sized Track buffer; PostgreSQL orders the row locks.
+        sqlx::query("SELECT id FROM tracks WHERE release_id=ANY($1) ORDER BY id FOR NO KEY UPDATE")
+            .bind(&source_ids)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("SELECT entity_id FROM native_recommendation_candidates WHERE entity_type='release' AND entity_id=ANY($1) ORDER BY entity_id FOR UPDATE")
+            .bind(&release_ids)
+            .execute(&mut *tx)
+            .await?;
         let now = OffsetDateTime::now_utc();
         let mut events = Vec::with_capacity(ordered.len());
         // Only the first source that owns one contributes its operator image;
@@ -2139,6 +2548,14 @@ impl CatalogStore {
             return Err(CatalogStoreError::MutationConflict);
         }
         let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
+        // The subsequent multi-Track write must use the same Track lock order
+        // as recommendation maintenance, regardless of executor plan order.
+        if !track_ids.is_empty() {
+            sqlx::query("SELECT id FROM tracks WHERE id=ANY($1) ORDER BY id FOR NO KEY UPDATE")
+                .bind(&track_ids)
+                .fetch_all(&mut *tx)
+                .await?;
+        }
         // PERF-V002: restore observations and Tracks with two set-based
         // statements instead of one round trip per observation and per Track.
         // The per-row guards (`release_id` still equals the merged-away
@@ -2445,6 +2862,14 @@ async fn merge_release_in_transaction(
         .iter()
         .map(|(track_id, _)| *track_id)
         .collect::<Vec<_>>();
+    // A single UPDATE may otherwise take tuple locks in executor-plan order.
+    // Lock before it in the order shared by recommendation maintenance.
+    if !source_track_ids.is_empty() {
+        sqlx::query("SELECT id FROM tracks WHERE id=ANY($1) ORDER BY id FOR NO KEY UPDATE")
+            .bind(&source_track_ids)
+            .fetch_all(&mut **tx)
+            .await?;
+    }
     let source_observations = sqlx::query_as::<_, (Uuid, Uuid, i32)>(
         "SELECT id, track_id, source_ordinal FROM observed_artists
              WHERE release_id=$1 AND track_id=ANY($2)
@@ -2514,43 +2939,25 @@ async fn merge_release_in_transaction(
     .fetch_one(&mut **tx)
     .await?
     .unwrap_or(0);
-    let mut moved = Vec::with_capacity(source_tracks.len());
-    let mut next_observation_ordinal = target_observation_max;
     // PERF-V002: compute the exact per-Track and per-observation ordinals in
     // the same deterministic order as before, then apply them set-wise.
+    let moved = prepare_release_move(
+        &source_tracks,
+        &source_observations,
+        target_max,
+        target_observation_max,
+    )?;
     let mut moved_track_ids = Vec::with_capacity(source_tracks.len());
     let mut moved_track_ordinals = Vec::with_capacity(source_tracks.len());
     let mut moved_observation_ids = Vec::new();
     let mut moved_observation_ordinals = Vec::new();
-    for (index, (track_id, original_ordinal)) in source_tracks.iter().enumerate() {
-        let merged_ordinal = target_max
-            .checked_add(i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?)
-            .ok_or(CatalogStoreError::NumericOverflow)?;
-        moved_track_ids.push(*track_id);
-        moved_track_ordinals.push(merged_ordinal);
-        let mut observations = Vec::new();
-        for (observation_id, _observation_track_id, original_observation_ordinal) in
-            source_observations
-                .iter()
-                .filter(|(_, observation_track_id, _)| observation_track_id == track_id)
-        {
-            next_observation_ordinal = next_observation_ordinal
-                .checked_add(1)
-                .ok_or(CatalogStoreError::NumericOverflow)?;
-            moved_observation_ids.push(*observation_id);
-            moved_observation_ordinals.push(next_observation_ordinal);
-            observations.push(ReleaseMovedObservation {
-                observation_id: *observation_id,
-                original_ordinal: *original_observation_ordinal,
-                merged_ordinal: next_observation_ordinal,
-            });
+    for track in &moved {
+        moved_track_ids.push(track.track_id);
+        moved_track_ordinals.push(track.merged_ordinal);
+        for observation in &track.observations {
+            moved_observation_ids.push(observation.observation_id);
+            moved_observation_ordinals.push(observation.merged_ordinal);
         }
-        moved.push(ReleaseMovedTrack {
-            track_id: *track_id,
-            original_ordinal: *original_ordinal,
-            merged_ordinal,
-            observations,
-        });
     }
     if !moved_track_ids.is_empty() {
         sqlx::query(
@@ -2835,25 +3242,19 @@ async fn enqueue_track_revisions(
     if track_ids.is_empty() {
         return Ok(());
     }
-    let rows = sqlx::query_as::<_, (Uuid, i64)>("SELECT id, revision FROM tracks WHERE id=ANY($1)")
-        .bind(track_ids)
-        .fetch_all(&mut **tx)
-        .await?;
-    for (track_id, revision) in rows {
-        sqlx::query(
-            "INSERT INTO catalog_projection_outbox (
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
                 projection_name, entity_type, entity_id, operation, entity_revision,
                 available_at, attempt_count, created_at
-             ) VALUES ('tantivy.catalog','track',$1,'upsert',$3,$2,0,$2)
+             ) SELECT 'tantivy.catalog','track',id,'upsert',revision,$2,0,$2
+               FROM tracks WHERE id=ANY($1)
              ON CONFLICT (projection_name, entity_type, entity_id, entity_revision)
              DO NOTHING",
-        )
-        .bind(track_id)
-        .bind(now)
-        .bind(revision)
-        .execute(&mut **tx)
-        .await?;
-    }
+    )
+    .bind(track_ids)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -2970,6 +3371,7 @@ struct ManifestBindingMetadata {
     schema_version: i32,
     semantic_hash: String,
     inline_payload: Option<serde_json::Value>,
+    evidence_reference: Option<ManifestEvidenceReference>,
     receipt_release_id: Uuid,
     plan_hash: String,
     plan_payload: serde_json::Value,
@@ -2978,13 +3380,13 @@ struct ManifestBindingMetadata {
 
 impl ManifestBindingMetadata {
     /// True when every field that binds the evidence to the work item is
-    /// unchanged. Payload equality is not required: the inline payload is part
-    /// of the same row, and an externalized payload is addressed by the sealed
-    /// hash compared here.
+    /// unchanged, including the precise evidence reference and inline payload.
     fn compatible_with(&self, other: &Self) -> bool {
         self.manifest_row_id == other.manifest_row_id
             && self.schema_version == other.schema_version
             && self.semantic_hash == other.semantic_hash
+            && self.inline_payload == other.inline_payload
+            && self.evidence_reference == other.evidence_reference
             && self.receipt_release_id == other.receipt_release_id
             && self.plan_hash == other.plan_hash
             && self.plan_payload == other.plan_payload
@@ -3005,9 +3407,40 @@ impl ManifestBindingMetadata {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, sqlx::FromRow)]
+struct ManifestEvidenceReference {
+    asset_key: String,
+    storage_kind: String,
+    content_sha256: String,
+    content_length: i64,
+    serialization_version: i32,
+    revision: i32,
+}
+
 struct ManifestBindingSnapshot {
     metadata: ManifestBindingMetadata,
     payload: serde_json::Value,
+}
+
+// Cancellation may occur during filesystem work or while waiting for a pool
+// connection. Dropping the work future is safe: filesystem admission remains
+// held by its blocking closure until it terminates.
+async fn run_before_catalog_cancellation<T>(
+    future: impl std::future::Future<Output = T>,
+    is_cancelled: &(impl Fn() -> bool + Sync),
+) -> Option<T> {
+    tokio::pin!(future);
+    let mut poll = tokio::time::interval(std::time::Duration::from_millis(50));
+    loop {
+        if is_cancelled() {
+            return None;
+        }
+        tokio::select! {
+            biased;
+            _ = poll.tick() => {},
+            result = &mut future => return if is_cancelled() { None } else { Some(result) },
+        }
+    }
 }
 
 struct ManifestBinding {
@@ -3576,11 +4009,32 @@ async fn load_manifest_binding_metadata(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or(CatalogStoreError::ImportConflict(work_item_id))?;
+    let evidence_reference = if row.3.is_none() {
+        Some(
+            sqlx::query_as::<_, ManifestEvidenceReference>(
+                "SELECT asset_key, storage_kind, content_sha256, content_length,
+                    serialization_version, revision
+             FROM release_work_item_manifest_evidence
+             WHERE manifest_row_id = $1 FOR SHARE",
+            )
+            .bind(row.0)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| {
+                CatalogStoreError::ManifestEvidence(
+                    "manifest evidence reference missing".to_owned(),
+                )
+            })?,
+        )
+    } else {
+        None
+    };
     Ok(ManifestBindingMetadata {
         manifest_row_id: row.0,
         schema_version: row.1,
         semantic_hash: row.2,
         inline_payload: row.3,
+        evidence_reference,
         receipt_release_id: row.4,
         plan_hash: row.5,
         plan_payload: row.6,
@@ -3588,14 +4042,12 @@ async fn load_manifest_binding_metadata(
     })
 }
 
-/// Phase-one binding read outside any transaction. Reads and cryptographically
-/// verifies externalized evidence through a pooled connection so the read does
-/// not extend the catalog write transaction or its row locks.
+/// Phase-one binding read outside any transaction. Database checkouts end
+/// before cryptographic file verification begins.
 async fn load_manifest_binding_snapshot(
     pool: &PgPool,
     work_item_id: Uuid,
 ) -> Result<Option<ManifestBindingSnapshot>, CatalogStoreError> {
-    let mut connection = pool.acquire().await?;
     let row = sqlx::query_as::<
         _,
         (
@@ -3617,16 +4069,36 @@ async fn load_manifest_binding_snapshot(
          WHERE m.work_item_id = $1",
     )
     .bind(work_item_id)
-    .fetch_optional(&mut *connection)
+    .fetch_optional(pool)
     .await?;
     let Some(row) = row else {
         return Ok(None);
+    };
+    let evidence_reference = if row.3.is_none() {
+        Some(
+            sqlx::query_as::<_, ManifestEvidenceReference>(
+                "SELECT asset_key, storage_kind, content_sha256, content_length,
+                    serialization_version, revision
+             FROM release_work_item_manifest_evidence WHERE manifest_row_id = $1",
+            )
+            .bind(row.0)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| {
+                CatalogStoreError::ManifestEvidence(
+                    "manifest evidence reference missing".to_owned(),
+                )
+            })?,
+        )
+    } else {
+        None
     };
     let metadata = ManifestBindingMetadata {
         manifest_row_id: row.0,
         schema_version: row.1,
         semantic_hash: row.2,
         inline_payload: row.3,
+        evidence_reference,
         receipt_release_id: row.4,
         plan_hash: row.5,
         plan_payload: row.6,
@@ -3636,34 +4108,23 @@ async fn load_manifest_binding_snapshot(
     // evidence object; routine policy/browse paths use the compact facts.
     let payload = match metadata.inline_payload.clone() {
         Some(payload) => payload,
-        None => crate::manifest_evidence::load_manifest_on_connection(
-            &mut connection,
-            metadata.manifest_row_id,
-        )
-        .await
-        .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?,
+        None => {
+            let reference = metadata.evidence_reference.as_ref().ok_or_else(|| {
+                CatalogStoreError::ManifestEvidence(
+                    "manifest evidence reference missing".to_owned(),
+                )
+            })?;
+            crate::asset_files::read_evidence_json(
+                reference.asset_key.clone(),
+                reference.storage_kind.clone(),
+                reference.content_sha256.clone(),
+                reference.content_length,
+            )
+            .await
+            .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?
+        }
     };
     Ok(Some(ManifestBindingSnapshot { metadata, payload }))
-}
-
-/// In-transaction fallback: reads the binding and (when externalized) its
-/// evidence under the transaction. Used when the phase-one snapshot could not
-/// be prepared or its binding changed, so no stale evidence is ever imported.
-async fn load_manifest_binding(
-    tx: &mut Transaction<'_, Postgres>,
-    work_item_id: Uuid,
-) -> Result<ManifestBinding, CatalogStoreError> {
-    let metadata = load_manifest_binding_metadata(tx, work_item_id).await?;
-    let payload = match metadata.inline_payload.clone() {
-        Some(payload) => payload,
-        None => crate::manifest_evidence::load_manifest_on_connection(
-            &mut *tx,
-            metadata.manifest_row_id,
-        )
-        .await
-        .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?,
-    };
-    Ok(metadata.into_binding(payload))
 }
 
 fn normalize_lookup(value: &str) -> String {
@@ -3889,6 +4350,37 @@ async fn reuse_existing_artists(
                 .await?;
         }
     }
+    // Lock all live homonyms, not just the eventually selected candidate. A
+    // concurrent merge or metadata edit may change eligibility while this
+    // statement waits; the candidate query below runs with a fresh READ
+    // COMMITTED snapshot after the locks are acquired. UUID order matches the
+    // parent lock order used by Artist corrections.
+    let locked_artist_ids = sqlx::query_scalar::<_, Uuid>(
+        "SELECT artist.id FROM artists artist
+         WHERE artist.normalized_name = ANY($1)
+           AND artist.status IN ('active','verified')
+           AND artist.merged_into_artist_id IS NULL
+         ORDER BY artist.id
+         FOR UPDATE OF artist",
+    )
+    .bind(&names)
+    .fetch_all(&mut **tx)
+    .await?;
+    let current_artist_ids = sqlx::query_scalar::<_, Uuid>(
+        "SELECT artist.id FROM artists artist
+         WHERE artist.normalized_name = ANY($1)
+           AND artist.status IN ('active','verified')
+           AND artist.merged_into_artist_id IS NULL
+         ORDER BY artist.id",
+    )
+    .bind(&names)
+    .fetch_all(&mut **tx)
+    .await?;
+    if locked_artist_ids != current_artist_ids {
+        // A matching identity appeared or disappeared while parent locks were
+        // being acquired. A retry resolves all homonyms under a new snapshot.
+        return Err(CatalogStoreError::MutationConflict);
+    }
     // Count every live homonym before checking the sole candidate's eligibility.
     // Aggregate provider rows per Artist: multiple aliases for one provider identity
     // do not imply multiple Artist identities (ADR-0194).
@@ -3994,6 +4486,13 @@ async fn persist_prepared_import(
         IngestionState::Cataloged,
         melodee_domain::TransitionKind::Worker,
     )?;
+
+    // Resolve and fence existing Artist identities before creating any
+    // Release/Track rows. Concurrent identity corrections lock Artist parents
+    // before their catalog children; following that order also prevents a
+    // correction from turning a selected Artist into a tombstone during import.
+    let (reused_import, reused_artist_ids) = reuse_existing_artists(tx, prepared).await?;
+    let prepared = &reused_import;
 
     sqlx::query(
         "INSERT INTO releases (
@@ -4103,9 +4602,6 @@ async fn persist_prepared_import(
     // be a tombstone, a disambiguation hint refuses reuse, and a conflicting
     // embedded MusicBrainz Artist identifier blocks the reuse (two same-name
     // artists with different external identity).
-    let (reused_import, reused_artist_ids) = reuse_existing_artists(tx, prepared).await?;
-    let prepared = &reused_import;
-
     // Reused Artists already exist, so they must not be inserted again.
     let artist_identities = prepared.resolutions.iter().fold(
         BTreeMap::<Uuid, &PreparedResolution>::new(),
@@ -4659,6 +5155,8 @@ async fn enqueue_identity_reconciliation_seeds(
            FROM release_artists credit
            JOIN artists artist ON artist.id = credit.artist_id
           WHERE credit.release_id = $1
+         UNION ALL
+         SELECT $1, NULL::uuid, NULL::uuid, NULL::text, NULL::text, NULL::text, $2
          UNION ALL
          SELECT $1, credit.artist_id, credit.observed_artist_id,
                 artist.normalized_name, NULL, NULL, $2
@@ -5216,5 +5714,64 @@ fn parse_contribution_role(value: &str) -> Result<ContributionRole, CatalogStore
         "engineer" => Ok(ContributionRole::Engineer),
         "other" => Ok(ContributionRole::Other),
         value => Err(CatalogStoreError::CorruptRole(value.to_owned())),
+    }
+}
+
+#[cfg(test)]
+mod release_move_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn preserves_track_order_observation_order_and_original_ordinals() {
+        let a = Uuid::from_u128(1);
+        let b = Uuid::from_u128(2);
+        let x = Uuid::from_u128(11);
+        let y = Uuid::from_u128(12);
+        let z = Uuid::from_u128(13);
+        // SQL sorts by Track UUID and observation UUID; Track order itself is
+        // by Release ordinal, which need not match UUID order.
+        let moved = prepare_release_move(
+            &[(b, 4), (a, 9)],
+            &[(x, a, 7), (y, a, 8), (z, b, 3)],
+            20,
+            30,
+        )
+        .unwrap();
+        assert_eq!(moved.len(), 2);
+        assert_eq!(
+            (
+                moved[0].track_id,
+                moved[0].original_ordinal,
+                moved[0].merged_ordinal
+            ),
+            (b, 4, 21)
+        );
+        assert_eq!(
+            (
+                moved[0].observations[0].observation_id,
+                moved[0].observations[0].original_ordinal,
+                moved[0].observations[0].merged_ordinal
+            ),
+            (z, 3, 31)
+        );
+        assert_eq!(
+            (
+                moved[1].track_id,
+                moved[1].original_ordinal,
+                moved[1].merged_ordinal
+            ),
+            (a, 9, 22)
+        );
+        assert_eq!(
+            moved[1]
+                .observations
+                .iter()
+                .map(|o| (o.observation_id, o.original_ordinal, o.merged_ordinal))
+                .collect::<Vec<_>>(),
+            vec![(x, 7, 32), (y, 8, 33)]
+        );
+        assert!(prepare_release_move(&[(a, 1)], &[], i32::MAX, 0).is_err());
+        assert!(prepare_release_move(&[(a, 1)], &[(x, a, 1)], 0, i32::MAX).is_err());
     }
 }

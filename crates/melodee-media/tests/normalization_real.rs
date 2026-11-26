@@ -921,8 +921,8 @@ fn real_embedded_jpeg_and_png_are_normalized_to_verified_jpeg() {
     for artwork in normalization.normalized_artwork {
         assert_eq!(artwork.mime_type, "image/jpeg");
         assert_eq!((artwork.width, artwork.height), (1600, 1600));
-        assert!(!artwork.byte_hash.is_empty());
         let bytes = fs::read(attempt_root.join(artwork.output_path)).unwrap();
+        assert_eq!(artwork.byte_hash, blake3::hash(&bytes).to_hex().to_string());
         assert!(bytes.starts_with(&[0xff, 0xd8]));
     }
 }

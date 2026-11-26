@@ -114,11 +114,11 @@ transaction-scoped advisory lock serializes passes across processes.
 | PERF-001 | RM-01 | IMPLEMENTED AND VERIFIED |
 | PERF-002 | RM-02 | IMPLEMENTED; decision-equivalence covered by existing policy suites; new plan measured |
 | PERF-003 | RM-03, RM-04 | IMPLEMENTED AND VERIFIED |
-| PERF-004 | RM-09 | IMPLEMENTED AND VERIFIED (see §8.1) |
-| PERF-005 | RM-08, RM-13 | RM-08 IMPLEMENTED AND VERIFIED; RM-13 PARTIAL — reader registry + batch hydration; writer reuse NO CHANGE (see §8.3) |
-| PERF-006 | RM-05, RM-14 | IMPLEMENTED AND VERIFIED (see §8.4) |
+| PERF-004 | RM-09 | PARTIAL — scoped candidates and mutation seeds require closure, concurrency and plan evidence (see current status ledger) |
+| PERF-005 | RM-08, RM-13 | RM-08 IMPLEMENTED AND VERIFIED; RM-13 PARTIAL — writer lifecycle requires measured decision (see §8.3) |
+| PERF-006 | RM-05, RM-14 | RM-05 IMPLEMENTED AND VERIFIED; RM-14 PARTIAL pending production rebuild measurement |
 | PERF-007 | RM-11, RM-12 | RM-11 PARTIAL (tool-version reuse); RM-12 NOT IMPLEMENTED — see §8.6, §8.10 |
-| PERF-008 | RM-10 | IMPLEMENTED (manifest two-phase) / PARTIAL (admission) — see §8.2, §8.8 |
+| PERF-008 | RM-10 | PARTIAL — preparation ordering and measured admission under correction (see §8.2) |
 | PERF-009 | RM-07 | IMPLEMENTED AND VERIFIED (bounded results); rolling refill already present for inspection/normalization/publication |
 | PERF-010 | RM-15 | PARTIAL — partial rating index added; route/serialization optimization NOT implemented |
 | PERF-011 | RM-16 | retention IMPLEMENTED AND VERIFIED (ADR-0215); renewal NO CHANGE (see §8.7) |
@@ -272,7 +272,10 @@ the authoritative final tier and was not run in this operation.
 
 ---
 
-## 7. Remaining work and blockers
+## 7. Remaining work and blockers at the earlier checkpoint
+
+This section is historical. The current state and next actions are in
+`PERF-REMEDIATION-STATUS.md`; subsequent work has changed several entries below.
 
 No external blocker prevented the delivered work. The following mandatory/optional items are **not
 completed** in this operation and must not be described as done:
@@ -332,9 +335,9 @@ catalog-wide queries per successful album. Instead:
   a 30-minute catalog-wide backstop for both Artist and strong-Release identity.
 - Idempotent (non-`inserted`) imports persist no new observation and therefore no seeds.
 
-The closure deliberately runs the global algorithms rather than a release-only filter, so it is
-equivalent to the oracle by construction and cannot miss transitive/historical effects. The cost is
-catalog-wide *per coalesced pass*, not per album.
+At that checkpoint the drain ran global algorithms per coalesced pass. The current
+working tree instead uses seed-scoped candidate queries; complete closure and
+oracle equivalence have not yet been established.
 
 Permanent tests:
 `catalog_importer::import_persists_identity_seeds_and_the_coalesced_drain_clears_them` and
@@ -342,13 +345,13 @@ Permanent tests:
 
 ## 8.2 Two-phase manifest preparation (PERF-008 / RM-10)
 
-`import_manifest_v3` now reads and cryptographically verifies the (potentially large, externalized)
-evidence **outside** the write transaction through a pooled connection, then re-enters the
-transaction, re-reads the binding metadata under `FOR SHARE`, and requires every binding field to be
-unchanged (`manifest_row_id`, schema version, semantic hash, receipt Release, plan hash, plan
-payload, sealed hash). On any mismatch (or if the pre-read failed) it discards the prepared payload
-and re-reads inside the transaction, so stale evidence can never be imported. No blocking
-filesystem read remains on the common path inside the catalog write transaction.
+The earlier implementation prepared and revalidated manifest evidence after
+acquiring the write lock and retained a connection during file I/O. The current
+working tree moves preparation before the transaction, releases the connection
+before file I/O, and revalidates the binding and current database-clock lease
+after locking. Focused binding, external-reference, expiry, lease-theft and
+cancellation races passed. Mixed-load measurement and integrated verification
+remain outstanding.
 
 Database workload admission/pool reservation remains a measured decision; see §8.8.
 
@@ -361,9 +364,9 @@ Database workload admission/pool reservation remains a measured decision; see §
 - Outbox hydration now loads all event records with one round trip per entity type
   (`load_catalog_records`), preserving per-event order, duplicates, deletes, and missing rows; a
   batch-read error falls back to the previous per-event classification.
-- A long-lived writer was evaluated and **not** adopted: the batch-scoped writer keeps
-  commit-before-ack, crash recovery, and multi-process Tanvy lock semantics simple, and the writer
-  is already amortized over a batch. This is recorded as a deliberate NO CHANGE.
+- The current writer remains batch-scoped. No representative lifecycle measurement
+  supports a decision to retain it; RM-13 remains partial pending measurement
+  and the required evidence-backed lifecycle decision.
 
 ## 8.4 Search rebuild execution (PERF-006 / RM-14)
 
@@ -432,7 +435,7 @@ asset registry after migration 0054. Neither touches remediation behavior.
   integrity/failure-injection tests is not implemented.
 - **RM-12** bounded CPU/FS admission, subprocess lifecycle review, and measured concurrency
   (including making `inspection_concurrency` effective) is not implemented.
-- **RM-13** long-lived writer lifecycle is not implemented (documented NO CHANGE).
+- **RM-13** long-lived writer lifecycle remains unimplemented; a measured decision is outstanding.
 - **RM-15** endpoint/serialization/ACL optimization beyond the rating index needs the representative
   fixture and route percentiles.
 - **RM-17** one-reader-per-stream, combined auth lookup, and rate-limit measurement are not
@@ -532,3 +535,110 @@ The representative 560K–600K end-to-end benchmark, seed-subgraph-scoped RM-09 
 RM-11 content-read elimination, shared RM-12 media admission and tuning, RM-13 writer evidence,
 RM-15 route optimization, RM-17 streaming/auth/rate-limit, and RM-18/RM-19 measurements remain. This
 document does not claim full remediation completion.
+
+## Current execution: partial media operation inventory
+
+Source inspection, not a measured I/O count: same-filesystem acquisition renames
+and hashes the staged tree; cross-filesystem acquisition hashes the source tree,
+copies, rehashes the source and hashes the copy, with a further source check at
+cleanup. Inspection and normalization each verify the owned tree before and after
+work; inspection also hashes and probes individual files. Normalization hashes
+source audio before and after processing, probes source and output, hashes output,
+and fingerprints it. Retained MP3 is decoded and copied; FLAC is encoded and
+CUE sources are processed per segment. External artwork has source checks before
+and after normalization. Embedded artwork requires an additional post-extraction
+source check. Publication hashes while copying and independently verifies or
+adopts the destination; retries and recovery reverify.
+
+The current working tree avoids an additional post-processing source hash when
+there is no embedded artwork and computes input and output artwork hashes from
+the same bounded bytes used for preflight and output validation. Inspection also hashes the complete external artwork stream while collecting its bounded header. `cargo test -p melodee-media --lib --test
+normalization_real` passed 56 unit tests (one ignored) and 13 real-media tests,
+with `CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1`. This is partial RM-11 work, not a
+measured reduction or completion of the required integrity and recovery matrix.
+
+The initial Rust-schema fixture smoke at default cardinality created 35,000
+artists, 50,000 releases, 600,000 tracks and 600,000 asset references in 98.5 s
+on the existing PostgreSQL 18.3 development service; the existing release CLI
+`catalog status` reported those counts. The database was invocation-owned and
+removed afterwards. This is a fixture construction smoke test, not an import or
+representative performance measurement: the CLI binary's build identity was
+not established, and the fixture omits physical media and several required
+relationship distributions. It is not a baseline/final comparison.
+
+A subsequent fixture construction run with synthetic acoustic evidence and
+genre terms completed in 149.1 s. It contained 600,000 acoustic evidence rows,
+1,200,000 genre terms and a total of 1,200,000 aggregate track counts across
+two surfaces. This is construction and invariant smoke evidence, not a
+production-path performance comparison; the missing distributions and workloads
+listed in the status ledger remain mandatory.
+
+A release-build in-process OpenSubsonic artist-index experiment on the
+600,000-track fixture produced six serial authenticated samples per format.
+The raw samples, diagnostic plans, environment, procedure and limitations are
+in [the artist index evidence](tests/performance/artist-index-2026-11-26.md).
+This was built from an uncommitted tree while other edits were in progress;
+the exact build identity is not established. It is not a comparable baseline or
+final acceptance run, and excludes network transport and concurrent load.
+
+The detached original revision was also measured with the same cardinalities.
+All 24 baseline artist-index samples completed under a 15-second statement
+limit; raw output and reproduction are in [the baseline evidence](tests/performance/artist-index-baseline-2026-11-26.md).
+The baseline and later observations are directional: the later executable's
+exact dirty source identity was not captured, cache conditions were uncontrolled,
+and the baseline predates the positive-rating index. They do not satisfy the
+required final integrated before/after workload matrix.
+
+A pre-0065 release binary (`c7a1405446d0f568c0497233fce2df0ba0ab941428685d7e3e1c4d33be77257d` SHA-256)
+processed 200 synthetic one-track MP3/FLAC releases to `cataloged` in 60.656 s
+on the 35,000-artist / 50,000-release / 600,000-track fixture, including
+polling and shutdown but excluding corpus generation. This is approximately
+197.8 releases/minute and 3.30 tracks/second. The full per-item evidence is
+[the ingestion checkpoint summary](design/evidence/performance/ingestion-600k-checkpoint-8a4cf6f.md).
+It bypassed search, policy, discovery, enrichment, podcast and concurrent
+interactive work and used five-second audio on tmpfs without artwork, CUE, retries or
+cross-filesystem staging. It did not collect I/O counts or reimport evidence.
+The exact dirty build source identity was not captured; it is neither a baseline
+comparison nor final acceptance.
+
+A controlled synthetic codec-stage matrix compared the original revision and
+current media source at one, two and four workers across MP3, FLAC, Ogg and WAV;
+raw samples, source digests, CPU/RSS observations and limitations are in
+[the codec matrix evidence](tests/performance/codec-matrix-2026-11-26.md).
+It bypasses database workers and the shared ingestion gate and did not measure
+interactive latency, so it does not establish an appropriate production limit.
+
+A single PostgreSQL-backed search rebuild on the 600,000-track fixture indexed
+685,000 documents in 30.968 seconds (22,119 documents/second), with 69 snapshot
+commits, 30.920 seconds of snapshot age, a 7.24 ms activation call, 218,358,261
+logical index bytes and a 248,976 KiB process peak RSS. Catch-up saw zero rows.
+This is a dirty-build, uncontrolled-cache, single-run observation with an empty
+outbox and no concurrent workload; it is not a comparable baseline or final
+acceptance measurement. See [the rebuild evidence](tests/performance/search-rebuild-2026-11-26.md) for raw timings and reproduction.
+
+The original revision's PostgreSQL-backed rebuild of the same document counts
+completed in 35.129 seconds, with 219,819,473 logical index bytes and 224,632 KiB
+peak process RSS. The current dirty-build sample was 30.968 seconds and
+248,976 KiB. These are one sample each with uncontrolled cache and UUID variation;
+the later binary's exact source identity was not captured. The baseline lacks
+snapshot/commit instrumentation and neither run had concurrent load or catch-up
+traffic, so this is directional evidence rather than final acceptance.
+
+The seed-scoped reconciliation diagnostic on the 600,000-track fixture is
+recorded in [the identity evidence](tests/performance/identity-scoped-2026-11-26.md).
+The observed drainer completed in 170.448 ms with four initial seeds, two Artist
+merges and four retained closure seeds; the late lower-ID check passed. The run
+unexpectedly rebuilt against a changing dirty tree, and its identity graph was
+sparse. Its plans do not establish affected-closure proportionality at a
+representative identity distribution; a richer fixture and final comparison
+remain required.
+
+A further diagnostic augmented the 600,000-track catalog with 650,000
+observations/current decisions, 600,000 Track credits, 11,085 Artist external
+identities, 16,666 Release external identities and 349 same-name groups. On one
+synthetic case, scoped and global vectors matched for all five methods; the
+same-Release, repeated-credit and name-proposal queries took 15.120/2,899.674 ms,
+7.029/1,268.991 ms and 5.809/795.096 ms respectively (scoped/global), and the
+production drain took 167.904 ms. The strong Release case had no seeded
+candidate and was vacuous. The binary's exact dirty source is unestablished;
+this is not final equivalence or baseline acceptance evidence.

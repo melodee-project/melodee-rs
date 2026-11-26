@@ -27,8 +27,11 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use crate::resource_bounds::ResourceGauge;
 use uuid::Uuid;
 
-/// Upper bound for one filesystem read before yielding back to the HTTP body.
+/// Upper bound for one HTTP body frame.
 const STREAM_CHUNK_SIZE: usize = 64 * 1024;
+/// One read is shared by up to four frames. This bounds read-ahead to 256 KiB
+/// per admitted stream while avoiding one blocking task per frame.
+const STREAM_READ_SIZE: usize = 4 * STREAM_CHUNK_SIZE;
 const STREAM_TOKEN_LIFETIME_SECONDS: i64 = 7 * 24 * 60 * 60;
 const MAX_ENCODED_STREAM_TOKEN_BYTES: usize = 4096;
 
@@ -882,18 +885,24 @@ async fn stream_file(
     let state = FileStreamState {
         file,
         remaining: range.length(),
+        buffered: Bytes::new(),
         _permit: permit,
     };
     Ok(Body::from_stream(stream::try_unfold(
         state,
-        |state| async move {
+        |mut state| async move {
+            if !state.buffered.is_empty() {
+                let size = state.buffered.len().min(STREAM_CHUNK_SIZE);
+                let chunk = state.buffered.split_to(size);
+                return Ok::<_, io::Error>(Some((chunk, state)));
+            }
             if state.remaining == 0 {
                 return Ok::<_, io::Error>(None);
             }
-            let chunk_size = state.remaining.min(STREAM_CHUNK_SIZE as u64) as usize;
+            let read_size = state.remaining.min(STREAM_READ_SIZE as u64) as usize;
             let read = tokio::task::spawn_blocking(move || {
                 let mut state = state;
-                let mut buffer = vec![0_u8; chunk_size];
+                let mut buffer = vec![0_u8; read_size];
                 let read = state.file.read(&mut buffer)?;
                 buffer.truncate(read);
                 Ok::<_, io::Error>((state, buffer, read))
@@ -908,7 +917,10 @@ async fn stream_file(
                 ));
             }
             state.remaining -= read as u64;
-            Ok(Some((Bytes::from(buffer), state)))
+            state.buffered = Bytes::from(buffer);
+            let size = state.buffered.len().min(STREAM_CHUNK_SIZE);
+            let chunk = state.buffered.split_to(size);
+            Ok(Some((chunk, state)))
         },
     )))
 }
@@ -916,6 +928,7 @@ async fn stream_file(
 struct FileStreamState {
     file: File,
     remaining: u64,
+    buffered: Bytes,
     _permit: Admission,
 }
 

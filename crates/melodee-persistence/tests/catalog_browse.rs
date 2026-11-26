@@ -396,6 +396,17 @@ async fn artist_detail_exposes_identity_stats_and_bounded_sections() {
         )
         .await
         .expect("relationship");
+    let evidence_seeds: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM catalog_identity_reconciliation_seed WHERE artist_id=$1",
+    )
+    .bind(member_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read durable Artist evidence seeds");
+    assert!(
+        evidence_seeds >= 3,
+        "alias, external ID and relationship each seed closure work"
+    );
     CatalogStore
         .add_group_membership(
             &db.pool,

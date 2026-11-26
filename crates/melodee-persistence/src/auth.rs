@@ -307,6 +307,13 @@ struct AuthenticationRow {
 }
 
 #[derive(FromRow)]
+struct OpenSubsonicAuthenticationRow {
+    #[sqlx(flatten)]
+    authentication: AuthenticationRow,
+    secret: Option<String>,
+}
+
+#[derive(FromRow)]
 struct RefreshRow {
     token_id: Uuid,
     family_id: Uuid,
@@ -323,6 +330,36 @@ struct RefreshRow {
 }
 
 impl AuthStore {
+    /// Loads the user and its optional OpenSubsonic token secret in one
+    /// statement, so token authentication observes both from one snapshot.
+    pub async fn user_for_opensubsonic_token(
+        &self,
+        pool: &PgPool,
+        normalized_username: &str,
+    ) -> Result<Option<(AuthenticationRecord, Option<SecretString>)>, AuthStoreError> {
+        let row = sqlx::query_as::<_, OpenSubsonicAuthenticationRow>(
+            "SELECT u.id, u.public_api_id, u.username, u.email, u.is_admin, u.is_editor,
+                    u.enabled, u.locked, u.blacklisted, u.description, u.time_zone_id,
+                    u.preferred_language, u.preferred_theme, u.auth_revision, u.created_at,
+                    u.updated_at, u.password_hash, u.password_hash_algorithm, s.secret
+             FROM native_users u
+             LEFT JOIN opensubsonic_user_secrets s ON s.user_id = u.id
+             WHERE u.normalized_username = $1",
+        )
+        .bind(normalized_username)
+        .fetch_optional(pool)
+        .await?;
+        match row {
+            Some(row) => {
+                let roles = roles_for_pool(pool, row.authentication.id).await?;
+                Ok(Some((
+                    authentication_from_row(row.authentication, roles)?,
+                    row.secret.map(SecretString::new),
+                )))
+            }
+            None => Ok(None),
+        }
+    }
     #[must_use]
     pub const fn new() -> Self {
         Self

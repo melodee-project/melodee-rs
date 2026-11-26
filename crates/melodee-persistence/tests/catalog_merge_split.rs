@@ -61,6 +61,117 @@ async fn insert_native_user(db: &TestDb, username: &str, now: OffsetDateTime) ->
 }
 
 #[tokio::test]
+async fn artist_merge_and_scrobble_wait_in_parent_order_and_preserve_popularity() {
+    use melodee_persistence::{NativeScrobbleResult, NativeUserStateStore};
+    let db = TestDb::create("artist_merge_scrobble_order").await;
+    let fixture = seed_published_release(
+        &db,
+        90,
+        CatalogFixturePresentation {
+            release_title: "Concurrent Artist Correction",
+            release_artist: "Merge Destination",
+            track_title: "Concurrent Play",
+            track_artist: "Merge Source",
+            release_date: "2009-09-09",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("merge-race", "test"),
+            now,
+        )
+        .await
+        .expect("import fixture");
+    let release = fixture.release_id.into_uuid();
+    let (track, public, source, source_public): (Uuid,Uuid,Uuid,Uuid) = sqlx::query_as("SELECT t.id,t.public_api_id,a.artist_id,artist.public_api_id FROM tracks t JOIN track_artists a ON a.track_id=t.id AND a.role='primary' JOIN artists artist ON artist.id=a.artist_id WHERE t.release_id=$1")
+        .bind(release).fetch_one(&db.pool).await.expect("read Track credit");
+    let target: Uuid = sqlx::query_scalar(
+        "SELECT artist_id FROM release_artists WHERE release_id=$1 AND role='primary'",
+    )
+    .bind(release)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read target");
+    assert_ne!(source, target);
+    let user = insert_native_user(&db, "artist-merge-race", now).await;
+    let mut holder = db.pool.begin().await.expect("begin holder");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(source)
+        .execute(&mut *holder)
+        .await
+        .expect("lock source Artist");
+    let merge = ArtistMerge {
+        id: ArtistMergeId::new(),
+        source_artist_id: ArtistId::from_uuid(source),
+        source_public_api_id: ArtistPublicId::from_uuid(source_public),
+        target_artist_id: ArtistId::from_uuid(target),
+        actor: "test".into(),
+        reason: "race".into(),
+        occurred_at: now,
+    };
+    let merge_pool = db.pool.clone();
+    let play_pool = db.pool.clone();
+    let merge_task =
+        tokio::spawn(async move { CatalogStore.merge_artist(&merge_pool, &merge, "race").await });
+    let play_task = tokio::spawn(async move {
+        NativeUserStateStore::record_scrobble(
+            &play_pool,
+            user,
+            public,
+            "artist-merge-race",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'")
+                .fetch_one(&db.pool).await.expect("count waiters");
+            if waiting >= 2 { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("both operations wait on parent");
+    holder.commit().await.expect("release parent");
+    let (merged, played) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        (
+            merge_task.await.expect("merge join"),
+            play_task.await.expect("play join"),
+        )
+    })
+    .await
+    .expect("operations finish");
+    merged.expect("merge succeeds");
+    assert_eq!(
+        played.expect("play succeeds"),
+        NativeScrobbleResult::Applied
+    );
+    let (actual, expected): (i64,i64) = sqlx::query_as("SELECT c.popularity,(SELECT count(*) FROM native_track_plays p JOIN track_artists a ON a.track_id=p.track_id WHERE a.role='primary' AND a.artist_id=$1) FROM native_recommendation_candidates c WHERE c.entity_type='artist' AND c.entity_id=$1")
+        .bind(target).fetch_one(&db.pool).await.expect("compare Artist popularity");
+    assert_eq!(actual, expected);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM native_track_plays WHERE track_id=$1")
+            .bind(track)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count plays"),
+        1
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn merge_then_selective_split_preserves_public_ids_v3_and_every_media_path() {
     let db = TestDb::create("catalog_artist_merge_split").await;
     let fixture = seed_published_release(

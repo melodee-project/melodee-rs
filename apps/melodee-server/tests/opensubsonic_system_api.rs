@@ -493,6 +493,36 @@ async fn token_auth_accepts_case_insensitive_hex_and_form_post() {
 }
 
 #[tokio::test]
+async fn token_auth_observes_secret_revocation_and_user_disablement() {
+    let db = common::TestDb::create("os_token_revocation").await;
+    let state = state(&db).await;
+    let path = format!(
+        "/rest/getMusicFolders.view?f=json&u=phase0-fixture&t={}&s=q",
+        token_for("q")
+    );
+    let (_, _, body) = respond(state.clone(), enforced_get(&path)).await;
+    assert_eq!(json_body(&body)["subsonic-response"]["status"], "ok");
+
+    sqlx::query("DELETE FROM opensubsonic_user_secrets")
+        .execute(&db.pool)
+        .await
+        .expect("revoke secret");
+    let (_, _, body) = respond(state.clone(), enforced_get(&path)).await;
+    assert_eq!(json_body(&body)["subsonic-response"]["status"], "error");
+
+    sqlx::query("INSERT INTO opensubsonic_user_secrets (user_id, secret, created_at, updated_at) SELECT id, $1, now(), now() FROM native_users WHERE normalized_username = 'PHASE0-FIXTURE'")
+        .bind(FIXTURE_SECRET).execute(&db.pool).await.expect("restore secret");
+    sqlx::query(
+        "UPDATE native_users SET enabled = false WHERE normalized_username = 'PHASE0-FIXTURE'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("disable user");
+    let (_, _, body) = respond(state, enforced_get(&path)).await;
+    assert_eq!(json_body(&body)["subsonic-response"]["status"], "error");
+}
+
+#[tokio::test]
 async fn password_auth_accepts_plain_and_enc_hex_forms() {
     let db = common::TestDb::create("os_password_forms").await;
     let state = state(&db).await;

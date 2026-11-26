@@ -15,7 +15,7 @@ use melodee_domain::{
     ReleaseWorkItemEvent, RetryPolicy, SourceDisposition, StructuralValidation, TransitionKind,
     ValidationOutcome, WorkErrorCode, WorkEventType,
 };
-use sqlx::{FromRow, PgPool, Postgres, Transaction};
+use sqlx::{Acquire, FromRow, PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
@@ -2255,11 +2255,16 @@ impl WorkItemStore {
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
         let acquire_started = std::time::Instant::now();
-        let mut tx = pool.begin().await?;
+        let _hold;
+        let mut connection = pool.acquire().await?;
+        let acquire_duration = acquire_started.elapsed();
+        _hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::InspectionClaimHold);
+        crate::metrics::observe(crate::metrics::Metric::PoolAcquire, acquire_duration);
         crate::metrics::observe(
-            crate::metrics::Metric::PoolAcquire,
-            acquire_started.elapsed(),
+            crate::metrics::Metric::InspectionClaimAcquire,
+            acquire_duration,
         );
+        let mut tx = (&mut *connection).begin().await?;
         // Select candidates with row locks (skipped when locked by rivals),
         // then update each within the same transaction. Two steps so the
         // pre-update state is known for the failed->ready requeue event.
@@ -2321,6 +2326,8 @@ impl WorkItemStore {
             items.push(item);
         }
         tx.commit().await?;
+        drop(connection);
+        drop(_hold);
         if items.is_empty() {
             debug!(worker_id = %worker, "claim: no eligible work");
         } else {
@@ -2797,7 +2804,13 @@ impl WorkItemStore {
         lease_duration: time::Duration,
         now: OffsetDateTime,
     ) -> Result<OffsetDateTime, WorkStoreError> {
-        let mut tx = pool.begin().await?;
+        let acquire_started = std::time::Instant::now();
+        let _hold;
+        let mut connection = pool.acquire().await?;
+        let acquire_duration = acquire_started.elapsed();
+        _hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::HeartbeatHold);
+        crate::metrics::observe(crate::metrics::Metric::HeartbeatAcquire, acquire_duration);
+        let mut tx = (&mut *connection).begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
         let new_expiry = now + lease_duration;
@@ -2825,6 +2838,8 @@ impl WorkItemStore {
         )
         .await?;
         tx.commit().await?;
+        drop(connection);
+        drop(_hold);
         info!(work_item_id = %id, lease_expires_at = %new_expiry, "lease renewed");
         Ok(new_expiry)
     }

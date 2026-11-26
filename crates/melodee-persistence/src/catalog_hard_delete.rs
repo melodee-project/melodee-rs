@@ -149,6 +149,252 @@ async fn enable_hard_delete(tx: &mut Transaction<'_, Postgres>) -> Result<(), Ca
     Ok(())
 }
 
+/// Capture the exact Track-to-Release membership before locking Release
+/// parents. A concurrent raw Track move can remove a row from the Release
+/// scope while we wait; recomputing the lock set afterward would miss it.
+async fn prepare_delete_track_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    track_ids: &[Uuid],
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    sqlx::query("CREATE TEMP TABLE melodee_hard_delete_track_scope (id uuid PRIMARY KEY, release_id uuid NOT NULL) ON COMMIT DROP")
+        .execute(&mut **tx).await?;
+    sqlx::query(
+        "INSERT INTO melodee_hard_delete_track_scope (id,release_id)
+         SELECT track.id,track.release_id FROM tracks track JOIN (
+             SELECT unnest($1::uuid[]) id
+             UNION SELECT id FROM tracks WHERE release_id=ANY($2)
+             UNION SELECT track_id FROM track_artists WHERE artist_id=ANY($3)
+         ) affected ON affected.id=track.id",
+    )
+    .bind(track_ids)
+    .bind(release_ids)
+    .bind(artist_ids)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn lock_captured_delete_tracks(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<(), CatalogStoreError> {
+    sqlx::query("SELECT track.id FROM tracks track JOIN melodee_hard_delete_track_scope scope ON scope.id=track.id ORDER BY track.id FOR UPDATE OF track")
+        .execute(&mut **tx).await?;
+    Ok(())
+}
+
+async fn verify_delete_track_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    track_ids: &[Uuid],
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    let changed: bool = sqlx::query_scalar(
+        "WITH current_scope AS MATERIALIZED (
+            SELECT track.id,track.release_id FROM tracks track JOIN (
+                SELECT unnest($1::uuid[]) id
+                UNION SELECT id FROM tracks WHERE release_id=ANY($2)
+                UNION SELECT track_id FROM track_artists WHERE artist_id=ANY($3)
+            ) selected ON selected.id=track.id
+         )
+         SELECT EXISTS (
+            (SELECT id,release_id FROM current_scope EXCEPT SELECT id,release_id FROM melodee_hard_delete_track_scope)
+            UNION ALL
+            (SELECT id,release_id FROM melodee_hard_delete_track_scope EXCEPT SELECT id,release_id FROM current_scope)
+         )",
+    ).bind(track_ids).bind(release_ids).bind(artist_ids).fetch_one(&mut **tx).await?;
+    if changed {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    Ok(())
+}
+
+/// With parents and captured Tracks fenced, lock every candidate before the
+/// first of the several statement-level deletion triggers mutates one.
+async fn lock_delete_recommendation_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    sqlx::query(
+        "WITH affected_tracks AS MATERIALIZED (
+             SELECT id,release_id FROM melodee_hard_delete_track_scope
+         ), affected AS (
+             SELECT 'track'::text entity_type,id entity_id FROM affected_tracks
+             UNION SELECT 'release',release_id FROM affected_tracks
+             UNION SELECT 'release',unnest($1::uuid[])
+             UNION SELECT 'artist',unnest($2::uuid[])
+             UNION SELECT 'artist',credit.artist_id FROM track_artists credit
+                   JOIN affected_tracks track ON track.id=credit.track_id
+                  WHERE credit.role='primary'
+         )
+         SELECT candidate.entity_id FROM native_recommendation_candidates candidate
+          JOIN affected ON affected.entity_type=candidate.entity_type
+                       AND affected.entity_id=candidate.entity_id
+         ORDER BY candidate.entity_type,candidate.entity_id FOR UPDATE OF candidate",
+    )
+    .bind(release_ids)
+    .bind(artist_ids)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Lock every Release that this deletion can update, in one order. A
+/// transaction-local table keeps even a large redirect closure out of the
+/// application's retained memory. Reject closure changes observed after a
+/// wait, before any destructive write.
+async fn lock_delete_release_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    sqlx::query(
+        "CREATE TEMP TABLE melodee_hard_delete_release_scope (id uuid PRIMARY KEY) ON COMMIT DROP",
+    )
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO melodee_hard_delete_release_scope (id)
+         SELECT id FROM releases WHERE id=ANY($1)
+         UNION SELECT id FROM releases WHERE merged_into_release_id=ANY($1)
+         UNION SELECT release_id FROM release_artists WHERE artist_id=ANY($2)
+         UNION SELECT track.release_id FROM tracks track JOIN track_artists credit
+                 ON credit.track_id=track.id WHERE credit.artist_id=ANY($2)",
+    )
+    .bind(release_ids)
+    .bind(artist_ids)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "SELECT release.id FROM releases release
+         JOIN melodee_hard_delete_release_scope scope ON scope.id=release.id
+         ORDER BY release.id FOR NO KEY UPDATE OF release",
+    )
+    .execute(&mut **tx)
+    .await?;
+    verify_delete_release_closure(tx, release_ids, artist_ids).await
+}
+
+async fn upgrade_delete_release_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    // KEY SHARE from an in-flight Track move is compatible with the initial
+    // parent lock. Upgrade only after captured Tracks are locked, then check
+    // again for arrivals that committed before the upgrade completed.
+    sqlx::query(
+        "SELECT release.id FROM releases release
+         JOIN melodee_hard_delete_release_scope scope ON scope.id=release.id
+         ORDER BY release.id FOR UPDATE OF release",
+    )
+    .execute(&mut **tx)
+    .await?;
+    verify_delete_release_closure(tx, release_ids, artist_ids).await
+}
+
+async fn verify_delete_release_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    let changed: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM releases release
+              WHERE release.merged_into_release_id=ANY($1)
+                AND NOT EXISTS (SELECT 1 FROM melodee_hard_delete_release_scope scope WHERE scope.id=release.id)
+             UNION ALL
+             SELECT 1 FROM release_artists credit WHERE credit.artist_id=ANY($2)
+                AND NOT EXISTS (SELECT 1 FROM melodee_hard_delete_release_scope scope WHERE scope.id=credit.release_id)
+             UNION ALL
+             SELECT 1 FROM track_artists credit JOIN tracks track ON track.id=credit.track_id
+              WHERE credit.artist_id=ANY($2)
+                AND NOT EXISTS (SELECT 1 FROM melodee_hard_delete_release_scope scope WHERE scope.id=track.release_id)
+         )",
+    )
+    .bind(release_ids).bind(artist_ids).fetch_one(&mut **tx).await?;
+    if changed {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    Ok(())
+}
+
+async fn lock_delete_artist_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    sqlx::query(
+        "CREATE TEMP TABLE melodee_hard_delete_artist_scope (id uuid PRIMARY KEY) ON COMMIT DROP",
+    )
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO melodee_hard_delete_artist_scope (id)
+         SELECT id FROM artists WHERE id=ANY($1)
+         UNION SELECT id FROM artists WHERE merged_into_artist_id=ANY($1)",
+    )
+    .bind(artist_ids)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "SELECT artist.id FROM artists artist
+         JOIN melodee_hard_delete_artist_scope scope ON scope.id=artist.id
+         ORDER BY artist.id FOR NO KEY UPDATE OF artist",
+    )
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "SELECT artist.id FROM artists artist
+         JOIN melodee_hard_delete_artist_scope scope ON scope.id=artist.id
+         ORDER BY artist.id FOR UPDATE OF artist",
+    )
+    .execute(&mut **tx)
+    .await?;
+    let changed: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM artists artist
+         WHERE artist.merged_into_artist_id=ANY($1)
+           AND NOT EXISTS (SELECT 1 FROM melodee_hard_delete_artist_scope scope WHERE scope.id=artist.id))",
+    ).bind(artist_ids).fetch_one(&mut **tx).await?;
+    if changed {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    Ok(())
+}
+
+/// Preserve identity keys without foreign keys to rows that are about to be
+/// deleted. The enclosing deletion transaction also owns these seeds.
+async fn seed_deleted_artist_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    artist_ids: &[Uuid],
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    if artist_ids.is_empty() {
+        return Ok(());
+    }
+    let has_seed_table: bool = sqlx::query_scalar(
+        "SELECT to_regclass('public.catalog_identity_reconciliation_seed') IS NOT NULL",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_seed_table {
+        sqlx::query(
+            "INSERT INTO catalog_identity_reconciliation_seed (normalized_name, external_provider, external_id, created_at)
+             SELECT DISTINCT artist.normalized_name, NULL::text, NULL::text, $2
+               FROM artists artist WHERE artist.id=ANY($1)
+             UNION
+             SELECT DISTINCT NULL::text, identity.provider, identity.external_id, $2
+               FROM artist_external_identities identity WHERE identity.artist_id=ANY($1)",
+        )
+        .bind(artist_ids)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn enqueue_projection_delete(
     tx: &mut Transaction<'_, Postgres>,
     entity_type: &str,
@@ -305,29 +551,38 @@ impl CatalogStore {
         let (actor, reason) = normalized_audit(actor, reason)?;
         let mut tx = pool.begin().await?;
         enable_hard_delete(&mut tx).await?;
-        let locked = sqlx::query_as::<_, (Uuid, Uuid)>(
+        let prepared = sqlx::query_as::<_, (Uuid, Uuid)>(
             "SELECT id, public_api_id FROM releases WHERE public_api_id = ANY($1)
-              ORDER BY id FOR UPDATE",
+              ORDER BY id",
         )
         .bind(&selected)
         .fetch_all(&mut *tx)
         .await?;
-        if locked.len() != selected.len() {
+        if prepared.len() != selected.len() {
             return Err(CatalogStoreError::MutationConflict);
         }
+        let release_ids = prepared.iter().map(|(id, _)| *id).collect::<Vec<_>>();
+        prepare_delete_track_closure(&mut tx, &[], &release_ids, &[]).await?;
+        lock_delete_release_closure(&mut tx, &release_ids, &[]).await?;
+        lock_captured_delete_tracks(&mut tx).await?;
+        verify_delete_track_closure(&mut tx, &[], &release_ids, &[]).await?;
+        upgrade_delete_release_closure(&mut tx, &release_ids, &[]).await?;
+        verify_delete_track_closure(&mut tx, &[], &release_ids, &[]).await?;
+        let locked = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT id,public_api_id FROM releases WHERE public_api_id=ANY($1) ORDER BY id",
+        )
+        .bind(&selected)
+        .fetch_all(&mut *tx)
+        .await?;
+        if locked != prepared {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        lock_delete_recommendation_closure(&mut tx, &release_ids, &[]).await?;
         let mut outcome = HardDeleteOutcome {
             deleted_releases: locked.iter().map(|(_, public)| *public).collect(),
             ..HardDeleteOutcome::default()
         };
-        delete_releases_tx(
-            &mut tx,
-            &locked.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
-            &actor,
-            &reason,
-            now,
-            &mut outcome,
-        )
-        .await?;
+        delete_releases_tx(&mut tx, &release_ids, &actor, &reason, now, &mut outcome).await?;
         tx.commit().await?;
         Ok(outcome)
     }
@@ -437,29 +692,49 @@ impl CatalogStore {
         let (actor, reason) = normalized_audit(actor, reason)?;
         let mut tx = pool.begin().await?;
         enable_hard_delete(&mut tx).await?;
-        let locked = sqlx::query_as::<_, (Uuid, Uuid)>(
-            "SELECT id, public_api_id FROM tracks WHERE public_api_id = ANY($1)
-              ORDER BY id FOR UPDATE",
+        // Release mutations lock their parent rows before their Tracks. Read
+        // the binding first, acquire the same order, then reject stale bindings
+        // rather than deleting a Track moved during lock acquisition.
+        let prepared = sqlx::query_as::<_, (Uuid, Uuid, Uuid)>(
+            "SELECT id,public_api_id,release_id FROM tracks
+              WHERE public_api_id=ANY($1) ORDER BY id",
         )
         .bind(&selected)
         .fetch_all(&mut *tx)
         .await?;
-        if locked.len() != selected.len() {
+        if prepared.len() != selected.len() {
             return Err(CatalogStoreError::MutationConflict);
         }
+        let release_ids = prepared.iter().map(|(_, _, id)| *id).collect::<Vec<_>>();
+        let track_ids = prepared.iter().map(|(id, _, _)| *id).collect::<Vec<_>>();
+        prepare_delete_track_closure(&mut tx, &track_ids, &[], &[]).await?;
+        sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR NO KEY UPDATE")
+            .bind(&release_ids)
+            .execute(&mut *tx)
+            .await?;
+        lock_captured_delete_tracks(&mut tx).await?;
+        verify_delete_track_closure(&mut tx, &track_ids, &[], &[]).await?;
+        sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+            .bind(&release_ids)
+            .execute(&mut *tx)
+            .await?;
+        verify_delete_track_closure(&mut tx, &track_ids, &[], &[]).await?;
+        let locked = sqlx::query_as::<_, (Uuid, Uuid, Uuid)>(
+            "SELECT id,public_api_id,release_id FROM tracks
+              WHERE public_api_id=ANY($1) ORDER BY id",
+        )
+        .bind(&selected)
+        .fetch_all(&mut *tx)
+        .await?;
+        if locked != prepared {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        lock_delete_recommendation_closure(&mut tx, &[], &[]).await?;
         let mut outcome = HardDeleteOutcome {
-            deleted_tracks: locked.iter().map(|(_, public)| *public).collect(),
+            deleted_tracks: locked.iter().map(|(_, public, _)| *public).collect(),
             ..HardDeleteOutcome::default()
         };
-        delete_tracks_tx(
-            &mut tx,
-            &locked.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
-            &actor,
-            &reason,
-            now,
-            &mut outcome,
-        )
-        .await?;
+        delete_tracks_tx(&mut tx, &track_ids, &actor, &reason, now, &mut outcome).await?;
         tx.commit().await?;
         Ok(outcome)
     }
@@ -615,24 +890,56 @@ impl CatalogStore {
         let (actor, reason) = normalized_audit(actor, reason)?;
         let mut tx = pool.begin().await?;
         enable_hard_delete(&mut tx).await?;
-        let locked = sqlx::query_as::<_, (Uuid, Uuid)>(
+        let prepared = sqlx::query_as::<_, (Uuid, Uuid)>(
             "SELECT id, public_api_id FROM artists WHERE public_api_id = ANY($1)
-              ORDER BY id FOR UPDATE",
+              ORDER BY id",
         )
         .bind(&selected)
         .fetch_all(&mut *tx)
         .await?;
-        if locked.len() != selected.len() {
+        if prepared.len() != selected.len() {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let prepared_ids = prepared.iter().map(|(id, _)| *id).collect::<Vec<_>>();
+        lock_delete_artist_closure(&mut tx, &prepared_ids).await?;
+        let locked = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT id,public_api_id FROM artists WHERE public_api_id=ANY($1) ORDER BY id",
+        )
+        .bind(&selected)
+        .fetch_all(&mut *tx)
+        .await?;
+        if locked != prepared {
             return Err(CatalogStoreError::MutationConflict);
         }
         let artist_ids = locked.iter().map(|(id, _)| *id).collect::<Vec<_>>();
         let owned = owned_release_ids_tx(&mut tx, &artist_ids).await?;
-        if !owned.is_empty() {
-            sqlx::query("SELECT id FROM releases WHERE id = ANY($1) ORDER BY id FOR UPDATE")
-                .bind(&owned)
-                .fetch_all(&mut *tx)
-                .await?;
+        prepare_delete_track_closure(&mut tx, &[], &owned, &artist_ids).await?;
+        // Lock every billed Release, not only those that appear solely owned:
+        // shared-Release credit removal can affect Tracks and candidates too.
+        lock_delete_release_closure(&mut tx, &owned, &artist_ids).await?;
+        lock_captured_delete_tracks(&mut tx).await?;
+        verify_delete_track_closure(&mut tx, &[], &owned, &artist_ids).await?;
+        // Existing co-billing rows can be deleted without taking an FK lock
+        // on the Release. Fence those rows before deciding which Releases are
+        // exclusively owned, and reject a decision that changed meanwhile.
+        sqlx::query(
+            "SELECT credit.id FROM release_artists credit JOIN (
+                 SELECT DISTINCT release_id FROM release_artists WHERE artist_id=ANY($1)
+             ) affected ON affected.release_id=credit.release_id
+             ORDER BY credit.release_id,credit.id FOR UPDATE OF credit",
+        )
+        .bind(&artist_ids)
+        .execute(&mut *tx)
+        .await?;
+        if owned_release_ids_tx(&mut tx, &artist_ids).await? != owned {
+            return Err(CatalogStoreError::MutationConflict);
         }
+        upgrade_delete_release_closure(&mut tx, &owned, &artist_ids).await?;
+        verify_delete_track_closure(&mut tx, &[], &owned, &artist_ids).await?;
+        if owned_release_ids_tx(&mut tx, &artist_ids).await? != owned {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        lock_delete_recommendation_closure(&mut tx, &owned, &artist_ids).await?;
         let mut outcome = HardDeleteOutcome {
             deleted_artists: locked.iter().map(|(_, public)| *public).collect(),
             deleted_releases: sqlx::query_scalar::<_, Uuid>(
@@ -989,6 +1296,17 @@ async fn delete_releases_tx(
     .bind(&track_ids)
     .fetch_all(&mut **tx)
     .await?;
+    let affected_artists = sqlx::query_scalar::<_, Uuid>(
+        "SELECT artist_id FROM release_artists WHERE release_id=ANY($1)
+         UNION SELECT artist_id FROM track_artists WHERE track_id=ANY($2)
+         UNION SELECT artist_id FROM artist_match_decisions WHERE observed_artist_id=ANY($3)",
+    )
+    .bind(release_ids)
+    .bind(&track_ids)
+    .bind(&observed_ids)
+    .fetch_all(&mut **tx)
+    .await?;
+    seed_deleted_artist_closure(tx, &affected_artists, now).await?;
     let work_items = sqlx::query_scalar::<_, Uuid>(
         "SELECT work_item_id FROM catalog_imports WHERE release_id = ANY($1)
          UNION
@@ -1021,7 +1339,8 @@ async fn delete_releases_tx(
     // Break self-references and references from surviving rows first.
     sqlx::query(
         "UPDATE artist_match_decisions SET predecessor_decision_id = NULL
-          WHERE predecessor_decision_id IN (
+          WHERE observed_artist_id <> ALL($1)
+            AND predecessor_decision_id IN (
               SELECT id FROM artist_match_decisions
                WHERE observed_artist_id = ANY($1)
           )",
@@ -1031,7 +1350,8 @@ async fn delete_releases_tx(
     .await?;
     sqlx::query(
         "UPDATE artist_negative_assertions SET predecessor_assertion_id = NULL
-          WHERE predecessor_assertion_id IN (
+          WHERE observed_artist_id <> ALL($1)
+            AND predecessor_assertion_id IN (
               SELECT id FROM artist_negative_assertions
                WHERE observed_artist_id = ANY($1)
           )",
@@ -1192,6 +1512,15 @@ async fn delete_tracks_tx(
             .bind(track_ids)
             .fetch_all(&mut **tx)
             .await?;
+    let affected_artists = sqlx::query_scalar::<_, Uuid>(
+        "SELECT artist_id FROM track_artists WHERE track_id=ANY($1)
+         UNION SELECT artist_id FROM artist_match_decisions WHERE observed_artist_id=ANY($2)",
+    )
+    .bind(track_ids)
+    .bind(&observed_ids)
+    .fetch_all(&mut **tx)
+    .await?;
+    seed_deleted_artist_closure(tx, &affected_artists, now).await?;
     let media_ids = sqlx::query_scalar::<_, Uuid>(
         "SELECT DISTINCT media_asset_id FROM track_media_assets
           WHERE track_id = ANY($1)
@@ -1288,6 +1617,7 @@ async fn delete_artists_tx(
     if artist_ids.is_empty() {
         return Ok(());
     }
+    seed_deleted_artist_closure(tx, artist_ids, now).await?;
     let artist_revisions = sqlx::query_as::<_, (Uuid, i64)>(
         "SELECT id, revision FROM artists WHERE id = ANY($1) ORDER BY id",
     )
@@ -1307,12 +1637,23 @@ async fn delete_artists_tx(
     .bind(artist_ids)
     .fetch_all(&mut **tx)
     .await?;
+    // Removing every decision for these Observations can affect surviving
+    // Artists too. Preserve their lookup keys before removing the evidence.
+    let affected_artists = sqlx::query_scalar::<_, Uuid>(
+        "SELECT DISTINCT artist_id FROM artist_match_decisions
+          WHERE observed_artist_id = ANY($1)",
+    )
+    .bind(&observed_ids)
+    .fetch_all(&mut **tx)
+    .await?;
+    seed_deleted_artist_closure(tx, &affected_artists, now).await?;
     let mut asset_keys = provider_image_keys_for_entities(tx, "artist", artist_ids).await?;
     asset_keys.extend(image_keys_tx(tx, "artist", artist_ids).await?);
 
     sqlx::query(
         "UPDATE artist_match_decisions SET predecessor_decision_id = NULL
-          WHERE predecessor_decision_id IN (
+          WHERE observed_artist_id <> ALL($2) AND artist_id <> ALL($1)
+            AND predecessor_decision_id IN (
               SELECT id FROM artist_match_decisions
                WHERE artist_id = ANY($1) OR observed_artist_id = ANY($2)
           )",
@@ -1323,7 +1664,9 @@ async fn delete_artists_tx(
     .await?;
     sqlx::query(
         "UPDATE artist_negative_assertions SET predecessor_assertion_id = NULL
-          WHERE predecessor_assertion_id IN (
+          WHERE observed_artist_id <> ALL($2)
+            AND (candidate_artist_id IS NULL OR candidate_artist_id <> ALL($1))
+            AND predecessor_assertion_id IN (
               SELECT id FROM artist_negative_assertions
                WHERE candidate_artist_id = ANY($1) OR observed_artist_id = ANY($2)
           )",

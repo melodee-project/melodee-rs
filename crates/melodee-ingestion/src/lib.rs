@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod acquisition;
+mod admission;
 mod config;
 mod deletion;
 mod error;
@@ -20,6 +21,10 @@ mod secure_fs;
 mod snapshot;
 mod source;
 mod validate;
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use admission::saturate_for_test as saturate_ingestion_admission_for_test;
 
 pub use acquisition::{
     AcquisitionError, OwnedSource, acquire_owned_source, owned_source_root, source_generation,

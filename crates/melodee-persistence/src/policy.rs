@@ -1816,6 +1816,12 @@ impl PolicyStore {
         .bind(request.completed_at)
         .fetch_one(&mut *tx)
         .await?;
+        // The Release row is held above; acquire its Track rows in the shared
+        // order before the revision UPDATE, independently of the query plan.
+        sqlx::query("SELECT id FROM tracks WHERE release_id=$1 ORDER BY id FOR NO KEY UPDATE")
+            .bind(stored.release_id.into_uuid())
+            .execute(&mut *tx)
+            .await?;
         sqlx::query(
             "UPDATE tracks
                 SET revision = revision + 1, updated_at = $2

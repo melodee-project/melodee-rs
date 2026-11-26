@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Instant;
 
 use tantivy::collector::{Count, TopDocs};
 use tantivy::query::{BooleanQuery, Occur, RegexQuery, TermQuery};
@@ -61,7 +62,13 @@ pub struct SearchStore {
 impl SearchStore {
     /// Open an existing generation directory.
     pub fn open(dir: &Path) -> Result<SearchStore, SearchError> {
+        let started = Instant::now();
         let index = Index::open_in_dir(dir).map_err(|e| SearchError::IndexOpen(e.to_string()))?;
+        tracing::debug!(
+            elapsed_seconds = started.elapsed().as_secs_f64(),
+            writable = true,
+            "search index opened"
+        );
         Self::from_index(index, true)
     }
 
@@ -69,7 +76,13 @@ impl SearchStore {
     /// writer lock. Query and diagnostic paths must use this entry point so
     /// they remain available while the projection worker is committing.
     pub fn open_readonly(dir: &Path) -> Result<SearchStore, SearchError> {
+        let started = Instant::now();
         let index = Index::open_in_dir(dir).map_err(|e| SearchError::IndexOpen(e.to_string()))?;
+        tracing::debug!(
+            elapsed_seconds = started.elapsed().as_secs_f64(),
+            writable = false,
+            "search index opened"
+        );
         Self::from_index(index, false)
     }
 
@@ -91,17 +104,26 @@ impl SearchStore {
             )));
         }
         let writer = if writable {
-            Some(
-                index
-                    .writer(50_000_000)
-                    .map_err(|e| SearchError::IndexOpen(e.to_string()))?,
-            )
+            let started = Instant::now();
+            let writer = index
+                .writer(50_000_000)
+                .map_err(|e| SearchError::IndexOpen(e.to_string()))?;
+            tracing::debug!(
+                elapsed_seconds = started.elapsed().as_secs_f64(),
+                "search writer initialized"
+            );
+            Some(writer)
         } else {
             None
         };
+        let started = Instant::now();
         let reader = index
             .reader()
             .map_err(|e| SearchError::IndexOpen(e.to_string()))?;
+        tracing::debug!(
+            elapsed_seconds = started.elapsed().as_secs_f64(),
+            "search reader initialized"
+        );
         let tokenizer = index
             .tokenizers()
             .get(TEXT_TOKENIZER)
@@ -286,8 +308,19 @@ impl SearchStore {
                 "injected Tantivy commit failure".to_string(),
             ));
         }
+        let pending = self.pending_revisions.len();
+        let commit_started = Instant::now();
         self.writer_mut()?.commit().map_err(SearchError::Tantivy)?;
+        let commit_seconds = commit_started.elapsed().as_secs_f64();
+        let reload_started = Instant::now();
         self.reader.reload().map_err(SearchError::Tantivy)?;
+        tracing::debug!(
+            commit_seconds,
+            reload_seconds = reload_started.elapsed().as_secs_f64(),
+            pending_revisions = pending,
+            segments = self.reader.searcher().segment_readers().len(),
+            "search writer committed"
+        );
         self.pending_revisions.clear();
         Ok(())
     }
@@ -629,7 +662,13 @@ impl SearchReader {
         // commits. Force a reload so a query sees the latest committed
         // segments immediately, matching the previous per-request open
         // visibility instead of Tantivy's default delayed reload.
-        let _ = self.reader.reload();
+        let started = Instant::now();
+        let result = self.reader.reload();
+        tracing::debug!(
+            elapsed_seconds = started.elapsed().as_secs_f64(),
+            success = result.is_ok(),
+            "cached search reader reloaded"
+        );
         // Clones are cheap (Arc-backed index handles); no index is reopened.
         SearchStore {
             schema: self.schema.clone(),

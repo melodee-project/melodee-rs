@@ -1833,7 +1833,7 @@ fn uuidv7() -> uuid::Uuid {
 ///
 /// Upgrades a populated pre-remediation database (schema through 0059) with
 /// representative data and deliberately inconsistent derived state, applying the
-/// full chain (0060-0064), and verifies existing rows survive, the new indexes
+/// full chain (0060-0066), and verifies existing rows survive, the new indexes
 /// are valid, and the operator repair converges the corrupted aggregate.
 #[tokio::test]
 async fn perf_remediation_upgrade_from_0059_preserves_data_and_repairs_derived_state() {
@@ -2017,5 +2017,146 @@ async fn perf_remediation_upgrade_from_0059_preserves_data_and_repairs_derived_s
         .expect("count discovery classes");
     assert_eq!(classes, 5);
 
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn recommendation_lock_upgrade_preserves_popularity_and_accepts_new_plays() {
+    use melodee_persistence::{NativeScrobbleResult, NativeUserStateStore};
+
+    let db = TestDb::create_unmigrated("recommendation_upgrade").await;
+    let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 64)
+        .cloned()
+        .collect();
+    assert_eq!(prior.len(), 64);
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("apply schema through 0064");
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7290,
+        catalog_common::CatalogFixturePresentation {
+            release_title: "Upgrade recommendations",
+            release_artist: "Upgrade Artist",
+            track_title: "Upgrade Track",
+            track_artist: "Upgrade Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let release = fixture.release_id().into_uuid();
+    let (track, public, artist): (uuid::Uuid,uuid::Uuid,uuid::Uuid) = sqlx::query_as(
+        "SELECT t.id,t.public_api_id,a.artist_id FROM tracks t JOIN track_artists a ON a.track_id=t.id AND a.role='primary' WHERE t.release_id=$1"
+    ).bind(release).fetch_one(&db.pool).await.expect("read fixture identities");
+    let user = uuidv7();
+    sqlx::query("INSERT INTO native_users(id,public_api_id,username,normalized_username,email,normalized_email,password_hash,password_hash_algorithm,stream_signing_key,created_at,updated_at) VALUES($1,uuidv7(),'recommendation-upgrade','RECOMMENDATION-UPGRADE','recommendation-upgrade@example.test','RECOMMENDATION-UPGRADE@EXAMPLE.TEST','unused','bcrypt','upgrade-test',now(),now())")
+        .bind(user).execute(&db.pool).await.expect("seed fixture user");
+    // Seed the pre-upgrade play through the historical table/trigger contract.
+    sqlx::query("INSERT INTO native_track_plays(id,user_id,track_id,client_event_id,played_at,submitted_at,duration_seconds,completed) VALUES(uuidv7(),$1,$2,'before-upgrade',now(),now(),30,true)")
+        .bind(user).bind(track).execute(&db.pool).await.expect("record prior play");
+    let ids = [track, release, artist];
+    let before: Vec<(String,uuid::Uuid,i64)> = sqlx::query_as("SELECT entity_type,entity_id,popularity FROM native_recommendation_candidates WHERE entity_id=ANY($1) ORDER BY entity_type,entity_id")
+        .bind(ids).fetch_all(&db.pool).await.expect("read prior popularity");
+    assert_eq!(before.len(), 3);
+    assert!(before.iter().all(|row| row.2 == 1));
+    let pending_seeds: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM catalog_identity_reconciliation_seed")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count pre-upgrade seeds");
+    MIGRATOR
+        .run(&db.pool)
+        .await
+        .expect("apply migrations 0065 and 0066");
+    let upgraded_seeds: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM catalog_identity_reconciliation_seed")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count post-upgrade seeds");
+    assert_eq!(
+        upgraded_seeds, pending_seeds,
+        "upgrade must preserve pending identity work"
+    );
+    let observation: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM observed_artists WHERE release_id=$1 LIMIT 1")
+            .bind(release)
+            .fetch_one(&db.pool)
+            .await
+            .expect("fixture observation");
+    let mut blocker = db.pool.begin().await.expect("begin lock holder");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(artist)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock Artist");
+    sqlx::query("SELECT id FROM observed_artists WHERE id=$1 FOR UPDATE")
+        .bind(observation)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock Observation");
+    let seed: i64 = tokio::time::timeout(std::time::Duration::from_secs(3),
+        sqlx::query_scalar("INSERT INTO catalog_identity_reconciliation_seed (release_id,artist_id,observed_artist_id,created_at) VALUES ($1,$2,$3,now()) RETURNING id")
+            .bind(release).bind(artist).bind(observation).fetch_one(&db.pool))
+        .await.expect("non-owning hints must not wait for identity row locks")
+        .expect("enqueue identity hints");
+    blocker.rollback().await.expect("release identity locks");
+    let stale: i64 = sqlx::query_scalar("INSERT INTO catalog_identity_reconciliation_seed (artist_id,observed_artist_id,created_at) VALUES ($1,$2,now()) RETURNING id")
+        .bind(uuidv7()).bind(uuidv7()).fetch_one(&db.pool).await.expect("enqueue stale hints");
+    let catalog = melodee_persistence::CatalogStore;
+    assert!(
+        catalog
+            .seeded_strong_artist_merge_candidates(&db.pool, &[stale], 10)
+            .await
+            .expect("ignore stale hints")
+            .is_empty()
+    );
+    assert!(
+        catalog
+            .seeded_name_only_artist_match_proposal_candidates(&db.pool, &[stale], 10)
+            .await
+            .expect("ignore stale observations")
+            .is_empty()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_identity_reconciliation_seed WHERE id=ANY($1)"
+        )
+        .bind(&[seed, stale][..])
+        .fetch_one(&db.pool)
+        .await
+        .expect("read pending hints"),
+        2
+    );
+    let after: Vec<(String,uuid::Uuid,i64)> = sqlx::query_as("SELECT entity_type,entity_id,popularity FROM native_recommendation_candidates WHERE entity_id=ANY($1) ORDER BY entity_type,entity_id")
+        .bind(ids).fetch_all(&db.pool).await.expect("read upgraded popularity");
+    assert_eq!(
+        after, before,
+        "upgrade must preserve prior recommendation state"
+    );
+    let now = time::OffsetDateTime::now_utc();
+    assert_eq!(
+        NativeUserStateStore::record_scrobble(
+            &db.pool,
+            user,
+            public,
+            "after-upgrade",
+            now,
+            now,
+            Some(30)
+        )
+        .await
+        .expect("record post-upgrade play"),
+        NativeScrobbleResult::Applied
+    );
+    let after_play: Vec<i64> = sqlx::query_scalar("SELECT popularity FROM native_recommendation_candidates WHERE entity_id=ANY($1) ORDER BY entity_type,entity_id")
+        .bind(ids).fetch_all(&db.pool).await.expect("read updated popularity");
+    assert_eq!(after_play, vec![2, 2, 2]);
     db.drop().await;
 }

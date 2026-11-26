@@ -200,10 +200,18 @@ pub async fn authenticate(
         return auth_failure(&params, &path, &state.server_version);
     };
     let normalized = username.trim().to_uppercase();
-    let record = match AuthStore::new()
-        .user_for_auth(&state.pool, AuthLookup::Username(&normalized))
-        .await
-    {
+    let token_credentials = params.get("t").is_some() && params.get("s").is_some();
+    let lookup = if token_credentials {
+        AuthStore::new()
+            .user_for_opensubsonic_token(&state.pool, &normalized)
+            .await
+    } else {
+        AuthStore::new()
+            .user_for_auth(&state.pool, AuthLookup::Username(&normalized))
+            .await
+            .map(|record| record.map(|record| (record, None)))
+    };
+    let (record, secret) = match lookup {
         Ok(Some(record)) => record,
         Ok(None) => return auth_failure(&params, &path, &state.server_version),
         Err(error) => {
@@ -218,10 +226,10 @@ pub async fn authenticate(
     // The `jwt` and `apiKey` parameters are deliberately never consulted
     // (ADR-0130 decisions 1-2). Only the token and password branches decide.
     let authenticated = match (params.get("t"), params.get("s")) {
-        (Some(token), Some(salt)) => match load_user_secret(&state, record.user.id).await {
-            Ok(Some(secret)) => {
+        (Some(token), Some(salt)) => match secret {
+            Some(secret) => {
                 let mut hasher = Md5::new();
-                hasher.update(secret.as_bytes());
+                hasher.update(secret.expose_secret().as_bytes());
                 hasher.update(salt.as_bytes());
                 let expected = params::hex_encode(&hasher.finalize());
                 expected.eq_ignore_ascii_case(token)
@@ -262,15 +270,6 @@ pub async fn authenticate(
         roles: record.user.roles,
     });
     next.run(request).await
-}
-
-async fn load_user_secret(state: &OsState, user_id: Uuid) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT secret FROM opensubsonic_user_secrets WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(&state.pool)
-    .await
 }
 
 #[cfg(test)]

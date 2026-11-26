@@ -31,6 +31,8 @@ pub enum ReleaseDeletionError {
     },
     #[error("Release deletion task did not complete")]
     Task(#[from] tokio::task::JoinError),
+    #[error("Release deletion admission failed")]
+    Admission(#[from] tokio::sync::AcquireError),
 }
 
 /// Removes the canonical bundle and optional retained staging tree.
@@ -60,7 +62,9 @@ pub async fn delete_release_storage(
     let canonical_relative_path = canonical_relative_path.to_owned();
     let staging_relative_path = staging.as_ref().map(|(_, relative)| relative.clone());
 
+    let permit = crate::admission::heavy_ingestion().await?;
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         remove_owned_tree(&canonical, "canonical")?;
         if let Some((path, _)) = staging {
             remove_owned_tree(&path, "staging")?;
@@ -93,7 +97,9 @@ pub async fn delete_storage_files(
         .iter()
         .map(|(_, path)| path.clone())
         .collect::<Vec<_>>();
+    let permit = crate::admission::heavy_ingestion().await?;
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         for path in paths {
             match crate::secure_fs::unlink_file(&path) {
                 Ok(()) => {}
@@ -144,7 +150,9 @@ pub async fn delete_unpublished_storage(
             trees.push((kind, root.to_owned(), owned_path(root, relative, kind)?));
         }
     }
+    let permit = crate::admission::heavy_ingestion().await?;
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         for (kind, root, _) in &trees {
             crate::secure_fs::open_directory(root).map_err(|source| {
                 ReleaseDeletionError::Remove {

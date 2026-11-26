@@ -1150,16 +1150,18 @@ impl NativeUserStateStore {
         // an impossible future play (which previously failed a database check and
         // surfaced as `500`).
         let played_at = played_at.min(submitted_at);
-        let mut tx = pool.begin().await?;
-        let track = sqlx::query_as::<_, (Uuid, Uuid)>(
-            "SELECT id, release_id FROM tracks WHERE public_api_id = $1",
-        )
-        .bind(track_public_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or(NativeUserStateStoreError::NotFound)?;
-        let inserted = sqlx::query_scalar::<_, Uuid>(
-            r#"
+        // If the primary credits or Release move while their parent locks are
+        // acquired, discard the entire transaction and retry with fresh data.
+        // Exhaustion stays a database error, rather than an idempotency-key
+        // conflict, preserving the adapter's existing error classification.
+        for _ in 0..SCROBBLE_BINDING_RETRIES {
+            let mut tx = pool.begin().await?;
+            let Some(track) = lock_scrobble_catalog_binding(&mut tx, track_public_id).await? else {
+                tx.rollback().await?;
+                continue;
+            };
+            let inserted = sqlx::query_scalar::<_, Uuid>(
+                r#"
             INSERT INTO native_track_plays (
                 id, user_id, track_id, client_event_id, played_at,
                 submitted_at, duration_seconds, completed
@@ -1167,45 +1169,162 @@ impl NativeUserStateStore {
             ON CONFLICT (user_id, client_event_id) DO NOTHING
             RETURNING id
             "#,
-        )
-        .bind(Uuid::now_v7())
-        .bind(user_id)
-        .bind(track.0)
-        .bind(client_event_id)
-        .bind(played_at)
-        .bind(submitted_at)
-        .bind(duration_seconds)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if inserted.is_none() {
-            let same: bool = sqlx::query_scalar(
-                r#"
+            )
+            .bind(Uuid::now_v7())
+            .bind(user_id)
+            .bind(track.0)
+            .bind(client_event_id)
+            .bind(played_at)
+            .bind(submitted_at)
+            .bind(duration_seconds)
+            .fetch_optional(&mut *tx)
+            .await?;
+            if inserted.is_none() {
+                let same: bool = sqlx::query_scalar(
+                    r#"
                 SELECT track_id = $3 AND played_at = $4 AND duration_seconds IS NOT DISTINCT FROM $5
                 FROM native_track_plays WHERE user_id = $1 AND client_event_id = $2
                 "#,
-            )
-            .bind(user_id)
-            .bind(client_event_id)
-            .bind(track.0)
-            .bind(played_at)
-            .bind(duration_seconds)
-            .fetch_one(&mut *tx)
-            .await?;
-            if !same {
-                return Err(NativeUserStateStoreError::Conflict);
+                )
+                .bind(user_id)
+                .bind(client_event_id)
+                .bind(track.0)
+                .bind(played_at)
+                .bind(duration_seconds)
+                .fetch_one(&mut *tx)
+                .await?;
+                if !same {
+                    return Err(NativeUserStateStoreError::Conflict);
+                }
+                tx.commit().await?;
+                return Ok(NativeScrobbleResult::Adopted);
             }
+            increment_play_counters(&mut tx, user_id, track.0, track.1, played_at, submitted_at)
+                .await?;
+            sqlx::query("DELETE FROM native_now_playing WHERE user_id = $1")
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await?;
             tx.commit().await?;
-            return Ok(NativeScrobbleResult::Adopted);
+            return Ok(NativeScrobbleResult::Applied);
         }
-        increment_play_counters(&mut tx, user_id, track.0, track.1, played_at, submitted_at)
-            .await?;
-        sqlx::query("DELETE FROM native_now_playing WHERE user_id = $1")
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await?;
-        tx.commit().await?;
-        Ok(NativeScrobbleResult::Applied)
+        Err(NativeUserStateStoreError::Database(sqlx::Error::Protocol(
+            "scrobble catalog binding changed repeatedly while acquiring locks".to_owned(),
+        )))
     }
+}
+
+const SCROBBLE_BINDING_RETRIES: usize = 8;
+const SCROBBLE_ARTIST_LOCK_PAGE: usize = 256;
+
+/// Acquire parent locks before the Track so catalog deletion/correction and
+/// scrobbling cannot wait on each other in opposite order. Cursors retain the
+/// exact pre-lock and post-lock sets without an unbounded application buffer.
+async fn lock_scrobble_catalog_binding(
+    tx: &mut Transaction<'_, Postgres>,
+    track_public_id: Uuid,
+) -> Result<Option<(Uuid, Uuid)>, NativeUserStateStoreError> {
+    let initial = sqlx::query_as::<_, (Uuid, Uuid)>(
+        "SELECT id,release_id FROM tracks WHERE public_api_id=$1",
+    )
+    .bind(track_public_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or(NativeUserStateStoreError::NotFound)?;
+    // A single cursor has one PostgreSQL statement snapshot. The two ordered
+    // scans deliver the exact same Artist set twice without a side-effecting
+    // STABLE function or an application-sized snapshot buffer.
+    sqlx::query("DECLARE scrobble_artists_before NO SCROLL CURSOR FOR SELECT 1::int AS phase,artist_id FROM (SELECT DISTINCT artist_id FROM track_artists WHERE track_id=$1 AND role='primary' ORDER BY artist_id) first UNION ALL SELECT 2::int AS phase,artist_id FROM (SELECT DISTINCT artist_id FROM track_artists WHERE track_id=$1 AND role='primary' ORDER BY artist_id) second ORDER BY phase,artist_id")
+        .bind(initial.0)
+        .execute(&mut **tx)
+        .await?;
+    let mut retained = std::collections::VecDeque::new();
+    loop {
+        let page =
+            sqlx::query_as::<_, (i32, Uuid)>("FETCH FORWARD 256 FROM scrobble_artists_before")
+                .fetch_all(&mut **tx)
+                .await?;
+        if page.is_empty() {
+            break;
+        }
+        let has_retained = page.iter().any(|(phase, _)| *phase == 2);
+        let lock_page = page
+            .iter()
+            .filter_map(|(phase, id)| (*phase == 1).then_some(*id))
+            .collect::<Vec<_>>();
+        retained.extend(
+            page.into_iter()
+                .filter_map(|(phase, id)| (phase == 2).then_some(id)),
+        );
+        let locked = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM artists WHERE id=ANY($1) ORDER BY id FOR KEY SHARE",
+        )
+        .bind(&lock_page)
+        .fetch_all(&mut **tx)
+        .await?;
+        if locked != lock_page {
+            return Ok(None);
+        }
+        if has_retained {
+            break;
+        }
+    }
+    let release =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM releases WHERE id=$1 FOR KEY SHARE")
+            .bind(initial.1)
+            .fetch_optional(&mut **tx)
+            .await?;
+    if release.is_none() {
+        return Ok(None);
+    }
+    let current_release = sqlx::query_scalar::<_, Uuid>(
+        "SELECT release_id FROM tracks WHERE id=$1 AND public_api_id=$2 FOR UPDATE",
+    )
+    .bind(initial.0)
+    .bind(track_public_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or(NativeUserStateStoreError::NotFound)?;
+    if current_release != initial.1 {
+        return Ok(None);
+    }
+    sqlx::query("DECLARE scrobble_artists_after NO SCROLL CURSOR FOR SELECT DISTINCT artist_id FROM track_artists WHERE track_id=$1 AND role='primary' ORDER BY artist_id")
+        .bind(initial.0).execute(&mut **tx).await?;
+    loop {
+        while retained.len() < SCROBBLE_ARTIST_LOCK_PAGE {
+            let rows =
+                sqlx::query_as::<_, (i32, Uuid)>("FETCH FORWARD 256 FROM scrobble_artists_before")
+                    .fetch_all(&mut **tx)
+                    .await?;
+            if rows.is_empty() {
+                break;
+            }
+            if rows.iter().any(|(phase, _)| *phase != 2) {
+                return Err(NativeUserStateStoreError::Database(sqlx::Error::Protocol(
+                    "unexpected scrobble cursor phase".to_owned(),
+                )));
+            }
+            retained.extend(rows.into_iter().map(|(_, id)| id));
+        }
+        let take = retained.len().min(SCROBBLE_ARTIST_LOCK_PAGE);
+        let before = retained.drain(..take).collect::<Vec<_>>();
+        let after = sqlx::query_scalar::<_, Uuid>("FETCH FORWARD 256 FROM scrobble_artists_after")
+            .fetch_all(&mut **tx)
+            .await?;
+        if before != after {
+            return Ok(None);
+        }
+        if before.len() < SCROBBLE_ARTIST_LOCK_PAGE {
+            break;
+        }
+    }
+    sqlx::query("CLOSE scrobble_artists_before")
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("CLOSE scrobble_artists_after")
+        .execute(&mut **tx)
+        .await?;
+    Ok(Some(initial))
 }
 
 fn validate_mutation(mutation: NativeUserStateMutation) -> Result<(), NativeUserStateStoreError> {
@@ -1461,7 +1580,7 @@ async fn increment_play_counters(
         INSERT INTO native_artist_user_states (
             user_id, artist_id, play_count, last_played_at, created_at, updated_at
         )
-        SELECT $1, artist_id, 1, $3, $4, $4
+        SELECT DISTINCT $1, artist_id, 1, $3, $4, $4
         FROM track_artists WHERE track_id = $2 AND role = 'primary'
         ON CONFLICT (user_id, artist_id) DO UPDATE SET
             play_count = native_artist_user_states.play_count + 1,

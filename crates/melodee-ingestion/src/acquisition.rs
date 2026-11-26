@@ -368,7 +368,11 @@ pub async fn acquire_owned_source(
     let expected_snapshot = expected_snapshot_signature.map(str::to_owned);
     let ready_marker = config.ready_marker_name.clone();
     let generation = handoff.source_generation.clone();
+    let permit = crate::admission::heavy_ingestion()
+        .await
+        .map_err(|error| AcquisitionError::Task(error.to_string()))?;
     let staged = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         if destination_for_task
             .try_exists()
             .map_err(|e| io_error(&destination_for_task, e))?
@@ -703,7 +707,11 @@ async fn finish_inbound_cleanup(
     let expected_tree_hash = expected_tree_hash.to_owned();
     #[cfg(feature = "test-support")]
     let fault_path = inbound.clone();
+    let permit = crate::admission::heavy_ingestion()
+        .await
+        .map_err(|error| AcquisitionError::Task(error.to_string()))?;
     let result = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         cleanup_inbound(
             &inbound,
             &inbound_root,

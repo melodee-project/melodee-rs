@@ -1,6 +1,6 @@
 # Performance Remediation — Upgrade, Repair, and Rollback Runbook
 
-Applies to the forward migrations `0060`–`0063` and the derived-state repair delivered with the
+Applies to the forward migrations `0060`–`0066` and the derived-state repair delivered with the
 PERF-001…PERF-015 / V001 / V002 remediation. This is an internal operator runbook; the public
 summary lives in `docs/src/content/docs/installation/upgrading.md`.
 
@@ -13,8 +13,23 @@ summary lives in `docs/src/content/docs/installation/upgrading.md`.
 | 0062 | `native_discovery_progress` with one durable cursor per discovery work class | additive table |
 | 0063 | `search_rebuild_snapshot_outbox`, `search_rebuild_applied_outbox` | additive tables |
 | 0064 | `catalog_identity_reconciliation_seed`; `lock_artist_identity_names(text[])` | additive table + function |
+| 0065 | Adds a primary-credit ordering index; orders Track and recommendation candidate locks and replaces popularity maintenance triggers with statement-level grouped changes | ordinary transactional index + replacement functions and triggers |
+| 0066 | Makes reconciliation Artist and Observation UUIDs non-owning hints; removes their FK checks without deleting pending seeds | transactional constraint removal |
 
-No column, constraint, or row semantics are removed. The three dropped indexes are exact
+Identity hints are resolved by indexed joins during reconciliation; deleted identities can leave
+stale hints, which are ignored and removed when their seed is acknowledged. Hard deletion records
+affected names and external keys in the same transaction before removing identity evidence. The
+Release FK remains in place. Existing seeds survive the upgrade. Reverting this schema requires a
+validated pre-upgrade restore: restoring the constraints alone can fail on stale hints and would
+reintroduce the lock inversion this migration removes.
+
+Migration 0065 aligns Artist popularity for repeated primary credits with the
+existing discovery recount (one contribution per credit); previously the play
+trigger counted that Artist once. Existing drift converges through scheduled,
+bounded discovery maintenance; the migration itself does not recount. User Artist
+play state still counts one play per distinct Artist.
+
+No column or constraint is removed. The three dropped indexes are exact
 duplicates of an existing constraint index; recreating them with their original `CREATE INDEX`
 text restores the prior shape if a forward fix is ever needed.
 
@@ -101,7 +116,7 @@ applied migration; if a forward correction is needed, add a new migration.
 
 ## Mixed-version operation
 
-Do **not** run an old worker against a database migrated to 0063. The old binary does not record
+Do **not** run an old worker against a database migrated to 0065. The old binary does not record
 snapshot-visible outbox rows and would activate a rebuilt generation under the old (unsafe)
 watermark check. Stop all writers, upgrade, verify, then resume. This is a stop-all-writers
 maintenance upgrade.

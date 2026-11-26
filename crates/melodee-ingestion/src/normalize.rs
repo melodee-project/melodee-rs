@@ -159,6 +159,27 @@ enum NormalizationOutcome {
     Failed,
 }
 
+async fn normalization_filesystem<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+    cancellation: &AtomicBool,
+    shutdown: &AtomicBool,
+) -> Result<T> {
+    let task = crate::admission::run(work);
+    tokio::pin!(task);
+    let mut poll = time::interval(TokioDuration::from_millis(100));
+    loop {
+        if cancellation.load(Ordering::SeqCst) || shutdown.load(Ordering::SeqCst) {
+            return Err(IngestionError::InspectionTask(
+                "normalization canceled during filesystem work".to_owned(),
+            ));
+        }
+        tokio::select! {
+            result = &mut task => return result.map_err(IngestionError::InspectionTask),
+            _ = poll.tick() => {}
+        }
+    }
+}
+
 async fn normalize_one(
     ingestion: &IngestionConfig,
     store: &WorkItemStore,
@@ -168,6 +189,49 @@ async fn normalize_one(
     work_config: &WorkEngineConfig,
     shutdown: Arc<AtomicBool>,
 ) -> Result<NormalizationOutcome> {
+    let cancellation = Arc::new(AtomicBool::new(false));
+    let heartbeat_store = *store;
+    let heartbeat_pool = pool.clone();
+    let heartbeat_worker = worker.clone();
+    let heartbeat_lease = work_config.lease_duration;
+    let heartbeat_item_id = item.id;
+    let heartbeat_cancellation = cancellation.clone();
+    let heartbeat_interval = heartbeat_interval(work_config.lease_duration)?;
+
+    let mut heartbeat_handle = tokio::task::JoinSet::new();
+    heartbeat_handle.spawn(async move {
+        let mut interval = time::interval(heartbeat_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        interval.tick().await; // skip initial tick
+        loop {
+            interval.tick().await;
+            if heartbeat_cancellation.load(Ordering::SeqCst) {
+                return;
+            }
+            match heartbeat_store
+                .renew_lease(
+                    &heartbeat_pool,
+                    heartbeat_item_id,
+                    &heartbeat_worker,
+                    heartbeat_lease,
+                    OffsetDateTime::now_utc(),
+                )
+                .await
+            {
+                Ok(_) => {}
+                Err(error) => {
+                    warn!(
+                        work_item_id = %heartbeat_item_id,
+                        %error,
+                        "normalization lease renewal failed; canceling in-flight work"
+                    );
+                    heartbeat_cancellation.store(true, Ordering::SeqCst);
+                    return;
+                }
+            }
+        }
+    });
+
     let owned = match owned_source_root(ingestion, store, pool, &item).await {
         Ok(owned) => owned,
         Err(error) => {
@@ -186,7 +250,14 @@ async fn normalize_one(
             .map(|_| NormalizationOutcome::Failed);
         }
     };
-    if let Err(error) = verify_owned_source(&owned) {
+    let task_owned = owned.clone();
+    let verification = normalization_filesystem(
+        move || verify_owned_source(&task_owned),
+        &cancellation,
+        &shutdown,
+    )
+    .await?;
+    if let Err(error) = verification {
         return record_normalization_failure(
             store,
             pool,
@@ -223,26 +294,32 @@ async fn normalize_one(
         serde_json::from_value(manifest_row.payload).map_err(|e| {
             IngestionError::Inspection(melodee_media::InspectionError::Serialization(e))
         })?;
-    let before_snapshot =
-        match snapshot_release_directory(&source_root, &ingestion.ready_marker_name) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                return record_normalization_failure(
-                    store,
-                    pool,
-                    worker,
-                    item.id,
-                    work_config,
-                    "normalization.source_changed",
-                    &error.to_string(),
-                    FailureClass::Retryable,
-                    OffsetDateTime::now_utc(),
-                )
-                .await
-                .map(|_| NormalizationOutcome::Failed);
-            }
-        };
-    let cancellation = Arc::new(AtomicBool::new(false));
+    let task_root = source_root.clone();
+    let ready_marker = ingestion.ready_marker_name.clone();
+    let before_snapshot = match normalization_filesystem(
+        move || snapshot_release_directory(&task_root, &ready_marker),
+        &cancellation,
+        &shutdown,
+    )
+    .await?
+    {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return record_normalization_failure(
+                store,
+                pool,
+                worker,
+                item.id,
+                work_config,
+                "normalization.source_changed",
+                &error.to_string(),
+                FailureClass::Retryable,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .map(|_| NormalizationOutcome::Failed);
+        }
+    };
     let cancellation_for_task = cancellation.clone();
     let options = NormalizationOptions {
         ffmpeg_path: ingestion.ffmpeg_path.clone(),
@@ -261,60 +338,33 @@ async fn normalize_one(
         ..NormalizationOptions::default()
     };
 
-    let heartbeat_store = *store;
-    let heartbeat_pool = pool.clone();
-    let heartbeat_worker = worker.clone();
-    let heartbeat_lease = work_config.lease_duration;
-    let heartbeat_item_id = item.id;
-    let heartbeat_cancellation = cancellation.clone();
-    let heartbeat_stop = Arc::new(AtomicBool::new(false));
-    let heartbeat_stop_for_task = heartbeat_stop.clone();
-    let heartbeat_interval = heartbeat_interval(work_config.lease_duration)?;
-
-    let heartbeat_handle = tokio::spawn(async move {
-        let mut interval = time::interval(heartbeat_interval);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        interval.tick().await; // skip initial tick
-        loop {
-            interval.tick().await;
-            if heartbeat_stop_for_task.load(Ordering::SeqCst)
-                || heartbeat_cancellation.load(Ordering::SeqCst)
-            {
-                return;
-            }
-            match heartbeat_store
-                .renew_lease(
-                    &heartbeat_pool,
-                    heartbeat_item_id,
-                    &heartbeat_worker,
-                    heartbeat_lease,
-                    OffsetDateTime::now_utc(),
-                )
-                .await
-            {
-                Ok(_) => {}
-                Err(error) => {
-                    warn!(
-                        work_item_id = %heartbeat_item_id,
-                        %error,
-                        "normalization lease renewal failed; canceling in-flight work"
-                    );
-                    heartbeat_cancellation.store(true, Ordering::SeqCst);
-                    return;
-                }
-            }
-        }
-    });
-
     let normalization_root = source_root.clone();
+    let admission = crate::admission::heavy_ingestion();
+    tokio::pin!(admission);
+    let mut cancel_poll = time::interval(TokioDuration::from_millis(100));
+    let permit = loop {
+        if cancellation.load(Ordering::SeqCst) || shutdown.load(Ordering::SeqCst) {
+            break None;
+        }
+        tokio::select! {
+            result = &mut admission => break Some(result),
+            _ = cancel_poll.tick() => {}
+        }
+    };
+    let permit = match permit {
+        Some(Ok(permit)) => permit,
+        result => {
+            return Err(IngestionError::InspectionTask(match result {
+                Some(Err(error)) => error.to_string(),
+                _ => "normalization canceled while awaiting admission".to_owned(),
+            }));
+        }
+    };
     let normalization_result = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         normalize_release(&mut manifest, &normalization_root, &options)
     })
     .await;
-
-    heartbeat_stop.store(true, Ordering::SeqCst);
-    heartbeat_handle.abort();
-    let _heartbeat_result = heartbeat_handle.await;
 
     // If the heartbeat set the cancellation flag, the normalization may have
     // already returned Canceled; either way we must not publish.
@@ -354,27 +404,45 @@ async fn normalize_one(
     if let Some(normalization) = report.manifest.normalization.as_mut() {
         normalization.provenance.worker_id = Some(worker.as_str().to_owned());
     }
-    let after_snapshot =
-        match snapshot_release_directory(&source_root, &ingestion.ready_marker_name) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                return record_normalization_failure(
-                    store,
-                    pool,
-                    worker,
-                    item.id,
-                    work_config,
-                    "normalization.source_changed",
-                    &error.to_string(),
-                    FailureClass::Retryable,
-                    OffsetDateTime::now_utc(),
-                )
-                .await
-                .map(|_| NormalizationOutcome::Failed);
-            }
-        };
-    if after_snapshot.signature != before_snapshot.signature || verify_owned_source(&owned).is_err()
+    let task_root = source_root.clone();
+    let ready_marker = ingestion.ready_marker_name.clone();
+    let after_snapshot = match normalization_filesystem(
+        move || snapshot_release_directory(&task_root, &ready_marker),
+        &cancellation,
+        &shutdown,
+    )
+    .await?
     {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return record_normalization_failure(
+                store,
+                pool,
+                worker,
+                item.id,
+                work_config,
+                "normalization.source_changed",
+                &error.to_string(),
+                FailureClass::Retryable,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .map(|_| NormalizationOutcome::Failed);
+        }
+    };
+    let source_changed = if after_snapshot.signature != before_snapshot.signature {
+        true
+    } else {
+        let task_owned = owned.clone();
+        normalization_filesystem(
+            move || verify_owned_source(&task_owned),
+            &cancellation,
+            &shutdown,
+        )
+        .await?
+        .is_err()
+    };
+    if source_changed {
         return record_normalization_failure(
             store,
             pool,
@@ -390,6 +458,11 @@ async fn normalize_one(
         .map(|_| NormalizationOutcome::Failed);
     }
 
+    if cancellation.load(Ordering::SeqCst) || shutdown.load(Ordering::SeqCst) {
+        return Err(IngestionError::InspectionTask(
+            "normalization canceled before publication".to_owned(),
+        ));
+    }
     let publish_result = store
         .publish_normalization(
             pool,
@@ -603,6 +676,53 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+
+    #[tokio::test]
+    async fn filesystem_work_stops_waiting_on_lease_cancellation() {
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (finished_tx, finished_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let task_cancellation = cancellation.clone();
+        let task = tokio::spawn(async move {
+            normalization_filesystem(
+                move || {
+                    let _ = started_tx.send(());
+                    let _ = release_rx.recv();
+                    let _ = finished_tx.send(());
+                },
+                &task_cancellation,
+                &shutdown,
+            )
+            .await
+        });
+        started_rx.await.unwrap();
+        cancellation.store(true, Ordering::SeqCst);
+        let result = time::timeout(TokioDuration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(result.is_err());
+        release_tx.send(()).unwrap();
+        finished_rx.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn filesystem_work_does_not_start_after_shutdown() {
+        let cancellation = AtomicBool::new(false);
+        let shutdown = AtomicBool::new(true);
+        let invoked = Arc::new(AtomicBool::new(false));
+        let task_invoked = invoked.clone();
+        let result = normalization_filesystem(
+            move || task_invoked.store(true, Ordering::SeqCst),
+            &cancellation,
+            &shutdown,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(!invoked.load(Ordering::SeqCst));
+    }
 
     #[test]
     fn classify_canceled_is_retryable() {

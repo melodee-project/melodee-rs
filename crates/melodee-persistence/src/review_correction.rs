@@ -104,6 +104,23 @@ pub async fn save_review_correction(
     }
     if let Some(s) = selection {
         if let Some(target) = s.target_release_id {
+            if retarget {
+                // Retargeting applies the merge below in this transaction.
+                // Lock both Releases in the shared order before validating the
+                // target, rather than upgrading a target SHARE lock later.
+                let source: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT release_id FROM catalog_imports WHERE work_item_id=$1",
+                )
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if let Some(source) = source {
+                    sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+                        .bind([source, target])
+                        .execute(&mut *tx)
+                        .await?;
+                }
+            }
             let active: Option<Uuid> = sqlx::query_scalar(
                 "SELECT id FROM releases WHERE id=$1 AND status='active' FOR SHARE",
             )
@@ -199,6 +216,12 @@ pub(crate) async fn apply_accepted_identification(
     let Some((source, target, provider, external, actor)) = row else {
         return Ok(item);
     };
+    if let Some(target) = target {
+        sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+            .bind([source, target])
+            .execute(&mut **tx)
+            .await?;
+    }
     if item.state_reason.as_deref() == Some("review.identified") {
         sqlx::query("UPDATE releases SET status='active',revision=revision+1,updated_at=$2 WHERE id=$1 AND status='deprecated'")
             .bind(source).bind(now).execute(&mut **tx).await?;
@@ -256,6 +279,20 @@ pub(crate) async fn apply_accepted_identification(
                ON CONFLICT(release_id,provider,external_id) DO UPDATE SET trusted=true,confidence=10000,
                evidence_source='operator.review',is_locked=true,observed_at=EXCLUDED.observed_at")
                .bind(Uuid::now_v7()).bind(source).bind(provider).bind(external).bind(now).execute(&mut **tx).await?;
+        let has_seed_table: bool = sqlx::query_scalar(
+            "SELECT to_regclass('public.catalog_identity_reconciliation_seed') IS NOT NULL",
+        )
+        .fetch_one(&mut **tx)
+        .await?;
+        if has_seed_table {
+            sqlx::query(
+                "INSERT INTO catalog_identity_reconciliation_seed (release_id, created_at) VALUES ($1, $2)",
+            )
+            .bind(source)
+            .bind(now)
+            .execute(&mut **tx)
+            .await?;
+        }
     }
     sqlx::query("UPDATE release_review_identifications SET applied_at=$2,merge_event_id=$3 WHERE work_item_id=$1")
             .bind(id).bind(now).bind(event).execute(&mut **tx).await?;

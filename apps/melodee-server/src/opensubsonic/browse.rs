@@ -274,15 +274,19 @@ async fn load_artist_index(
         "SELECT artist.public_api_id, artist.canonical_name, artist.sort_name,
                 COALESCE(aggregate.release_count, 0) AS album_count,
                 COALESCE(state.rating, 0)::smallint AS user_rating,
-                COALESCE((SELECT AVG(ratings.rating)::float8 FROM native_artist_user_states ratings
-                          WHERE ratings.artist_id = artist.id AND ratings.rating > 0
-                            AND ($1::uuid IS NULL OR ratings.user_id <> $1)), 0) AS average_rating,
+                COALESCE(ratings.average_rating, 0) AS average_rating,
                 COALESCE(state.starred, false) AS starred,
                 CASE WHEN COALESCE(state.starred, false) THEN state.updated_at END AS starred_at
            FROM artists artist
            LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
            LEFT JOIN native_artist_user_states state
              ON state.artist_id = artist.id AND state.user_id = $1
+           LEFT JOIN (
+             SELECT artist_id, AVG(rating)::float8 AS average_rating
+               FROM native_artist_user_states
+              WHERE rating > 0 AND ($1::uuid IS NULL OR user_id <> $1)
+              GROUP BY artist_id
+           ) ratings ON ratings.artist_id = artist.id
           WHERE artist.status NOT IN ('merged', 'deprecated')
           ORDER BY artist.sort_name COLLATE \"C\", artist.public_api_id",
     )
@@ -417,24 +421,24 @@ pub async fn get_artists(
             return error_reply(&state, &params, "A generic error.");
         }
     };
-    let index = build_index(&state, &rows);
     // The captured getArtists XML serializes `averageRating` as a six-decimal
     // decimal ("0.000000") and the starred entries carry both `starred` and a
-    // `starredAt` attribute. The generic envelope writer cannot express that,
-    // so the XML children are written explicitly.
-    let xml = artists_xml(&state, &rows);
-    reply(
-        &state,
-        &params,
-        OsReply::ok(serde_json::json!({
+    // `starredAt` attribute. Only construct the negotiated representation:
+    // both complete trees can be very large for a catalog-wide index.
+    let format = format_of(&params);
+    let payload = match format {
+        Format::Xml => {
+            OsReply::ok(Value::Null).with_xml_children_override(artists_xml(&state, &rows))
+        }
+        Format::Json | Format::Jsonp(_) => OsReply::ok(serde_json::json!({
             "artists": {
                 "ignoredArticles": IGNORED_ARTICLES,
                 "lastModified": "",
-                "index": index
+                "index": build_index(&state, &rows)
             }
-        }))
-        .with_xml_children_override(xml),
-    )
+        })),
+    };
+    payload.respond(&format, &state.server_version, StatusCode::OK)
 }
 
 /// The captured getArtists XML byte shape (os-getartists-xml.xml). The legacy

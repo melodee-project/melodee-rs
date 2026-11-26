@@ -368,6 +368,25 @@ impl CatalogStore {
             CatalogCorrectionDimension::Releases,
             MAX_CATALOG_CORRECTION_RELEASES,
         )?;
+        // Overlay revisions below update Releases. Take those parent locks
+        // before Tracks to match Release merge and hard-delete order.
+        sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+            .bind(&release_ids)
+            .execute(&mut *tx)
+            .await?;
+        lock_correction_tracks(&mut tx, &track_ids).await?;
+        let current_tracks = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM tracks WHERE audio_identity_id=$1 ORDER BY id LIMIT $2",
+        )
+        .bind(merge.source_id.into_uuid())
+        .bind(limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
+        .fetch_all(&mut *tx)
+        .await?;
+        if current_tracks != track_ids
+            || audio_release_ids(&mut tx, &track_ids).await? != release_ids
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         sqlx::query(
             "UPDATE tracks SET audio_identity_id = $2,
                     revision = revision + 1, updated_at = $3
@@ -480,6 +499,22 @@ impl CatalogStore {
             CatalogCorrectionDimension::Releases,
             MAX_CATALOG_CORRECTION_RELEASES,
         )?;
+        sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+            .bind(&release_ids)
+            .execute(&mut *tx)
+            .await?;
+        lock_correction_tracks(&mut tx, &track_ids).await?;
+        let current_releases = sqlx::query_scalar::<_, Uuid>(
+            "SELECT DISTINCT release_id FROM tracks WHERE id=ANY($1) AND audio_identity_id=$2 ORDER BY release_id LIMIT $3",
+        )
+        .bind(&track_ids)
+        .bind(split.source_id.into_uuid())
+        .bind(limit_plus_one(MAX_CATALOG_CORRECTION_RELEASES)?)
+        .fetch_all(&mut *tx)
+        .await?;
+        if current_releases != release_ids {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         let matching_tracks = sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM tracks
              WHERE id = ANY($1) AND audio_identity_id = $2",
@@ -786,6 +821,30 @@ impl CatalogStore {
         let mut ordered_merges = merges.iter().collect::<Vec<_>>();
         ordered_merges.sort_by_key(|merge| merge.source_artist_id.into_uuid());
         let mut tx = pool.begin().await?;
+        let release_ids = affected_artist_release_ids(&mut tx, &source_artist_ids).await?;
+        ensure_correction_scope(
+            release_ids.len(),
+            CatalogCorrectionDimension::Releases,
+            MAX_CATALOG_CORRECTION_RELEASES,
+        )?;
+        let mut artists = source_artist_ids
+            .iter()
+            .map(|id| id.into_uuid())
+            .collect::<Vec<_>>();
+        artists.push(target_artist_id.into_uuid());
+        let tracks = artist_merge_scope_tracks(&mut tx, &release_ids, &artists).await?;
+        if !crate::catalog_mutations::lock_participation_closure(
+            &mut tx,
+            &release_ids,
+            Some(&tracks),
+            &artists,
+        )
+        .await?
+            || affected_artist_release_ids(&mut tx, &source_artist_ids).await? != release_ids
+            || artist_merge_scope_tracks(&mut tx, &release_ids, &artists).await? != tracks
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         ensure_artist_merge_batch_scope(&mut tx, &source_artist_ids, target_artist_id).await?;
         for merge in ordered_merges {
             self.merge_artist_in_transaction(&mut tx, merge, resolver_version, decision_authority)
@@ -1058,6 +1117,15 @@ impl CatalogStore {
             merge.occurred_at,
         )
         .await?;
+        enqueue_artist_identity_seeds(
+            tx,
+            &[
+                merge.source_artist_id.into_uuid(),
+                merge.target_artist_id.into_uuid(),
+            ],
+            merge.occurred_at,
+        )
+        .await?;
         Ok(())
     }
 
@@ -1112,12 +1180,42 @@ impl CatalogStore {
             CatalogCorrectionDimension::Releases,
             MAX_CATALOG_CORRECTION_RELEASES,
         )?;
+        sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+            .bind(&release_ids)
+            .fetch_all(&mut *tx)
+            .await?;
+        if split_release_ids(
+            &mut tx,
+            &release_artist_ids,
+            &track_artist_ids,
+            &contribution_ids,
+        )
+        .await?
+            != release_ids
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         let track_ids = release_track_ids(&mut tx, &release_ids).await?;
         ensure_correction_scope(
             track_ids.len(),
             CatalogCorrectionDimension::Tracks,
             MAX_CATALOG_CORRECTION_TRACKS,
         )?;
+        let locked_tracks = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM tracks WHERE id=ANY($1) ORDER BY id FOR NO KEY UPDATE",
+        )
+        .bind(&track_ids)
+        .fetch_all(&mut *tx)
+        .await?;
+        if locked_tracks != track_ids
+            || release_track_ids(&mut tx, &release_ids).await? != track_ids
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        sqlx::query("SELECT entity_id FROM native_recommendation_candidates WHERE entity_type='artist' AND entity_id=ANY($1) ORDER BY entity_id FOR UPDATE")
+            .bind([split.source_artist_id.into_uuid(), split.new_artist_id.into_uuid()])
+            .fetch_all(&mut *tx)
+            .await?;
         let observation_ids = split_observation_ids(
             &mut tx,
             &release_artist_ids,
@@ -1223,9 +1321,62 @@ impl CatalogStore {
             split.occurred_at,
         )
         .await?;
+        enqueue_artist_identity_seeds(
+            &mut tx,
+            &[
+                split.source_artist_id.into_uuid(),
+                split.new_artist_id.into_uuid(),
+            ],
+            split.occurred_at,
+        )
+        .await?;
         tx.commit().await?;
         Ok(())
     }
+}
+
+async fn artist_merge_scope_tracks(
+    tx: &mut Transaction<'_, Postgres>,
+    release_ids: &[Uuid],
+    artist_ids: &[Uuid],
+) -> Result<Vec<Uuid>, CatalogStoreError> {
+    let mut tracks = release_track_ids(tx, release_ids)
+        .await?
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    tracks.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT track_id FROM artist_track_associations WHERE artist_id=ANY($1) OR source_artist_id=ANY($1) ORDER BY track_id LIMIT $2")
+        .bind(artist_ids).bind(limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?).fetch_all(&mut **tx).await?);
+    ensure_correction_scope(
+        tracks.len(),
+        CatalogCorrectionDimension::Tracks,
+        MAX_CATALOG_CORRECTION_TRACKS,
+    )?;
+    Ok(tracks.into_iter().collect())
+}
+
+/// Corrections expose new identity relationships. Record both endpoints in the
+/// same transaction so closure expansion survives a crash and active drain.
+pub(crate) async fn enqueue_artist_identity_seeds(
+    tx: &mut Transaction<'_, Postgres>,
+    artist_ids: &[Uuid],
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    let has_seed_table: bool = sqlx::query_scalar(
+        "SELECT to_regclass('public.catalog_identity_reconciliation_seed') IS NOT NULL",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_seed_table {
+        sqlx::query(
+            "INSERT INTO catalog_identity_reconciliation_seed (artist_id, normalized_name, created_at)
+             SELECT id, normalized_name, $2 FROM artists WHERE id = ANY($1)",
+        )
+        .bind(artist_ids)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -1297,6 +1448,16 @@ async fn ensure_artist_merge_batch_scope(
         CatalogCorrectionDimension::Releases,
         MAX_CATALOG_CORRECTION_RELEASES,
     )?;
+    // Fence Track membership before acquiring the transaction-wide Track set.
+    // The Release rows also prevent a concurrent move from adding a Track
+    // between our membership read and the later per-source writes.
+    sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+        .bind(&release_ids)
+        .fetch_all(&mut **tx)
+        .await?;
+    if affected_artist_release_ids(tx, source_artist_ids).await? != release_ids {
+        return Err(CatalogStoreError::MutationConflict);
+    }
     let mut track_ids = release_track_ids(tx, &release_ids)
         .await?
         .into_iter()
@@ -1316,7 +1477,46 @@ async fn ensure_artist_merge_batch_scope(
         track_ids.len(),
         CatalogCorrectionDimension::Tracks,
         MAX_CATALOG_CORRECTION_TRACKS,
+    )?;
+    let ordered_tracks = track_ids.into_iter().collect::<Vec<_>>();
+    let locked_tracks = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM tracks WHERE id=ANY($1) ORDER BY id FOR NO KEY UPDATE",
     )
+    .bind(&ordered_tracks)
+    .fetch_all(&mut **tx)
+    .await?;
+    if locked_tracks != ordered_tracks {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    let mut current_tracks = release_track_ids(tx, &release_ids)
+        .await?
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    current_tracks.extend(
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT DISTINCT track_id FROM artist_track_associations
+              WHERE artist_id=ANY($1) OR source_artist_id=ANY($1)
+              ORDER BY track_id LIMIT $2",
+        )
+        .bind(&all_ids)
+        .bind(limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
+        .fetch_all(&mut **tx)
+        .await?,
+    );
+    if !current_tracks
+        .into_iter()
+        .eq(ordered_tracks.iter().copied())
+    {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    // Each per-source credit update invokes a statement trigger. Lock the
+    // union before the first update so those statements cannot acquire the
+    // same candidate rows in opposing source order.
+    sqlx::query("SELECT entity_id FROM native_recommendation_candidates WHERE entity_type='artist' AND entity_id=ANY($1) ORDER BY entity_id FOR UPDATE")
+        .bind(&all_ids)
+        .fetch_all(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 /// Coalesces Artist-owned data introduced after the original Phase 4 merge.
@@ -2002,6 +2202,27 @@ async fn audit_audio_identity_change(
     .await
 }
 
+/// Lock a bounded correction set before a multi-Track UPDATE so it cannot
+/// acquire tuple locks in executor-dependent order against another writer.
+async fn lock_correction_tracks(
+    tx: &mut Transaction<'_, Postgres>,
+    track_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
+    let mut ordered = track_ids.to_vec();
+    ordered.sort_unstable();
+    ordered.dedup();
+    let locked = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM tracks WHERE id=ANY($1) ORDER BY id FOR NO KEY UPDATE",
+    )
+    .bind(&ordered)
+    .fetch_all(&mut **tx)
+    .await?;
+    if locked != ordered {
+        return Err(CatalogStoreError::MutationConflict);
+    }
+    Ok(())
+}
+
 async fn enqueue_track_revisions(
     tx: &mut Transaction<'_, Postgres>,
     track_ids: &[Uuid],
@@ -2012,6 +2233,7 @@ async fn enqueue_track_revisions(
         return Ok(());
     }
     let inserted = if bump_revision {
+        lock_correction_tracks(tx, track_ids).await?;
         sqlx::query(
             "WITH updated AS (
                 UPDATE tracks SET revision = revision + 1, updated_at = $2

@@ -210,7 +210,9 @@ async fn validate_one(
     let task_shutdown = shutdown.clone();
     let work_area = ingestion.work_area_base.clone();
     let task_manifest = manifest.clone();
+    let permit = admit_with_heartbeat(store, pool, item.id, worker, work_config, &shutdown).await?;
     let handle = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         if task_shutdown.load(Ordering::SeqCst) {
             task_cancellation.store(true, Ordering::SeqCst);
         }
@@ -518,7 +520,9 @@ async fn publish_one(
     let nfs_io_budget = ingestion.nfs_io_budget.clone();
     #[cfg(feature = "test-support")]
     let copy_test_barrier = ingestion.publication_copy_test_barrier.clone();
+    let permit = admit_with_heartbeat(store, pool, item.id, worker, work_config, &shutdown).await?;
     let mut handle = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         #[cfg(feature = "test-support")]
         {
             publish_canonical_bundle_with_observer_and_test_barrier(
@@ -701,6 +705,42 @@ async fn reap_publication_task<T>(
                     return;
                 }
             }
+        }
+    }
+}
+
+// Workers own leases while waiting for scarce blocking capacity. Continue
+// renewing them without scheduling blocking work or holding another permit.
+async fn admit_with_heartbeat(
+    store: &WorkItemStore,
+    pool: &PgPool,
+    id: uuid::Uuid,
+    worker: &WorkerId,
+    work_config: &WorkEngineConfig,
+    shutdown: &AtomicBool,
+) -> Result<tokio::sync::OwnedSemaphorePermit> {
+    let admission = crate::admission::heavy_ingestion();
+    tokio::pin!(admission);
+    let mut heartbeat = time::interval(heartbeat_interval(work_config.lease_duration)?);
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    heartbeat.tick().await;
+    let mut shutdown_poll = time::interval(TokioDuration::from_millis(100));
+    shutdown_poll.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            store
+                .release_lease(pool, id, worker, OffsetDateTime::now_utc())
+                .await?;
+            return Err(IngestionError::InspectionTask(
+                "shutdown while awaiting ingestion admission".to_owned(),
+            ));
+        }
+        tokio::select! {
+            result = &mut admission => return result.map_err(|error| IngestionError::InspectionTask(error.to_string())),
+            _ = heartbeat.tick() => {
+                store.renew_lease(pool, id, worker, work_config.lease_duration, OffsetDateTime::now_utc()).await?;
+            }
+            _ = shutdown_poll.tick() => {}
         }
     }
 }

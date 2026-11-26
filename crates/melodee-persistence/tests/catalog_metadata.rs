@@ -223,6 +223,10 @@ async fn artist_metadata_round_trip_partial_and_rejects() {
     .await;
     let (_release_id, artist_id, _track_id) =
         internal_ids(&db.pool, release.release_id().into_uuid()).await;
+    sqlx::query("DELETE FROM catalog_identity_reconciliation_seed")
+        .execute(&db.pool)
+        .await
+        .expect("clear fixture seeds");
 
     // Round-trip.
     let before = revision(&db.pool, "artists", artist_id).await;
@@ -241,6 +245,13 @@ async fn artist_metadata_round_trip_partial_and_rejects() {
         )
         .await
         .expect("artist round-trip");
+    let affected_names: Vec<String> = sqlx::query_scalar(
+        "SELECT normalized_name FROM catalog_identity_reconciliation_seed ORDER BY normalized_name",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read names affected by Artist rename");
+    assert_eq!(affected_names, ["meta artist", "new artist"]);
 
     let row: (String, String, String, i64) = sqlx::query_as(
         "SELECT canonical_name, sort_name, artist_type, revision FROM artists WHERE id = $1",

@@ -505,6 +505,39 @@ async fn seed_count(pool: &sqlx::PgPool) -> i64 {
         .expect("count identity seeds")
 }
 
+/// Failed discovery must not acknowledge durable work. Once the underlying
+/// problem is repaired, the same seed is processed on the next drain.
+#[tokio::test]
+async fn identity_drain_preserves_seeds_when_candidate_discovery_fails() {
+    let db = TestDb::create("catalog_identity_discovery_failure").await;
+    sqlx::query(
+        "INSERT INTO catalog_identity_reconciliation_seed (normalized_name, created_at)
+         VALUES ('retry after discovery failure', now())",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("insert seed");
+    sqlx::query(
+        "ALTER TABLE artist_external_identities RENAME TO unavailable_artist_external_identities",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("inject candidate discovery failure");
+
+    assert!(melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await);
+    assert_eq!(seed_count(&db.pool).await, 1);
+
+    sqlx::query(
+        "ALTER TABLE unavailable_artist_external_identities RENAME TO artist_external_identities",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("restore candidate discovery");
+    assert!(melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await);
+    assert_eq!(seed_count(&db.pool).await, 0);
+    db.drop().await;
+}
+
 /// PERF-004 / RM-09: an ordinary import persists durable affected-identity
 /// seeds in its authoritative transaction; the coalesced drain consumes them
 /// exactly once and is idempotent.
@@ -652,6 +685,11 @@ async fn coalesced_drain_converges_legacy_duplicate_artist_identities() {
         (1, 2),
         "the closure converges the legacy duplicates the import left apart"
     );
+    assert!(
+        seed_count(&db.pool).await > 0,
+        "merges enqueue their affected names for a later drain"
+    );
+    assert!(melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await);
     assert_eq!(seed_count(&db.pool).await, 0);
     db.drop().await;
 }

@@ -30,15 +30,18 @@ on a separate database and directory and retrieve a known avatar or cover. Rolli
 [Asset storage](./storage/)
 
 
-## Performance remediation upgrade (migrations 0060–0064)
+## Performance remediation upgrade (migrations 0060–0066)
 
 This upgrade adds predicate-aligned indexes, corrects concurrent genre aggregate maintenance,
 makes discovery maintenance progress durable, and changes the search rebuild activation protocol so
-a late-committing catalog change can no longer be omitted from the new search generation.
+a late-committing catalog change can no longer be omitted from the new search generation. It also updates recommendation popularity maintenance to coordinate concurrent plays
+and catalog changes. If a Track has repeated primary credits for the same Artist, its plays now
+count once per credit in Artist recommendations; existing counts converge through scheduled
+discovery maintenance.
 
 1. Follow **Before the upgrade** below: stop every server and worker that writes to this database,
    take a validated PostgreSQL backup, and keep the pre-upgrade image digest.
-2. Start exactly one candidate instance so it applies migrations `0060`–`0064`. These are ordinary
+2. Start exactly one candidate instance so it applies migrations `0060`–`0066`. These are ordinary
    transactional migrations, so expect write unavailability for the index build; the maintenance
    fence is required.
 3. Verify the genre serving aggregates and repair existing drift. The check is read-only; the
@@ -77,7 +80,7 @@ docker compose exec melodee melodee-cli work prune-lease-events --older-than-day
 docker compose exec melodee melodee-cli work prune-lease-events --older-than-days 30 --apply
 ```
 
-**Do not** run an older binary against a database migrated to `0064`. The combined schema and
+**Do not** run an older binary against a database migrated to `0066`. The combined schema and
 application change is a stop-all-writers upgrade; mixed old/new workers are unsupported for this
 release. Rolling back requires restoring the pre-upgrade database and the matching old image.
 

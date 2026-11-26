@@ -207,6 +207,17 @@ async fn processing_stats(
 
 async fn library_stats(pool: &sqlx::PgPool) -> Result<LibraryStatsDto, sqlx::Error> {
     // One bounded pass for the headline counts and totals.
+    let acquire_started = std::time::Instant::now();
+    let hold;
+    let mut connection = pool.acquire().await?;
+    let acquire_duration = acquire_started.elapsed();
+    hold = melodee_persistence::metrics::HoldTimer::new(
+        melodee_persistence::metrics::Metric::AdminStatsHeadlineHold,
+    );
+    melodee_persistence::metrics::observe(
+        melodee_persistence::metrics::Metric::AdminStatsHeadlineAcquire,
+        acquire_duration,
+    );
     let (
         artists,
         releases,
@@ -219,16 +230,24 @@ async fn library_stats(pool: &sqlx::PgPool) -> Result<LibraryStatsDto, sqlx::Err
         "SELECT
            (SELECT count(*) FROM artists WHERE status <> 'merged'),
            (SELECT count(*) FROM releases),
-           (SELECT count(*) FROM tracks),
-           (SELECT count(*) FROM media_assets),
-           (SELECT COALESCE(sum(byte_size), 0)::bigint FROM media_assets),
-           (SELECT COALESCE(sum(duration_ms), 0)::bigint FROM tracks),
-           (SELECT count(*) FROM media_assets
-             WHERE codec IS NOT NULL
-               AND lower(codec) IN ('flac','alac','wav','pcm_s16le','pcm_s24le','ape','wv'))",
+           track_totals.tracks,
+           asset_totals.assets,
+           asset_totals.bytes,
+           track_totals.duration_ms,
+           asset_totals.lossless
+         FROM (SELECT count(*) AS tracks,
+                      COALESCE(sum(duration_ms), 0)::bigint AS duration_ms
+                 FROM tracks) AS track_totals
+         CROSS JOIN (SELECT count(*) AS assets,
+                            COALESCE(sum(byte_size), 0)::bigint AS bytes,
+                            count(*) FILTER (WHERE codec IS NOT NULL AND
+                              lower(codec) IN ('flac','alac','wav','pcm_s16le','pcm_s24le','ape','wv')) AS lossless
+                       FROM media_assets) AS asset_totals",
     )
-    .fetch_one(pool)
+    .fetch_one(&mut *connection)
     .await?;
+    drop(connection);
+    drop(hold);
 
     let formats = sqlx::query_as::<_, (Option<String>, Option<String>, i64, i64)>(
         "SELECT container, codec, count(*), COALESCE(sum(byte_size), 0)::bigint

@@ -883,8 +883,18 @@ fn inspect_file(
             file.kind_code = Some("unsupported_or_corrupt_audio".to_owned());
         }
     } else if kind == ObservedFileKind::Artwork {
-        match hash_file(path) {
-            Ok((hash, _)) => file.content_hash = Some(hash),
+        let inspect_header = file.size_bytes <= options.max_artwork_bytes as u64;
+        let mut header_result = None;
+        let hash_result = if inspect_header {
+            hash_artwork_and_header(path, options.max_artwork_bytes).map(|(hash, header)| {
+                header_result = Some(header);
+                hash
+            })
+        } else {
+            hash_file(path).map(|(hash, _)| hash)
+        };
+        match hash_result {
+            Ok(hash) => file.content_hash = Some(hash),
             Err(error) => file.findings.push(Finding {
                 code: "artwork.hash_failed".to_owned(),
                 message: error.to_string(),
@@ -904,7 +914,9 @@ fn inspect_file(
                     "max_bytes": options.max_artwork_bytes,
                 }),
             });
-        } else if let Err(error) = inspect_image_header(path, options.max_artwork_bytes) {
+        } else if let Err(error) =
+            header_result.unwrap_or_else(|| inspect_image_header(path, options.max_artwork_bytes))
+        {
             file.findings.push(Finding {
                 code: "artwork.invalid".to_owned(),
                 message: error,
@@ -1494,6 +1506,31 @@ fn inspect_image_header(path: &Path, max_bytes: usize) -> Result<(), String> {
         .ok_or_else(|| "unsupported or malformed image header".to_owned())
 }
 
+/// Hash all bytes and inspect a bounded prefix from the same opened stream.
+/// The full hash is required even if the source grows past the header limit.
+fn hash_artwork_and_header(
+    path: &Path,
+    max_bytes: usize,
+) -> io::Result<(String, Result<(), String>)> {
+    let mut file = secure_fs::open_read(path)?;
+    let mut hasher = Hasher::new();
+    let mut header = Vec::new();
+    let mut buffer = vec![0_u8; HASH_BUFFER_SIZE];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+        let take = count.min(max_bytes.saturating_sub(header.len()));
+        header.extend_from_slice(&buffer[..take]);
+    }
+    let result = image_dimensions(&header)
+        .map(|_| ())
+        .ok_or_else(|| "unsupported or malformed image header".to_owned());
+    Ok((hasher.finalize().to_hex().to_string(), result))
+}
+
 pub(crate) fn image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.len() >= 24 {
         let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
@@ -1753,6 +1790,21 @@ mod tests {
         fs::write(&left, b"abcd").expect("left");
         fs::write(&right, b"abce").expect("right");
         assert_ne!(hash_file(&left).unwrap().0, hash_file(&right).unwrap().0);
+    }
+
+    #[test]
+    fn artwork_hash_covers_the_full_stream_with_a_bounded_header() {
+        let root = temp_dir("artwork-hash");
+        let path = root.join("cover.png");
+        let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x03".to_vec();
+        bytes.extend(std::iter::repeat_n(7, HASH_BUFFER_SIZE + 1));
+        fs::write(&path, &bytes).expect("write artwork");
+        let (hash, header) = hash_artwork_and_header(&path, 24).expect("read artwork");
+        assert_eq!(hash, blake3::hash(&bytes).to_hex().to_string());
+        assert!(header.is_ok());
+        let (_, short_header) = hash_artwork_and_header(&path, 23).expect("read artwork");
+        assert!(short_header.is_err());
+        fs::remove_dir_all(root).expect("remove test directory");
     }
 
     /// large-file rule: media hashing streams through a bounded buffer.

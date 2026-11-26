@@ -127,13 +127,55 @@ fn read_verified(root: &Path, key: &str) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+static FILE_IO: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+
+#[cfg(feature = "test-support")]
+static FILE_IO_WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(feature = "test-support")]
+struct FileIoWaiter;
+
+#[cfg(feature = "test-support")]
+impl Drop for FileIoWaiter {
+    fn drop(&mut self) {
+        FILE_IO_WAITERS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Test-only control for deterministic admission and cancellation races.
+#[cfg(feature = "test-support")]
+pub async fn test_hold_all_file_io()
+-> Result<tokio::sync::SemaphorePermit<'static>, tokio::sync::AcquireError> {
+    FILE_IO.acquire_many(4).await
+}
+
+/// Number of operations currently waiting for file-I/O admission in tests.
+#[cfg(feature = "test-support")]
+pub fn test_file_io_waiters() -> usize {
+    FILE_IO_WAITERS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> io::Result<T> + Send + 'static,
 ) -> Result<T, sqlx::Error> {
-    tokio::task::spawn_blocking(f)
-        .await
-        .map_err(io::Error::other)?
-        .map_err(Into::into)
+    // A dropped async caller cannot stop a running blocking filesystem task.
+    // Acquire before scheduling and keep the permit in the closure until the
+    // underlying I/O actually ends, including after cancellation.
+    #[cfg(feature = "test-support")]
+    let waiting = {
+        FILE_IO_WAITERS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        FileIoWaiter
+    };
+    let permit = FILE_IO.acquire().await.map_err(io::Error::other)?;
+    #[cfg(feature = "test-support")]
+    drop(waiting);
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        f()
+    })
+    .await
+    .map_err(io::Error::other)?
+    .map_err(Into::into)
 }
 
 /// Reads and verifies a reference selected by the caller's authorized database query.
@@ -377,9 +419,35 @@ pub async fn read_evidence(
     expected_sha256: String,
     expected_length: i64,
 ) -> Result<Vec<u8>, sqlx::Error> {
-    let bytes = blocking(move || read_evidence_blocking(&key, &storage_kind)).await?;
+    blocking(move || read_evidence_verified(&key, &storage_kind, &expected_sha256, expected_length))
+        .await
+}
+
+/// Verifies and parses manifest JSON within the same bounded blocking task.
+pub async fn read_evidence_json(
+    key: String,
+    storage_kind: String,
+    expected_sha256: String,
+    expected_length: i64,
+) -> Result<serde_json::Value, sqlx::Error> {
+    blocking(move || {
+        let bytes = read_evidence_verified(&key, &storage_kind, &expected_sha256, expected_length)?;
+        serde_json::from_slice(&bytes).map_err(|_| invalid("evidence is not valid JSON"))
+    })
+    .await
+}
+
+fn read_evidence_verified(
+    key: &str,
+    storage_kind: &str,
+    expected_sha256: &str,
+    expected_length: i64,
+) -> io::Result<Vec<u8>> {
+    let bytes = read_evidence_blocking(key, storage_kind)?;
     if bytes.len() as i64 != expected_length || sha256_hex(&bytes) != expected_sha256 {
-        return Err(invalid("evidence content differs from its recorded receipt").into());
+        return Err(invalid(
+            "evidence content differs from its recorded receipt",
+        ));
     }
     Ok(bytes)
 }
@@ -505,5 +573,32 @@ mod tests {
         ] {
             assert!(object_path(dir.path(), invalid).is_err());
         }
+    }
+
+    #[tokio::test]
+    async fn cancelled_waiter_does_not_release_active_filesystem_work() {
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let task = tokio::spawn(async move {
+            blocking(move || {
+                let _ = started_tx.send(());
+                release_rx.recv().map_err(io::Error::other)?;
+                Ok(())
+            })
+            .await
+        });
+        started_rx.await.expect("filesystem work started");
+        assert_eq!(FILE_IO.available_permits(), 3);
+        task.abort();
+        let _ = task.await;
+        assert_eq!(FILE_IO.available_permits(), 3);
+        release_tx.send(()).expect("release blocking task");
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while FILE_IO.available_permits() != 4 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("permit returned when blocking task ended");
     }
 }

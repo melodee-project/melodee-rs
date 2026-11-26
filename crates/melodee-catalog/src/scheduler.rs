@@ -55,11 +55,11 @@ pub fn start_catalog_loop(
 
         // Converge safe candidates left by an older binary even when no new
         // Published work remains to trigger the post-import reconciliation.
-        reconcile_artist_identities_once(&store, &pool).await;
+        let _ = reconcile_artist_identities_once(&store, &pool).await;
         // PERF-004: the startup backstop previously covered Artist identity
         // only. Strong Release identity needs the same convergence path so a
         // catalog with no new Published work still repairs a missed merge.
-        reconcile_strong_release_identities(&store, &pool).await;
+        let _ = reconcile_strong_release_identities(&store, &pool).await;
 
         // The poll interval is the idle cadence, not a throughput ceiling: a pass
         // that claims a full batch means more `published` work is queued, so run
@@ -124,8 +124,8 @@ pub fn start_catalog_loop(
             // imports instead of five catalog-wide queries per album.
             reconcile_affected_identities_once(&store, &pool).await;
             if last_backstop.elapsed() >= backstop_interval {
-                reconcile_artist_identities_once(&store, &pool).await;
-                reconcile_strong_release_identities(&store, &pool).await;
+                let _ = reconcile_artist_identities_once(&store, &pool).await;
+                let _ = reconcile_strong_release_identities(&store, &pool).await;
                 last_backstop = std::time::Instant::now();
             }
         }

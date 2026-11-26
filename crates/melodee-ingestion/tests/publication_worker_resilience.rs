@@ -406,6 +406,135 @@ async fn disabled_one_shot_workers_skip_roots_and_database_access() {
     );
 }
 
+#[cfg(feature = "test-support")]
+async fn wait_for_lease_events(pool: &sqlx::PgPool, id: Uuid, event: &str, count: i64) {
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let observed: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM release_work_item_events WHERE work_item_id = $1 AND event_type = $2",
+            )
+            .bind(id)
+            .bind(event)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+            if observed >= count {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for work-item lease events");
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn saturated_validation_renews_then_stops_without_a_permit() {
+    let mut roots = FixtureRoots::new();
+    roots.config.reconciliation_interval = time::Duration::milliseconds(20);
+    let database = common::TestDb::create("admission_shutdown").await;
+    let id = seed_validating_item(&database, &roots).await;
+    let work = WorkEngineConfig {
+        claim_batch_size: 1,
+        lease_duration: time::Duration::seconds(2),
+        ..WorkEngineConfig::default()
+    };
+    let permits = melodee_ingestion::saturate_ingestion_admission_for_test()
+        .await
+        .unwrap();
+    let scheduler = melodee_ingestion::start_validation_loop(
+        roots.config.clone(),
+        database.pool.clone(),
+        WorkItemStore,
+        work,
+    );
+    // Four renewals require the waiter to survive beyond the original lease.
+    wait_for_lease_events(&database.pool, id, "lease_renewed", 4).await;
+    let item = WorkItemStore.get(&database.pool, id).await.unwrap();
+    assert_eq!(item.state, IngestionState::Validating);
+    assert!(item.lease_expires_at.unwrap() > OffsetDateTime::now_utc());
+    tokio::time::timeout(std::time::Duration::from_secs(3), scheduler.stop())
+        .await
+        .expect("shutdown waited for a saturated permit");
+    let item = WorkItemStore.get(&database.pool, id).await.unwrap();
+    assert_eq!(item.state, IngestionState::Validating);
+    assert!(item.lease_owner.is_none());
+    drop(permits);
+    let retry = validate_once(
+        &roots.config,
+        &WorkItemStore,
+        &database.pool,
+        &work,
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(retry.completed, 1);
+    database.drop().await;
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn saturated_validation_lease_theft_cannot_publish_or_release_new_owner() {
+    let roots = FixtureRoots::new();
+    let database = common::TestDb::create("admission_fencing").await;
+    let id = seed_validating_item(&database, &roots).await;
+    let work = WorkEngineConfig {
+        claim_batch_size: 1,
+        lease_duration: time::Duration::seconds(2),
+        ..WorkEngineConfig::default()
+    };
+    let permits = melodee_ingestion::saturate_ingestion_admission_for_test()
+        .await
+        .unwrap();
+    let config = roots.config.clone();
+    let pool = database.pool.clone();
+    let task = tokio::spawn(async move {
+        validate_once(
+            &config,
+            &WorkItemStore,
+            &pool,
+            &work,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+    });
+    wait_for_lease_events(&database.pool, id, "lease_renewed", 1).await;
+    sqlx::query("UPDATE release_work_items SET lease_owner = 'replacement-owner', lease_expires_at = now() + interval '30 seconds' WHERE id = $1")
+        .bind(id)
+        .execute(&database.pool)
+        .await
+        .unwrap();
+    let stats = tokio::time::timeout(std::time::Duration::from_secs(5), task)
+        .await
+        .expect("stale waiter did not stop")
+        .unwrap()
+        .unwrap();
+    assert_eq!(stats.completed, 0);
+    assert_eq!(stats.errors, 1);
+    let item = WorkItemStore.get(&database.pool, id).await.unwrap();
+    assert_eq!(item.state, IngestionState::Validating);
+    assert_eq!(item.lease_owner.as_deref(), Some("replacement-owner"));
+    drop(permits);
+    sqlx::query("UPDATE release_work_items SET lease_owner = NULL, lease_acquired_at = NULL, lease_expires_at = NULL WHERE id = $1")
+        .bind(id)
+        .execute(&database.pool)
+        .await
+        .unwrap();
+    let retry = validate_once(
+        &roots.config,
+        &WorkItemStore,
+        &database.pool,
+        &work,
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(retry.completed, 1);
+    database.drop().await;
+}
+
 #[tokio::test]
 async fn sqlstate_53100_releases_validation_and_publication_leases_for_direct_retry() {
     let roots = FixtureRoots::new();

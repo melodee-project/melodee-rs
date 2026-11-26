@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sqlx::pool::PoolConnection;
-use sqlx::{AssertSqlSafe, PgPool, Postgres, Row};
+use sqlx::{Acquire, AssertSqlSafe, PgPool, Postgres, Row};
 use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -1123,11 +1123,16 @@ impl SearchProjectionStore {
         let batch_size = i64::try_from(batch_size)
             .map_err(|_| SearchStoreError::InvalidRequest("batch size is too large".to_string()))?;
         let acquire_started = std::time::Instant::now();
-        let mut tx = pool.begin().await?;
+        let _hold;
+        let mut connection = pool.acquire().await?;
+        let acquire_duration = acquire_started.elapsed();
+        _hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::SearchOutboxHold);
+        crate::metrics::observe(crate::metrics::Metric::PoolAcquire, acquire_duration);
         crate::metrics::observe(
-            crate::metrics::Metric::PoolAcquire,
-            acquire_started.elapsed(),
+            crate::metrics::Metric::SearchOutboxAcquire,
+            acquire_duration,
         );
+        let mut tx = (&mut *connection).begin().await?;
         sqlx::query(
             "INSERT INTO search_projection_checkpoint (
                 projection_name, last_processed_outbox_id, updated_at
@@ -1155,6 +1160,8 @@ impl SearchProjectionStore {
         .is_some();
         if !owns_projection {
             tx.commit().await?;
+            drop(connection);
+            drop(_hold);
             return Ok(Vec::new());
         }
 
@@ -1203,6 +1210,8 @@ impl SearchProjectionStore {
             .await?;
         }
         tx.commit().await?;
+        drop(connection);
+        drop(_hold);
 
         rows.into_iter().map(parse_outbox_row).collect()
     }
@@ -2299,6 +2308,7 @@ fn parse_track_row(row: sqlx::postgres::PgRow) -> Result<SearchTrackRecord, Sear
 /// how far an id-ordered catch-up cursor has advanced.
 pub struct SearchSnapshotReader {
     connection: PoolConnection<Postgres>,
+    _hold: crate::metrics::HoldTimer,
     generation_id: Uuid,
     source_high_water_mark: i64,
     finished: bool,
@@ -2306,7 +2316,14 @@ pub struct SearchSnapshotReader {
 
 impl SearchSnapshotReader {
     pub async fn begin(pool: &PgPool, generation_id: Uuid) -> Result<Self, SearchStoreError> {
+        let acquire_started = std::time::Instant::now();
         let mut connection = pool.acquire().await?;
+        let acquire_duration = acquire_started.elapsed();
+        let hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::SearchSnapshotHold);
+        crate::metrics::observe(
+            crate::metrics::Metric::SearchSnapshotAcquire,
+            acquire_duration,
+        );
         // REPEATABLE READ (not READ ONLY) so the visibility record below is
         // written from the same snapshot it describes. It is committed with
         // the snapshot, before the generation is validated, so a resumed
@@ -2334,6 +2351,7 @@ impl SearchSnapshotReader {
         .await?;
         Ok(Self {
             connection,
+            _hold: hold,
             generation_id,
             source_high_water_mark,
             finished: false,

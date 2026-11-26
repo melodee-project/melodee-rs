@@ -210,6 +210,113 @@ fn export_for_user(user: Uuid) -> ExportBuilder {
 }
 
 #[tokio::test]
+async fn overlapping_play_imports_with_opposite_track_order_do_not_deadlock() {
+    let db = TestDb::create("user_state_concurrent_plays").await;
+    let database_url = common::database_url(&db.name);
+    let user_a = Uuid::now_v7();
+    let user_b = Uuid::now_v7();
+    seed_user(&db, user_a, "play-import-a").await;
+    seed_user(&db, user_b, "play-import-b").await;
+    let (_, track_a) = seed_catalog(&db, 811, "Play A", "Play Artist A").await;
+    let (_, track_b) = seed_catalog(&db, 812, "Play B", "Play Artist B").await;
+
+    // Force both Tracks to share an Artist candidate. Per-row inserts acquire
+    // that candidate between Tracks and could then deadlock in opposite order.
+    sqlx::query(
+        "UPDATE track_artists SET artist_id=(
+             SELECT ta.artist_id FROM track_artists ta JOIN tracks t ON t.id=ta.track_id
+             WHERE t.public_api_id=$1 AND ta.role='primary' LIMIT 1
+         ) WHERE track_id=(SELECT id FROM tracks WHERE public_api_id=$2) AND role='primary'",
+    )
+    .bind(track_a)
+    .bind(track_b)
+    .execute(&db.pool)
+    .await
+    .expect("share Artist candidate");
+
+    // Slow each play INSERT at the database boundary, allowing the other
+    // importer to enter its transaction without changing production code.
+    sqlx::raw_sql(
+        "CREATE FUNCTION delay_play_import_for_test() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN PERFORM pg_sleep(0.15); RETURN NEW; END $$;
+         CREATE TRIGGER delay_play_import_for_test BEFORE INSERT ON native_track_plays
+         FOR EACH ROW EXECUTE FUNCTION delay_play_import_for_test();",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("install test delay");
+
+    let export_a = tempfile::tempdir().expect("export A");
+    let export_b = tempfile::tempdir().expect("export B");
+    for (user, username, tracks, directory) in [
+        (user_a, "play-import-a", [track_a, track_b], export_a.path()),
+        (user_b, "play-import-b", [track_b, track_a], export_b.path()),
+    ] {
+        let mut builder = ExportBuilder::new().push(
+            "users.ndjson",
+            json!({
+                "publicId": user, "username": username,
+                "email": format!("{username}@example.test"),
+                "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-02-01T00:00:00Z",
+            }),
+        );
+        for track in tracks {
+            builder = builder.push(
+                "track-plays.ndjson",
+                json!({
+                    "userPublicId": user, "trackPublicId": track,
+                    "playedAt": "2024-02-01T12:00:00Z", "durationSeconds": 180, "completed": true,
+                }),
+            );
+        }
+        builder.write(directory);
+    }
+    let gate = std::sync::Barrier::new(2);
+    let (first, second) = std::thread::scope(|scope| {
+        let gate_a = &gate;
+        let gate_b = &gate;
+        let database_a = &database_url;
+        let database_b = &database_url;
+        let directory_a = export_a.path();
+        let directory_b = export_b.path();
+        let first = scope.spawn(move || {
+            gate_a.wait();
+            run_import(database_a, directory_a, &["--json"])
+        });
+        let second = scope.spawn(move || {
+            gate_b.wait();
+            run_import(database_b, directory_b, &["--json"])
+        });
+        (
+            first.join().expect("first importer"),
+            second.join().expect("second importer"),
+        )
+    });
+    for (ok, stdout, stderr) in [first, second] {
+        assert!(ok, "concurrent play import failed: {stderr}");
+        let summary: Value = serde_json::from_str(&stdout).expect("summary json");
+        assert_eq!(summary["playsInserted"], 2);
+    }
+    let play_counts: Vec<i64> = sqlx::query_scalar(
+        "SELECT count(*) FROM native_track_plays WHERE track_id IN
+         (SELECT id FROM tracks WHERE public_api_id=ANY($1)) GROUP BY track_id ORDER BY track_id",
+    )
+    .bind([track_a, track_b].as_slice())
+    .fetch_all(&db.pool)
+    .await
+    .expect("play counts");
+    assert_eq!(play_counts, [2, 2]);
+    for directory in [export_a.path(), export_b.path()] {
+        let (ok, stdout, stderr) = run_import(&database_url, directory, &["--json"]);
+        assert!(ok, "play import replay failed: {stderr}");
+        let summary: Value = serde_json::from_str(&stdout).expect("summary json");
+        assert_eq!(summary["playsInserted"], 0);
+        assert_eq!(summary["playsDuplicate"], 2);
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn partial_catalog_import_retries_the_same_export_when_more_music_arrives() {
     let db = TestDb::create("user_state_growing").await;
     let database_url = common::database_url(&db.name);

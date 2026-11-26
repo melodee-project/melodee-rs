@@ -106,7 +106,11 @@ pub async fn reconcile_inbound_source(
     let mut stats = ReconcileStats::default();
     let mut observed = HashSet::<String>::new();
 
-    let candidates = match discover_release_candidates(source) {
+    let task_source = source.clone();
+    let discovery = crate::admission::run(move || discover_release_candidates(&task_source))
+        .await
+        .map_err(IngestionError::InspectionTask)?;
+    let candidates = match discovery {
         Ok(candidates) => candidates,
         Err(error) => {
             warn!(
@@ -124,7 +128,11 @@ pub async fn reconcile_inbound_source(
         observed.insert(relative.clone());
         stats.candidates_seen += 1;
 
-        let generation = match source_generation(&candidate.absolute_path) {
+        let candidate_path = candidate.absolute_path.clone();
+        let generation = match crate::admission::run(move || source_generation(&candidate_path))
+            .await
+            .map_err(IngestionError::InspectionTask)?
+        {
             Ok(generation) => generation,
             Err(error) => {
                 stats.errors += 1;
@@ -166,30 +174,36 @@ pub async fn reconcile_inbound_source(
             }
         };
 
-        let snapshot =
-            match snapshot_release_directory(&candidate.absolute_path, &config.ready_marker_name) {
-                Ok(snapshot) => snapshot,
-                Err(error) => {
-                    stats.errors += 1;
-                    warn!(
-                        source = %source.name,
-                        source_path = %relative,
-                        error = %error,
-                        "snapshot capture failed"
-                    );
-                    let _ = store
-                        .upsert_settling_progress(
-                            pool,
-                            item.id,
-                            item.stable_since,
-                            item.latest_settling_snapshot_id,
-                            now,
-                            Some("snapshot-error"),
-                        )
-                        .await;
-                    continue;
-                }
-            };
+        let candidate_path = candidate.absolute_path.clone();
+        let ready_marker = config.ready_marker_name.clone();
+        let snapshot = match crate::admission::run(move || {
+            snapshot_release_directory(&candidate_path, &ready_marker)
+        })
+        .await
+        .map_err(IngestionError::InspectionTask)?
+        {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                stats.errors += 1;
+                warn!(
+                    source = %source.name,
+                    source_path = %relative,
+                    error = %error,
+                    "snapshot capture failed"
+                );
+                let _ = store
+                    .upsert_settling_progress(
+                        pool,
+                        item.id,
+                        item.stable_since,
+                        item.latest_settling_snapshot_id,
+                        now,
+                        Some("snapshot-error"),
+                    )
+                    .await;
+                continue;
+            }
+        };
 
         let latest_snapshot = match store.latest_snapshot(pool, item.id).await {
             Ok(snapshot) => snapshot,

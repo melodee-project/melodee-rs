@@ -23,6 +23,125 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[tokio::test]
+async fn audio_and_release_corrections_lock_shared_tracks_in_order() {
+    let db = TestDb::create("audio_release_track_order").await;
+    let mut fixtures = Vec::new();
+    for ordinal in 0..3 {
+        fixtures.push(
+            seed_published_release(
+                &db,
+                140 + ordinal,
+                CatalogFixturePresentation {
+                    release_title: match ordinal {
+                        0 => "Audio Race A",
+                        1 => "Audio Race B",
+                        _ => "Audio Race C",
+                    },
+                    ..CatalogFixturePresentation::default()
+                },
+            )
+            .await,
+        );
+    }
+    let now = OffsetDateTime::now_utc();
+    let worker = WorkerId::new();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixtures");
+    for fixture in &fixtures {
+        CatalogStore
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("audio-release-race", "test"),
+                now,
+            )
+            .await
+            .expect("import fixture");
+    }
+    let releases = fixtures
+        .iter()
+        .map(|f| f.release_id.into_uuid())
+        .collect::<Vec<_>>();
+    let tracks: Vec<(Uuid,Uuid)> = sqlx::query_as("SELECT id,audio_identity_id FROM tracks WHERE release_id=ANY($1) ORDER BY array_position($1,release_id)")
+        .bind(&releases).fetch_all(&db.pool).await.expect("read Tracks");
+    assert_eq!(tracks.len(), 3);
+    let source_audio = tracks[0].1;
+    let target_audio = tracks[2].1;
+    sqlx::query("UPDATE tracks SET audio_identity_id=$2 WHERE id=$1")
+        .bind(tracks[1].0)
+        .bind(source_audio)
+        .execute(&db.pool)
+        .await
+        .expect("share source AudioIdentity");
+    let mut holder = db.pool.begin().await.expect("begin Track holder");
+    sqlx::query("SELECT id FROM tracks WHERE id=$1 FOR UPDATE")
+        .bind(tracks[0].0.min(tracks[1].0))
+        .execute(&mut *holder)
+        .await
+        .expect("hold first Track");
+    let audio = AudioIdentityMerge {
+        id: AudioIdentityMergeId::new(),
+        source_id: AudioIdentityId::from_uuid(source_audio),
+        target_id: AudioIdentityId::from_uuid(target_audio),
+        reason: "concurrent correction".into(),
+        occurred_at: now,
+    };
+    let merges = releases[..2]
+        .iter()
+        .copied()
+        .map(|source_release_id| melodee_persistence::ReleaseMerge {
+            source_release_id,
+            target_release_id: releases[2],
+            actor: "test".into(),
+            reason: "concurrent correction".into(),
+            occurred_at: now,
+        })
+        .collect::<Vec<_>>();
+    let audio_pool = db.pool.clone();
+    let release_pool = db.pool.clone();
+    let audio_task = tokio::spawn(async move {
+        CatalogStore
+            .merge_audio_identity(&audio_pool, &audio, "test", "race")
+            .await
+    });
+    let release_task =
+        tokio::spawn(async move { CatalogStore.merge_releases(&release_pool, &merges).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'")
+                .fetch_one(&db.pool).await.expect("count Track waiters");
+            if waiting >= 2 { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("both corrections wait at the first shared Track");
+    holder.commit().await.expect("release Track holder");
+    let (audio_result, release_result) =
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            (
+                audio_task.await.expect("audio join"),
+                release_task.await.expect("Release join"),
+            )
+        })
+        .await
+        .expect("corrections finish without deadlock");
+    release_result.expect("Release merge succeeds");
+    assert!(
+        audio_result.is_ok() || matches!(audio_result, Err(CatalogStoreError::MutationConflict)),
+        "audio correction must succeed or reject changed binding: {audio_result:?}"
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM tracks WHERE release_id=$1")
+        .bind(releases[2])
+        .fetch_one(&db.pool)
+        .await
+        .expect("count moved Tracks");
+    assert_eq!(count, 3);
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn audio_evidence_locked_merge_and_selective_split_never_move_or_rewrite_media() {
     let db = TestDb::create("catalog_audio_identity_corrections").await;
     let first = seed_published_release(

@@ -237,6 +237,19 @@ pub async fn import_track_plays(
         let played: Vec<time::OffsetDateTime> =
             rows.iter().map(|row| row.get("PlayedAt")).collect();
         let seconds: Vec<Option<i32>> = rows.iter().map(|row| row.get("SecondsPlayed")).collect();
+        // Acquire Track locks before the INSERT's unique keys. The statement
+        // trigger then takes the complete candidate set once, in its shared
+        // deterministic order, rather than upgrading foreign-key locks later.
+        let target_track_ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT DISTINCT internal_id FROM legacy_catalog_id_mappings
+             WHERE migration_run_id=$1 AND entity_type='track' AND legacy_numeric_id=ANY($2)",
+        )
+        .bind(run_id)
+        .bind(&tracks)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|error| format!("track play mapping lookup failed: {error}"))?;
+        crate::user_state_import::lock_play_tracks(&mut tx, &target_track_ids).await?;
         let (inserted, issues): (i64, i64) = sqlx::query_as(
             "WITH input AS (
                 SELECT * FROM unnest($2::bigint[], $3::bigint[], $4::bigint[], $5::timestamptz[], $6::integer[])
@@ -256,6 +269,7 @@ pub async fn import_track_plays(
                 INSERT INTO native_track_plays(id,user_id,track_id,client_event_id,played_at,submitted_at,duration_seconds,completed)
                 SELECT uuidv7(),user_id,track_id,'legacy-play-' || source_pk,played_at,played_at,seconds,true
                 FROM resolved WHERE user_id IS NOT NULL AND track_id IS NOT NULL
+                ORDER BY user_id,'legacy-play-' || source_pk,source_pk
                 ON CONFLICT (user_id,client_event_id) DO NOTHING
                 RETURNING id,user_id,client_event_id,played_at
              ), mapped AS (

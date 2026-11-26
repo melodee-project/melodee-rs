@@ -451,6 +451,20 @@ async fn correct_candidate_popularity(
             stats.passes_completed = stats.passes_completed.saturating_add(1);
             return Ok(());
         };
+        // Lock the complete candidate batch before taking the recount's
+        // READ COMMITTED snapshot. A concurrent play or relationship change
+        // either commits first and is counted below, or waits for these rows
+        // and applies its delta after this transaction commits. The repair
+        // takes no Track row locks, so it cannot cycle with trigger order.
+        sqlx::query(
+            "SELECT entity_id FROM native_recommendation_candidates \
+             WHERE entity_type=$1 AND entity_id=ANY($2) ORDER BY entity_id FOR UPDATE",
+        )
+        .bind(entity_type)
+        .bind(&batch)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sql)?;
         let corrected = sqlx::query(correction_sql)
             .bind(&batch)
             .execute(&mut *tx)

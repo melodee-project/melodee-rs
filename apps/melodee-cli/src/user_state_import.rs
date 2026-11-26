@@ -1931,6 +1931,22 @@ fn play_event_id(play: &PlayRecord) -> String {
     format!("portable-play-{}", &hex[..32])
 }
 
+/// Prelocks the complete bounded play batch before inserting any event. The
+/// recommendation statement trigger locks candidate rows only after the whole
+/// batch is inserted, keeping Track, event-key and candidate lock order aligned
+/// with a concurrent scrobble.
+pub(crate) async fn lock_play_tracks(
+    connection: &mut sqlx::PgConnection,
+    track_ids: &[Uuid],
+) -> Result<(), String> {
+    sqlx::query("SELECT id FROM tracks WHERE id = ANY($1) ORDER BY id FOR NO KEY UPDATE")
+        .bind(track_ids)
+        .execute(connection)
+        .await
+        .map_err(|error| format!("play history track lock failed: {error}"))?;
+    Ok(())
+}
+
 async fn apply_plays(
     pool: &PgPool,
     export: &Export,
@@ -1950,31 +1966,51 @@ async fn apply_plays(
         .collect::<Vec<_>>();
     for chunk in resolved.chunks(batch) {
         let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
-        for (user_id, track_id, play) in chunk {
-            let inserted = sqlx::query(
-                "INSERT INTO native_track_plays (
-                    id, user_id, track_id, client_event_id, played_at, submitted_at,
-                    duration_seconds, completed
-                 ) VALUES ($1,$2,$3,$4,$5,$5,$6,$7)
-                 ON CONFLICT (user_id, client_event_id) DO NOTHING",
-            )
-            .bind(Uuid::now_v7())
-            .bind(user_id)
-            .bind(track_id)
-            .bind(play_event_id(play))
-            .bind(play.played_at)
-            .bind(play.row.duration_seconds)
-            .bind(play.row.completed)
-            .execute(&mut *tx)
-            .await
-            .map_err(|error| format!("play history write failed: {error}"))?
-            .rows_affected();
-            if inserted == 1 {
-                summary.plays_inserted += 1;
-            } else {
-                summary.plays_duplicate += 1;
-            }
-        }
+        let user_ids: Vec<_> = chunk.iter().map(|(user_id, _, _)| *user_id).collect();
+        let track_ids: Vec<_> = chunk.iter().map(|(_, track_id, _)| *track_id).collect();
+        let event_ids: Vec<_> = chunk
+            .iter()
+            .map(|(_, _, play)| play_event_id(play))
+            .collect();
+        let played_at: Vec<_> = chunk.iter().map(|(_, _, play)| play.played_at).collect();
+        let durations: Vec<_> = chunk
+            .iter()
+            .map(|(_, _, play)| play.row.duration_seconds)
+            .collect();
+        let completed: Vec<_> = chunk
+            .iter()
+            .map(|(_, _, play)| play.row.completed)
+            .collect();
+        lock_play_tracks(&mut tx, &track_ids).await?;
+        // Stable input ordinality retains the former first-input-wins behavior
+        // for duplicates while ordering unique-key acquisition across imports.
+        let inserted = sqlx::query(
+            "INSERT INTO native_track_plays (
+                 id, user_id, track_id, client_event_id, played_at, submitted_at,
+                 duration_seconds, completed
+             )
+             SELECT uuidv7(), user_id, track_id, event_id, played_at, played_at,
+                    duration, completed
+             FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::timestamptz[],
+                         $5::integer[], $6::boolean[]) WITH ORDINALITY
+                  AS input(user_id, track_id, event_id, played_at, duration, completed, ordinal)
+             ORDER BY user_id, event_id, ordinal
+             ON CONFLICT (user_id, client_event_id) DO NOTHING",
+        )
+        .bind(&user_ids)
+        .bind(&track_ids)
+        .bind(&event_ids)
+        .bind(&played_at)
+        .bind(&durations)
+        .bind(&completed)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| format!("play history write failed: {error}"))?
+        .rows_affected();
+        let inserted = usize::try_from(inserted)
+            .map_err(|_| "play history write count overflow".to_owned())?;
+        summary.plays_inserted += inserted;
+        summary.plays_duplicate += chunk.len() - inserted;
         tx.commit().await.map_err(|error| error.to_string())?;
     }
     Ok(())

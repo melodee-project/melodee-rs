@@ -22,6 +22,358 @@ use melodee_persistence::{
 use time::Duration;
 use uuid::Uuid;
 
+async fn wait_for_import_lock_wait(pool: &sqlx::PgPool) {
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                 WHERE datname=current_database() AND wait_event_type='Lock'
+                   AND query LIKE 'SELECT * FROM release_work_items WHERE id = $1 FOR UPDATE%')",
+            )
+            .fetch_one(pool)
+            .await
+            .expect("inspect blocked importer");
+            if waiting {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("importer reaches its row lock after preparing binding");
+}
+
+#[tokio::test]
+async fn prepared_manifest_binding_change_is_rejected_and_retry_succeeds() {
+    let db = TestDb::create("catalog_binding_race").await;
+    let fixture = seed_published_release(&db, 701, CatalogFixturePresentation::default()).await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim");
+    let mut blocker = db.pool.begin().await.expect("blocker transaction");
+    sqlx::query("SELECT id FROM release_work_items WHERE id=$1 FOR UPDATE")
+        .bind(fixture.work_item_id)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock work item");
+    let old_plan: serde_json::Value = sqlx::query_scalar(
+        "SELECT plan_payload FROM release_publication_plans WHERE work_item_id=$1",
+    )
+    .bind(fixture.work_item_id)
+    .fetch_one(&mut *blocker)
+    .await
+    .expect("read plan");
+    let pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let work_item_id = fixture.work_item_id;
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &pool,
+                work_item_id,
+                &import_worker,
+                &CatalogImportRequest::new("binding-race", "test"),
+                now,
+            )
+            .await
+    });
+    wait_for_import_lock_wait(&db.pool).await;
+    sqlx::query("UPDATE release_publication_plans SET plan_payload = plan_payload || '{\"race\":true}'::jsonb WHERE work_item_id=$1")
+        .bind(fixture.work_item_id).execute(&mut *blocker).await.expect("change binding");
+    blocker.commit().await.expect("commit changed binding");
+    let result = task.await.expect("join importer");
+    assert!(
+        matches!(
+            result,
+            Err(melodee_persistence::CatalogStoreError::ManifestEvidence(_))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM catalog_imports WHERE work_item_id=$1")
+            .bind(fixture.work_item_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count imports"),
+        0
+    );
+    sqlx::query("UPDATE release_publication_plans SET plan_payload=$2 WHERE work_item_id=$1")
+        .bind(fixture.work_item_id)
+        .bind(old_plan)
+        .execute(&db.pool)
+        .await
+        .expect("restore plan");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("binding-race", "test"),
+            now,
+        )
+        .await
+        .expect("retry succeeds");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn prepared_manifest_does_not_bypass_lease_theft() {
+    let db = TestDb::create("catalog_lease_race").await;
+    let fixture = seed_published_release(&db, 702, CatalogFixturePresentation::default()).await;
+    let worker = WorkerId::new();
+    let thief = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim");
+    let mut blocker = db.pool.begin().await.expect("blocker transaction");
+    sqlx::query("SELECT id FROM release_work_items WHERE id=$1 FOR UPDATE")
+        .bind(fixture.work_item_id)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock work item");
+    let pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let work_item_id = fixture.work_item_id;
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &pool,
+                work_item_id,
+                &import_worker,
+                &CatalogImportRequest::new("lease-race", "test"),
+                now,
+            )
+            .await
+    });
+    wait_for_import_lock_wait(&db.pool).await;
+    sqlx::query("UPDATE release_work_items SET lease_owner=$2 WHERE id=$1")
+        .bind(fixture.work_item_id)
+        .bind(thief.as_str())
+        .execute(&mut *blocker)
+        .await
+        .expect("steal lease");
+    blocker.commit().await.expect("commit lease theft");
+    let result = task.await.expect("join importer");
+    assert!(
+        matches!(
+            result,
+            Err(melodee_persistence::CatalogStoreError::Work(
+                melodee_persistence::WorkStoreError::NotLeaseOwner(_)
+            ))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM catalog_imports WHERE work_item_id=$1")
+            .bind(fixture.work_item_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count imports"),
+        0
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn prepared_manifest_external_reference_change_is_rejected() {
+    let db = TestDb::create("catalog_ref_race").await;
+    let fixture = seed_published_release(&db, 703, CatalogFixturePresentation::default()).await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim");
+    let mut blocker = db.pool.begin().await.expect("blocker transaction");
+    sqlx::query("SELECT id FROM release_work_items WHERE id=$1 FOR UPDATE")
+        .bind(fixture.work_item_id)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock item");
+    let pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let work_item_id = fixture.work_item_id;
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &pool,
+                work_item_id,
+                &import_worker,
+                &CatalogImportRequest::new("reference-race", "test"),
+                now,
+            )
+            .await
+    });
+    wait_for_import_lock_wait(&db.pool).await;
+    let updated = sqlx::query("UPDATE release_work_item_manifest_evidence SET revision=revision+1 WHERE manifest_row_id=(SELECT id FROM release_work_item_manifests WHERE work_item_id=$1)")
+        .bind(fixture.work_item_id).execute(&mut *blocker).await.expect("revise reference");
+    assert_eq!(updated.rows_affected(), 1);
+    blocker.commit().await.expect("commit changed reference");
+    let result = task.await.expect("join importer");
+    assert!(
+        matches!(
+            result,
+            Err(melodee_persistence::CatalogStoreError::ManifestEvidence(_))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM catalog_imports WHERE work_item_id=$1")
+            .bind(fixture.work_item_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count imports"),
+        0
+    );
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("reference-race", "test"),
+            now,
+        )
+        .await
+        .expect("retry succeeds");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn prepared_manifest_expired_lease_is_rejected_using_current_database_time() {
+    let db = TestDb::create("catalog_expiry_race").await;
+    let fixture = seed_published_release(&db, 704, CatalogFixturePresentation::default()).await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim");
+    let mut blocker = db.pool.begin().await.expect("blocker transaction");
+    sqlx::query("SELECT id FROM release_work_items WHERE id=$1 FOR UPDATE")
+        .bind(fixture.work_item_id)
+        .execute(&mut *blocker)
+        .await
+        .expect("lock item");
+    let pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let work_item_id = fixture.work_item_id;
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &pool,
+                work_item_id,
+                &import_worker,
+                &CatalogImportRequest::new("expiry-race", "test"),
+                now,
+            )
+            .await
+    });
+    wait_for_import_lock_wait(&db.pool).await;
+    sqlx::query("UPDATE release_work_items SET lease_expires_at=$2 WHERE id=$1")
+        .bind(fixture.work_item_id)
+        .bind(now + time::Duration::seconds(1))
+        .execute(&mut *blocker)
+        .await
+        .expect("shorten lease");
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    blocker.commit().await.expect("commit expired lease");
+    let result = task.await.expect("join importer");
+    assert!(
+        matches!(
+            result,
+            Err(melodee_persistence::CatalogStoreError::Work(
+                melodee_persistence::WorkStoreError::LeaseExpired(_)
+            ))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM catalog_imports WHERE work_item_id=$1")
+            .bind(fixture.work_item_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count imports"),
+        0
+    );
+    db.drop().await;
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn cancellation_while_evidence_io_is_blocked_never_begins_the_import() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    let db = TestDb::create("catalog_cancel_io").await;
+    let fixture = seed_published_release(&db, 705, CatalogFixturePresentation::default()).await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim");
+    let all_permits = melodee_persistence::asset_files::test_hold_all_file_io()
+        .await
+        .expect("hold file admission");
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let task_cancelled = cancelled.clone();
+    let pool = db.pool.clone();
+    let task_worker = worker.clone();
+    let work_item_id = fixture.work_item_id;
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3_cancellable(
+                &pool,
+                work_item_id,
+                &task_worker,
+                &CatalogImportRequest::new("cancel-io", "test"),
+                now,
+                || task_cancelled.load(Ordering::Acquire),
+            )
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        while melodee_persistence::asset_files::test_file_io_waiters() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("import waits for file admission");
+    cancelled.store(true, Ordering::Release);
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), task)
+        .await
+        .expect("cancellation ends import while I/O remains blocked")
+        .expect("join importer")
+        .expect("no error");
+    assert!(result.is_none());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM catalog_imports WHERE work_item_id=$1")
+            .bind(fixture.work_item_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count imports"),
+        0
+    );
+    drop(all_permits);
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("cancel-io", "test"),
+            now,
+        )
+        .await
+        .expect("retry succeeds");
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn slash_billing_keeps_release_artist_primary_and_creates_featured_track_artists() {
     let db = TestDb::create("catalog_slash_track_billing").await;
@@ -487,6 +839,30 @@ async fn repeated_track_artist_credit_reconciliation_is_release_scoped_audited_a
     assert_eq!(candidate.release_id, fixture.release_id.into_uuid());
     assert_eq!(candidate.normalized_name, "glockboyz teejaee");
     assert_eq!(candidate.source_artist_id, legacy_source_artist_id);
+    let affected_seeds: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM catalog_identity_reconciliation_seed WHERE normalized_name=$1 ORDER BY id",
+    )
+    .bind(&candidate.normalized_name)
+    .fetch_all(&db.pool)
+    .await
+    .expect("read affected Track Artist seeds");
+    assert!(!affected_seeds.is_empty());
+    let scoped = catalog
+        .seeded_same_release_track_artist_merge_candidates(&db.pool, &affected_seeds, 64)
+        .await
+        .expect("scan affected same-Release Track credits");
+    assert!(scoped.iter().any(|row| {
+        row.source_artist_id == candidate.source_artist_id
+            && row.target_artist_id == candidate.target_artist_id
+            && row.release_id == candidate.release_id
+    }));
+    assert!(
+        catalog
+            .seeded_same_release_track_artist_merge_candidates(&db.pool, &[-1], 64)
+            .await
+            .expect("scan unrelated same-Release Track seed")
+            .is_empty()
+    );
     let merge = ArtistMerge {
         id: ArtistMergeId::new(),
         source_artist_id: ArtistId::from_uuid(candidate.source_artist_id),
@@ -1373,6 +1749,52 @@ async fn conflicting_active_dates_block_strong_provider_id_reconciliation() {
     .await
     .expect("read same-name Artist identities");
     assert_eq!(artist_ids.len(), 2);
+    let affected_seeds: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM catalog_identity_reconciliation_seed WHERE artist_id=$1 ORDER BY id",
+    )
+    .bind(artist_ids[0])
+    .fetch_all(&db.pool)
+    .await
+    .expect("read strong Artist identity seeds");
+    assert!(!affected_seeds.is_empty());
+    assert_eq!(
+        catalog
+            .seeded_strong_artist_merge_candidates(&db.pool, &affected_seeds, 64)
+            .await
+            .expect("scan affected strong Artist group")
+            .len(),
+        1
+    );
+    assert!(
+        catalog
+            .seeded_strong_artist_merge_candidates(&db.pool, &[-1], 64)
+            .await
+            .expect("scan unrelated strong Artist seed")
+            .is_empty()
+    );
+    // A seed must expand live identity relationships at processing time, not
+    // just the names and keys present when it was enqueued.
+    let late_seed: i64 = sqlx::query_scalar(
+        "INSERT INTO catalog_identity_reconciliation_seed (artist_id,created_at) VALUES ($1,now()) RETURNING id",
+    )
+    .bind(artist_ids[0]).fetch_one(&db.pool).await.expect("enqueue live hint");
+    let late_key = uuid::Uuid::now_v7().to_string();
+    let original_key: String = sqlx::query_scalar("SELECT external_id FROM artist_external_identities WHERE artist_id=$1 AND provider='musicbrainz' LIMIT 1")
+        .bind(artist_ids[0]).fetch_one(&db.pool).await.expect("read original key");
+    sqlx::query("UPDATE artist_external_identities SET external_id=$2 WHERE artist_id=ANY($1) AND provider='musicbrainz'")
+        .bind(&artist_ids).bind(&late_key).execute(&db.pool).await.expect("add late identity evidence");
+    assert!(
+        catalog
+            .seeded_strong_artist_merge_candidates(&db.pool, &[late_seed], 64)
+            .await
+            .expect("expand late evidence")
+            .iter()
+            .any(|candidate| candidate.external_id == late_key)
+    );
+    sqlx::query("UPDATE artist_external_identities SET external_id=$2 WHERE artist_id=ANY($1) AND provider='musicbrainz'")
+        .bind(&artist_ids).bind(&original_key).execute(&db.pool)
+        .await
+        .expect("remove temporary evidence");
     assert_eq!(
         catalog
             .strong_artist_merge_candidates(&db.pool, 64)
@@ -1399,6 +1821,13 @@ async fn conflicting_active_dates_block_strong_provider_id_reconciliation() {
             .expect("scan conflicting active dates")
             .is_empty(),
         "disjoint active ranges block even an otherwise strong provider-ID merge"
+    );
+    assert!(
+        catalog
+            .seeded_strong_artist_merge_candidates(&db.pool, &affected_seeds, 64)
+            .await
+            .expect("scan affected Artist group with conflicting dates")
+            .is_empty()
     );
     assert!(
         catalog
@@ -1613,6 +2042,27 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
         .into_iter()
         .next()
         .expect("same provisional billing is initially eligible");
+    let affected_seeds: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM catalog_identity_reconciliation_seed WHERE normalized_name='shared billing'",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read affected name seeds");
+    let scoped = catalog
+        .seeded_name_only_artist_match_proposal_candidates(&db.pool, &affected_seeds, 64)
+        .await
+        .expect("scan affected name group");
+    assert!(scoped.iter().any(|row| {
+        row.observed_artist_id == candidate.observed_artist_id
+            && row.candidate_artist_id == candidate.candidate_artist_id
+    }));
+    assert!(
+        catalog
+            .seeded_name_only_artist_match_proposal_candidates(&db.pool, &[-1], 64)
+            .await
+            .expect("scan unrelated seed")
+            .is_empty()
+    );
     assert_eq!(
         catalog
             .repeated_artist_credit_merge_candidates(&db.pool, 64)
@@ -1620,6 +2070,21 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
             .expect("scan initial contextual candidate")
             .len(),
         1
+    );
+    assert_eq!(
+        catalog
+            .seeded_repeated_artist_credit_merge_candidates(&db.pool, &affected_seeds, 64)
+            .await
+            .expect("scan affected repeated-credit group")
+            .len(),
+        1
+    );
+    assert!(
+        catalog
+            .seeded_repeated_artist_credit_merge_candidates(&db.pool, &[-1], 64)
+            .await
+            .expect("scan unrelated repeated-credit seed")
+            .is_empty()
     );
     let source_observation = candidate.observed_artist_id;
     let assertion_id = ArtistNegativeAssertionId::new();
@@ -2076,6 +2541,16 @@ async fn import_adopts_reserved_release_id_is_idempotent_and_never_rewrites_v3()
     assert_eq!(stored_asset.1, fixture.normalized_byte_hash);
     assert_eq!(stored_asset.2, 42);
 
+    let seeds_before_retry: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM catalog_identity_reconciliation_seed ORDER BY id")
+            .fetch_all(&db.pool)
+            .await
+            .expect("read identity obligations before retry");
+    assert!(
+        !seeds_before_retry.is_empty(),
+        "the first import persists identity obligations"
+    );
+
     let retry = catalog
         .import_manifest_v3(
             &db.pool,
@@ -2091,6 +2566,15 @@ async fn import_adopts_reserved_release_id_is_idempotent_and_never_rewrites_v3()
     assert_eq!(
         catalog.counts(&db.pool).await.expect("retry counts"),
         counts_after_first
+    );
+    let seeds_after_retry: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM catalog_identity_reconciliation_seed ORDER BY id")
+            .fetch_all(&db.pool)
+            .await
+            .expect("read identity obligations after retry");
+    assert_eq!(
+        seeds_after_retry, seeds_before_retry,
+        "retry must neither lose outstanding work nor enqueue new reconciliation seeds"
     );
 
     let conflicting_retry = catalog
@@ -2488,6 +2972,31 @@ async fn trusted_release_evidence_merge_and_split_preserve_tracks_and_audit() {
                 && candidate.target_release_id == second.release_id.into_uuid()
         })
         .expect("duplicate Releases form a strong evidence candidate");
+    let seeds: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM catalog_identity_reconciliation_seed WHERE release_id=$1 ORDER BY id",
+    )
+    .bind(first.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read affected Release seeds");
+    assert!(!seeds.is_empty());
+    let scoped = catalog
+        .seeded_strong_release_merge_candidates(&db.pool, &seeds, 64)
+        .await
+        .expect("scan affected trusted Release evidence");
+    assert!(scoped.iter().any(|row| {
+        row.source_release_id == candidate.source_release_id
+            && row.target_release_id == candidate.target_release_id
+            && row.provider == candidate.provider
+            && row.external_id == candidate.external_id
+    }));
+    assert!(
+        catalog
+            .seeded_strong_release_merge_candidates(&db.pool, &[-1], 64)
+            .await
+            .expect("scan an unrelated seed")
+            .is_empty()
+    );
     let source_track: uuid::Uuid =
         sqlx::query_scalar("SELECT id FROM tracks WHERE release_id=$1 ORDER BY ordinal LIMIT 1")
             .bind(first.release_id.into_uuid())
@@ -2559,6 +3068,45 @@ async fn trusted_release_evidence_merge_and_split_preserve_tracks_and_audit() {
         )
         .await
         .expect("split Release merge");
+    let projection_revisions: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT entity_revision, operation FROM catalog_projection_outbox
+         WHERE projection_name='tantivy.catalog' AND entity_type='track'
+           AND entity_id=$1 AND entity_revision > 1 ORDER BY entity_revision",
+    )
+    .bind(source_track)
+    .fetch_all(&db.pool)
+    .await
+    .expect("read merge and split projection revisions");
+    assert_eq!(
+        projection_revisions,
+        vec![(2, "upsert".into()), (3, "upsert".into())]
+    );
+    let retry = catalog
+        .split_release_merge(
+            &db.pool,
+            merge_event,
+            "catalog-test",
+            "retry an already restored merge",
+            time::OffsetDateTime::now_utc(),
+        )
+        .await;
+    assert!(matches!(
+        retry,
+        Err(melodee_persistence::CatalogStoreError::MutationConflict)
+    ));
+    let after_retry: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT entity_revision, operation FROM catalog_projection_outbox
+         WHERE projection_name='tantivy.catalog' AND entity_type='track'
+           AND entity_id=$1 AND entity_revision > 1 ORDER BY entity_revision",
+    )
+    .bind(source_track)
+    .fetch_all(&db.pool)
+    .await
+    .expect("read projection revisions after rejected retry");
+    assert_eq!(
+        after_retry, projection_revisions,
+        "a rejected retry must not emit duplicate events"
+    );
     assert_eq!(
         sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id=$1")
             .bind(first.release_id.into_uuid())
@@ -2606,5 +3154,114 @@ async fn trusted_release_evidence_merge_and_split_preserve_tracks_and_audit() {
         .expect("read restored source aggregate"),
         1
     );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn overlapping_release_merge_batches_lock_the_complete_parent_set_first() {
+    let db = TestDb::create("release_batch_lock_order").await;
+    let mut releases = Vec::new();
+    for ordinal in 0..3 {
+        releases.push(
+            seed_published_release(
+                &db,
+                830 + ordinal,
+                CatalogFixturePresentation {
+                    release_title: match ordinal {
+                        0 => "Batch A",
+                        1 => "Batch B",
+                        _ => "Batch C",
+                    },
+                    ..CatalogFixturePresentation::default()
+                },
+            )
+            .await,
+        );
+    }
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixtures");
+    for fixture in &releases {
+        CatalogStore
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("batch-lock", "test"),
+                now,
+            )
+            .await
+            .expect("import fixture");
+    }
+    let ids = releases
+        .iter()
+        .map(|fixture| fixture.release_id.into_uuid())
+        .collect::<Vec<_>>();
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    let mut holder = db.pool.begin().await.expect("begin holder");
+    sqlx::query("SELECT id FROM releases WHERE id=$1 FOR UPDATE")
+        .bind(sorted[0])
+        .execute(&mut *holder)
+        .await
+        .expect("lock first Release");
+    let make_batch = |target: Uuid| {
+        ids.iter()
+            .copied()
+            .filter(|id| *id != target)
+            .map(|source_release_id| melodee_persistence::ReleaseMerge {
+                source_release_id,
+                target_release_id: target,
+                actor: "test".into(),
+                reason: "concurrent merge".into(),
+                occurred_at: now,
+            })
+            .collect::<Vec<_>>()
+    };
+    let left = make_batch(ids[0]);
+    let right = make_batch(ids[2]);
+    let left_pool = db.pool.clone();
+    let right_pool = db.pool.clone();
+    let first = tokio::spawn(async move { CatalogStore.merge_releases(&left_pool, &left).await });
+    let second =
+        tokio::spawn(async move { CatalogStore.merge_releases(&right_pool, &right).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE%'")
+                .fetch_one(&db.pool).await.expect("count lock waiters");
+            if waiting >= 2 { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("both batches wait at the same first Release");
+    holder.commit().await.expect("release lock");
+    let (first, second) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        (
+            first.await.expect("first join"),
+            second.await.expect("second join"),
+        )
+    })
+    .await
+    .expect("batches finish");
+    assert_eq!(
+        usize::from(first.is_ok()) + usize::from(second.is_ok()),
+        1,
+        "one batch must win: {first:?} {second:?}"
+    );
+    let loser = if first.is_err() { first } else { second };
+    assert!(
+        matches!(
+            loser,
+            Err(melodee_persistence::CatalogStoreError::MutationConflict)
+        ),
+        "loser must observe changed state: {loser:?}"
+    );
+    let events: i64 = sqlx::query_scalar("SELECT count(*) FROM release_merge_events")
+        .fetch_one(&db.pool)
+        .await
+        .expect("count events");
+    assert_eq!(events, 2);
     db.drop().await;
 }

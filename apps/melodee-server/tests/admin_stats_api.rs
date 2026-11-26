@@ -180,6 +180,20 @@ async fn stats_report_library_listening_and_database_panels() {
     let fixture = seed_users(&db).await;
     seed_release(&db, 41, "Stats Release One").await;
     seed_release(&db, 42, "Stats Release Two").await;
+    sqlx::query("UPDATE media_assets SET codec = NULL")
+        .execute(&db.pool)
+        .await
+        .expect("clear codecs");
+    sqlx::query("UPDATE media_assets SET codec = 'FLAC' WHERE id = (SELECT min(id::text)::uuid FROM media_assets)")
+        .execute(&db.pool).await.expect("set lossless codec");
+    let expected_bytes: i64 = sqlx::query_scalar("SELECT sum(byte_size)::bigint FROM media_assets")
+        .fetch_one(&db.pool)
+        .await
+        .expect("asset bytes");
+    let expected_duration: i64 = sqlx::query_scalar("SELECT sum(duration_ms)::bigint FROM tracks")
+        .fetch_one(&db.pool)
+        .await
+        .expect("track duration");
     sqlx::query("UPDATE release_publication_receipts SET published_at = now() - interval '2 hours'
                     WHERE work_item_id=(SELECT min(work_item_id::text)::uuid FROM release_publication_receipts)")
         .execute(&db.pool).await.expect("recent publication");
@@ -204,8 +218,10 @@ async fn stats_report_library_listening_and_database_panels() {
     let library = &body["library"];
     assert_eq!(library["releases"], 2);
     assert_eq!(library["tracks"], 2);
-    assert!(library["totalBytes"].as_i64().unwrap_or_default() > 0);
-    assert!(library["totalDurationMs"].as_i64().unwrap_or_default() > 0);
+    assert_eq!(library["mediaAssets"], 2);
+    assert_eq!(library["totalBytes"], expected_bytes);
+    assert_eq!(library["totalDurationMs"], expected_duration);
+    assert_eq!(library["losslessTracks"], 1);
     let formats = library["formats"].as_array().expect("formats");
     assert!(!formats.is_empty(), "the fixture publishes one media asset");
     assert!(formats.len() <= 12, "the breakdown is bounded");

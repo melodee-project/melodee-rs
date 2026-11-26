@@ -1,6 +1,7 @@
 //! Generational rebuild orchestration from a bounded PostgreSQL snapshot.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use melodee_persistence::{
@@ -9,7 +10,7 @@ use melodee_persistence::{
 };
 use sqlx::PgPool;
 use time::OffsetDateTime;
-use tracing::warn;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::config::SearchConfig;
@@ -126,25 +127,96 @@ fn is_permanent_rebuild_error(error: &SearchError) -> bool {
     )
 }
 
-/// PERF-006 / RM-14: run one bounded page's document construction and commit on
-/// the blocking pool, and return the store so the next page reuses it. The
-/// spawn_blocking queue depth is bounded to one page per rebuild, so this moves
-/// index CPU/IO off the async runtime without an unbounded blocking backlog.
+// A process-wide bound on queued and executing rebuild index work. The permit
+// moves into the blocking closure: cancellation of an async waiter cannot
+// incorrectly advertise capacity while the closure is still running.
+const REBUILD_BLOCKING_LIMIT: usize = 1;
+static REBUILD_BLOCKING: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+
+#[derive(Clone, Copy)]
+struct RebuildTask<'a> {
+    config: &'a SearchConfig,
+    pool: &'a PgPool,
+    job_id: Uuid,
+    worker: &'a str,
+    cancel: &'a AtomicBool,
+}
+
+/// Admit before spawning, renew while queued or running, and reap the task on
+/// cancellation or lease loss. A finished index task is not acknowledged or
+/// activated until the caller continues under a valid rebuild lease.
+async fn rebuild_blocking<T: Send + 'static>(
+    task: RebuildTask<'_>,
+    work: impl FnOnce() -> Result<T, SearchError> + Send + 'static,
+) -> Result<T, SearchError> {
+    let semaphore = REBUILD_BLOCKING
+        .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(REBUILD_BLOCKING_LIMIT)))
+        .clone();
+    let admission = semaphore.acquire_owned();
+    tokio::pin!(admission);
+    let heartbeat_period =
+        (Duration::from_secs(task.config.lease_seconds) / 3).max(Duration::from_millis(100));
+    let mut heartbeat = tokio::time::interval(heartbeat_period);
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    heartbeat.tick().await;
+    let mut cancellation = tokio::time::interval(Duration::from_millis(100));
+    cancellation.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let permit = loop {
+        check_cancel(task.cancel)?;
+        tokio::select! {
+            permit = &mut admission => break permit.map_err(|error| SearchError::Retryable(format!("rebuild admission failed: {error}")))?,
+            _ = heartbeat.tick() => renew(task.config, task.pool, task.job_id, task.worker).await?,
+            _ = cancellation.tick() => {}
+        }
+    };
+    check_cancel(task.cancel)?;
+    let mut handle = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        work()
+    });
+    loop {
+        tokio::select! {
+            result = &mut handle => {
+                check_cancel(task.cancel)?;
+                // Task completion and a scheduled heartbeat can become ready
+                // together. Revalidate ownership even if the completion arm
+                // won so a stale worker cannot continue towards activation.
+                renew(task.config, task.pool, task.job_id, task.worker).await?;
+                return result.map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?;
+            }
+            _ = heartbeat.tick() => {
+                if let Err(error) = renew(task.config, task.pool, task.job_id, task.worker).await {
+                    let _ = handle.await;
+                    return Err(error);
+                }
+            }
+            _ = cancellation.tick() => {
+                if let Err(error) = check_cancel(task.cancel) {
+                    let _ = handle.await;
+                    return Err(error);
+                }
+            }
+        }
+    }
+}
+
+/// Run one bounded page's document construction and optional commit off the
+/// async runtime, returning its writer for the next page.
 async fn run_index_blocking(
     mut store: SearchStore,
     work: impl FnOnce(&mut SearchStore) -> Result<(), SearchError> + Send + 'static,
     commit: bool,
+    task: RebuildTask<'_>,
 ) -> Result<SearchStore, SearchError> {
     let started = std::time::Instant::now();
-    let result = tokio::task::spawn_blocking(move || {
+    let result = rebuild_blocking(task, move || {
         work(&mut store)?;
         if commit {
             store.commit()?;
         }
         Ok::<SearchStore, SearchError>(store)
     })
-    .await
-    .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?;
+    .await;
     melodee_persistence::metrics::observe(
         melodee_persistence::metrics::Metric::SearchRebuildPage,
         started.elapsed(),
@@ -153,13 +225,15 @@ async fn run_index_blocking(
 }
 
 /// Commits buffered documents on the blocking pool and returns the store.
-async fn commit_store_blocking(mut store: SearchStore) -> Result<SearchStore, SearchError> {
-    tokio::task::spawn_blocking(move || {
+async fn commit_store_blocking(
+    mut store: SearchStore,
+    task: RebuildTask<'_>,
+) -> Result<SearchStore, SearchError> {
+    rebuild_blocking(task, move || {
         store.commit()?;
         Ok::<SearchStore, SearchError>(store)
     })
     .await
-    .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?
 }
 
 async fn execute_claimed_rebuild(
@@ -173,19 +247,31 @@ async fn execute_claimed_rebuild(
     let generation_id = initial_job.generation_id.ok_or_else(|| {
         SearchError::InvalidQuery("claimed rebuild has no generation".to_string())
     })?;
+    let task = RebuildTask {
+        config,
+        pool,
+        job_id: initial_job.job_id,
+        worker,
+        cancel,
+    };
     let mut generation = SearchProjectionStore::get_generation(pool, generation_id).await?;
     if initial_job.status == "running" {
         check_cancel(cancel)?;
+        // Reset mutates generation storage. Keep its existing synchronous
+        // lifecycle until cross-process takeover can fence an in-flight reset.
         let generation_path = root.reset_generation(
             generation_id,
             OffsetDateTime::now_utc(),
             SCHEMA_VERSION,
             generation.source_high_water_mark,
         )?;
-        let mut store = SearchStore::create(&generation_path)?;
+        let mut store =
+            rebuild_blocking(task, move || SearchStore::create(&generation_path)).await?;
         // Record this snapshot's visible outbox rows inside the snapshot so
         // late-committing low ids stay a delivery obligation (PERF-V001).
         let mut snapshot = SearchSnapshotReader::begin(pool, generation_id).await?;
+        let snapshot_started = std::time::Instant::now();
+        let mut commit_count = 0_u64;
         let mut counts = SearchDocumentCounts {
             artists: 0,
             releases: 0,
@@ -224,9 +310,11 @@ async fn execute_claimed_rebuild(
                     Ok(())
                 },
                 should_commit,
+                task,
             )
             .await?;
             if should_commit {
+                commit_count = commit_count.saturating_add(1);
                 pending_documents = 0;
                 last_commit = std::time::Instant::now();
             }
@@ -260,9 +348,11 @@ async fn execute_claimed_rebuild(
                     Ok(())
                 },
                 should_commit,
+                task,
             )
             .await?;
             if should_commit {
+                commit_count = commit_count.saturating_add(1);
                 pending_documents = 0;
                 last_commit = std::time::Instant::now();
             }
@@ -296,9 +386,11 @@ async fn execute_claimed_rebuild(
                     Ok(())
                 },
                 should_commit,
+                task,
             )
             .await?;
             if should_commit {
+                commit_count = commit_count.saturating_add(1);
                 pending_documents = 0;
                 last_commit = std::time::Instant::now();
             }
@@ -308,9 +400,11 @@ async fn execute_claimed_rebuild(
                 .ok_or_else(|| SearchError::InvalidQuery("Track count overflow".to_string()))?;
         }
         if pending_documents > 0 {
-            store = commit_store_blocking(store).await?;
+            store = commit_store_blocking(store, task).await?;
+            commit_count = commit_count.saturating_add(1);
         }
         snapshot.finish().await?;
+        info!(job_id = %initial_job.job_id, %generation_id, snapshot_seconds = snapshot_started.elapsed().as_secs_f64(), commit_count, artists = counts.artists, releases = counts.releases, tracks = counts.tracks, "search rebuild snapshot indexed");
         let stats = store.stats()?;
         if stats.artists as u64 != counts.artists
             || stats.releases as u64 != counts.releases
@@ -364,6 +458,16 @@ async fn catch_up_and_activate(
     cancel: &AtomicBool,
 ) -> Result<(), SearchError> {
     let path = root.generation_path(generation.generation_id);
+    let task = RebuildTask {
+        config,
+        pool,
+        job_id,
+        worker,
+        cancel,
+    };
+    let catchup_started = std::time::Instant::now();
+    let mut catchup_batches = 0_u64;
+    let mut catchup_rows = 0_u64;
     // Deterministic test interleaving: pause after the snapshot is validated
     // and before catch-up so a test can drive the ordinary outbox consumer
     // against the previous generation. Compiled only for `test-support`.
@@ -402,7 +506,7 @@ async fn catch_up_and_activate(
             }
             let records = SearchProjectionStore::load_catalog_records(pool, &rows).await?;
             let catchup_path = path.clone();
-            let stats = tokio::task::spawn_blocking(move || {
+            let stats = rebuild_blocking(task, move || {
                 let mut store = SearchStore::open(&catchup_path)?;
                 for (item, record) in rows.iter().zip(records) {
                     apply_record(&mut store, item, record)?;
@@ -410,8 +514,7 @@ async fn catch_up_and_activate(
                 store.commit()?;
                 store.stats()
             })
-            .await
-            .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))??;
+            .await?;
             // Apply, then commit, then record the durable replay progress.
             // A crash between commit and record replays an idempotent batch;
             // a crash before commit replays from the last recorded point.
@@ -439,11 +542,15 @@ async fn catch_up_and_activate(
                 OffsetDateTime::now_utc(),
             )
             .await?;
+            catchup_batches = catchup_batches.saturating_add(1);
+            catchup_rows =
+                catchup_rows.saturating_add(u64::try_from(pending.len()).unwrap_or(u64::MAX));
             after = last;
         }
         // Persistence holds the outbox ACCESS EXCLUSIVE fence only inside this
         // bounded metadata transaction. Keep all index/catalog/filesystem work
         // above this call so activation cannot extend catalog-writer blocking.
+        let activation_started = std::time::Instant::now();
         match SearchProjectionStore::activate_generation(
             pool,
             job_id,
@@ -453,6 +560,7 @@ async fn catch_up_and_activate(
         .await
         {
             Ok(_) => {
+                info!(%job_id, generation_id = %generation.generation_id, catchup_seconds = catchup_started.elapsed().as_secs_f64(), catchup_batches, catchup_rows, activation_seconds = activation_started.elapsed().as_secs_f64(), "search rebuild activated");
                 retire_old_generations(pool, root).await;
                 return Ok(());
             }
@@ -570,6 +678,92 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), SearchError> {
         ))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod admission_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[tokio::test]
+    async fn queued_and_running_work_remains_bounded_during_cancellation_and_lease_failure() {
+        let semaphore = REBUILD_BLOCKING
+            .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(REBUILD_BLOCKING_LIMIT)))
+            .clone();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(150))
+            .connect_lazy("postgres://test:test@127.0.0.1:1/test")
+            .expect("lazy pool");
+        let mut config = SearchConfig::default();
+        config.lease_seconds = 1;
+        let cancelled = AtomicBool::new(false);
+        let task = RebuildTask {
+            config: &config,
+            pool: &pool,
+            job_id: Uuid::now_v7(),
+            worker: "test",
+            cancel: &cancelled,
+        };
+
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let started = Arc::new(AtomicBool::new(false));
+        let closure_started = Arc::clone(&started);
+        let (result, ()) = tokio::join!(
+            rebuild_blocking(task, move || {
+                closure_started.store(true, Ordering::SeqCst);
+                Ok(())
+            }),
+            async {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                cancelled.store(true, Ordering::SeqCst);
+            }
+        );
+        assert!(matches!(result, Err(SearchError::Retryable(_))));
+        assert!(!started.load(Ordering::SeqCst));
+        drop(permit);
+
+        cancelled.store(false, Ordering::SeqCst);
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let (result, ()) = tokio::join!(
+            rebuild_blocking(task, move || {
+                started_tx.send(()).unwrap();
+                finish_rx.recv().unwrap();
+                Ok(())
+            }),
+            async {
+                started_rx.await.unwrap();
+                cancelled.store(true, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                assert!(semaphore.clone().try_acquire_owned().is_err());
+                finish_tx.send(()).unwrap();
+            }
+        );
+        assert!(matches!(result, Err(SearchError::Retryable(_))));
+
+        // Simulate a failed heartbeat while a blocking task is running. The
+        // connection is deliberately unavailable; the task must still be
+        // reaped and retain the permit until its closure really exits.
+        cancelled.store(false, Ordering::SeqCst);
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let (result, ()) = tokio::join!(
+            rebuild_blocking(task, move || {
+                started_tx.send(()).unwrap();
+                finish_rx.recv().unwrap();
+                Ok(())
+            }),
+            async {
+                started_rx.await.unwrap();
+                tokio::time::sleep(Duration::from_millis(750)).await;
+                assert!(semaphore.clone().try_acquire_owned().is_err());
+                finish_tx.send(()).unwrap();
+            }
+        );
+        assert!(result.is_err());
+        assert!(semaphore.try_acquire_owned().is_ok());
     }
 }
 
