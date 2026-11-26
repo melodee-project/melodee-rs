@@ -70,17 +70,17 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "email.enabled",
-        consumer: "notifications",
+        consumer: "admin_diagnostics",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.fromEmail",
-        consumer: "notifications",
+        consumer: "melodee-application:notifications",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.fromName",
-        consumer: "notifications",
+        consumer: "melodee-application:notifications",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -100,32 +100,32 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "email.smtpHost",
-        consumer: "notifications",
+        consumer: "admin_diagnostics",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.smtpPassword",
-        consumer: "notifications",
+        consumer: "melodee-application:notifications",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.smtpPort",
-        consumer: "notifications",
+        consumer: "admin_diagnostics",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.smtpUseSsl",
-        consumer: "notifications",
+        consumer: "melodee-application:notifications",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.smtpUseStartTls",
-        consumer: "notifications",
+        consumer: "melodee-application:notifications",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "email.smtpUsername",
-        consumer: "notifications",
+        consumer: "melodee-application:notifications",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -240,7 +240,7 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "jellyfin.token.pepper",
-        consumer: "jellyfin",
+        consumer: "melodee-persistence:runtime_settings",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -420,7 +420,7 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "mpv.path",
-        consumer: "playback",
+        consumer: "melodee-persistence:runtime_settings",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -490,22 +490,22 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "podcast.download.maxConcurrent.global",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.download.maxConcurrent.perUser",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.download.maxEnclosureBytes",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.enabled",
-        consumer: "opensubsonic/podcasts",
+        consumer: "admin_config/entries",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -515,22 +515,22 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "podcast.http.maxFeedBytes",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.http.maxRedirects",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.http.timeoutSeconds",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.quota.maxBytesPerUser",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -545,22 +545,22 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "podcast.refresh.maxItemsPerChannel",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.retention.downloadedEpisodesInDays",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.retention.keepLastNEpisodes",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "podcast.retention.keepUnplayedOnly",
-        consumer: "podcast_worker",
+        consumer: "melodee-application:podcast_worker",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -680,7 +680,7 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "scripting.enabled",
-        consumer: "scripting",
+        consumer: "melodee-application:scripting",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -714,23 +714,28 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
         inert_reason: "",
     },
     SettingInventoryEntry {
+        key: "search.processedOutboxRetentionDays",
+        consumer: "cli:commands/search",
+        inert_reason: "",
+    },
+    SettingInventoryEntry {
         key: "searchEngine.artistSearchDatabaseRefreshInDays",
         consumer: "providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.brave.apiKey",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.brave.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.brave.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -745,12 +750,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.deezer.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.deezer.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -765,12 +770,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.discogs.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.discogs.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -780,17 +785,17 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.discogs.userToken",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.itunes.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.itunes.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -800,12 +805,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.lastFm.Enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.lastFm.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -820,12 +825,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.metalApi.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.metalApi.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -835,12 +840,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.musicbrainz.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.musicbrainz.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -875,7 +880,7 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.spotify.accessToken",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -885,12 +890,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.spotify.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.spotify.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -910,12 +915,12 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "searchEngine.wikidata.baseUrl",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
         key: "searchEngine.wikidata.enabled",
-        consumer: "providers",
+        consumer: "melodee-persistence:providers",
         inert_reason: "",
     },
     SettingInventoryEntry {
@@ -930,7 +935,7 @@ pub const SETTING_INVENTORY: &[SettingInventoryEntry] = &[
     },
     SettingInventoryEntry {
         key: "security.blacklistedEmails",
-        consumer: "native/auth",
+        consumer: "admin_diagnostics",
         inert_reason: "",
     },
     SettingInventoryEntry {

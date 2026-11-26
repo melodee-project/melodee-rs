@@ -1077,12 +1077,12 @@ impl PolicyStore {
         }
         ensure_active_lease(&item, worker, request.now)?;
 
-        let binding: Option<(Uuid, String, bool, serde_json::Value)> = sqlx::query_as(
+        // ADR-0213: the sealed payload is optional. Upgraded rows carry the
+        // compact facts; pre-upgrade rows (and historical schemas) still carry
+        // the inline payload, which is read only as a fallback.
+        let binding: Option<(Uuid, String, Option<serde_json::Value>, i64)> = sqlx::query_as(
             r#"SELECT import.release_id, import.sealed_manifest_hash,
-                      jsonb_path_exists(
-                          manifest.manifest_payload,
-                          '$.files[*] ? (@.bytes_read_errors == true)'
-                      ), manifest.manifest_payload
+                      manifest.manifest_payload, manifest.id
                  FROM catalog_imports import
                  JOIN release_work_item_manifests manifest
                    ON manifest.id = import.manifest_row_id
@@ -1091,8 +1091,10 @@ impl PolicyStore {
         .bind(request.work_item_id)
         .fetch_optional(&mut *tx)
         .await?;
-        let (release_id, fingerprint, has_corrupt_media, manifest_payload) =
+        let (release_id, fingerprint, manifest_payload, manifest_row_id) =
             binding.ok_or(PolicyStoreError::NotCataloged(request.work_item_id))?;
+        let evidence =
+            manifest_evidence_view_tx(&mut tx, manifest_row_id, manifest_payload.as_ref()).await?;
         if release_id != request.release_id.into_uuid()
             || fingerprint != request.source_fingerprint
             || request.decision.source_fingerprint != request.source_fingerprint
@@ -1134,11 +1136,7 @@ impl PolicyStore {
                     .ok_or(PolicyStoreError::CorruptValue(value))
             })
             .collect::<Result<std::collections::BTreeSet<_>, _>>()?;
-        validate_manifest_classification_evidence(
-            &classification,
-            &manifest_payload,
-            &catalog_traits,
-        )?;
+        validate_manifest_classification_evidence(&classification, &evidence, &catalog_traits)?;
         if novelty.evaluator_version != SUPPORTED_NOVELTY_EVALUATOR_VERSION {
             return Err(PolicyStoreError::ForeignFacts);
         }
@@ -1170,7 +1168,7 @@ impl PolicyStore {
                 &classification,
                 &novelty,
                 None,
-                has_corrupt_media,
+                evidence.has_corrupt_media,
             )?;
         }
 
@@ -2063,10 +2061,31 @@ impl PolicyStore {
         pool: &PgPool,
         release_id: melodee_domain::ReleaseId,
     ) -> Result<Vec<CatalogTrackFact>, PolicyStoreError> {
-        let rows: Vec<CatalogTrackFactRow> = sqlx::query_as(
+        // A database upgraded from the historical schema (or a compatibility
+        // test snapshot) may predate the manifest facts table; the payload is
+        // then still inline. Both variants return the same columns.
+        let facts_available: bool = sqlx::query_scalar(
+            "SELECT to_regclass('public.release_work_item_manifest_track_facts') IS NOT NULL",
+        )
+        .fetch_one(pool)
+        .await?;
+        let facts_select = if facts_available {
+            "track_fact.fingerprint_digest AS fingerprint_digest"
+        } else {
+            "NULL::text AS fingerprint_digest"
+        };
+        let facts_join = if facts_available {
+            "LEFT JOIN release_work_item_manifest_track_facts track_fact
+                ON track_fact.manifest_row_id = wm.id
+               AND track_fact.relative_path = t.source_path"
+        } else {
+            ""
+        };
+        let sql = format!(
             r#"SELECT t.release_id, t.id as track_id, t.audio_identity_id,
                    t.playable_media_asset_id as media_asset_id,
                    m.byte_hash, fp.fingerprint AS audio_fingerprint,
+                   {facts_select},
                    (EXISTS (
                        SELECT 1 FROM audio_identity_catalog_assertions assertion
                         WHERE assertion.audio_identity_id = t.audio_identity_id
@@ -2097,17 +2116,23 @@ impl PolicyStore {
                      WHERE value->>'source_file' = t.source_path
                      LIMIT 1
               ) fp ON true
+              -- ADR-0213: when the payload moved to evidence, the digest is
+              -- the durable comparison fact (ADR-0186); the raw fingerprint is
+              -- not query data and is not read here.
+              {facts_join}
              WHERE t.release_id = $1
              ORDER BY t.ordinal
-             LIMIT $2"#,
-        )
-        .bind(release_id.into_uuid())
-        .bind(
-            i64::try_from(MAX_POLICY_TRACKS_PER_RELEASE + 1)
-                .map_err(|_| PolicyStoreError::NumericOverflow)?,
-        )
-        .fetch_all(pool)
-        .await?;
+             LIMIT $2"#
+        );
+        // The interpolated fragments are two fixed literals chosen above.
+        let rows: Vec<CatalogTrackFactRow> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+            .bind(release_id.into_uuid())
+            .bind(
+                i64::try_from(MAX_POLICY_TRACKS_PER_RELEASE + 1)
+                    .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            )
+            .fetch_all(pool)
+            .await?;
 
         if rows.len() > MAX_POLICY_TRACKS_PER_RELEASE {
             return Err(PolicyStoreError::ScopeExceeded {
@@ -2124,10 +2149,11 @@ impl PolicyStore {
                 audio_identity_id: row.audio_identity_id,
                 media_asset_id: row.media_asset_id,
                 byte_hash: row.byte_hash,
-                audio_fingerprint_digest: row
-                    .audio_fingerprint
-                    .as_deref()
-                    .map(melodee_domain::acoustic_fingerprint_digest),
+                audio_fingerprint_digest: row.fingerprint_digest.or_else(|| {
+                    row.audio_fingerprint
+                        .as_deref()
+                        .map(melodee_domain::acoustic_fingerprint_digest)
+                }),
                 audio_fingerprint: row.audio_fingerprint,
                 has_confirmed_audio_identity: row.has_confirmed_audio_identity,
             })
@@ -2141,14 +2167,10 @@ impl PolicyStore {
         pool: &PgPool,
         claim: &PolicyClaim,
     ) -> Result<PolicyCatalogContext, PolicyStoreError> {
-        let persisted: Option<(Uuid, String, String, String, bool, serde_json::Value)> =
+        let persisted: Option<(Uuid, String, String, String, Option<serde_json::Value>, i64)> =
             sqlx::query_as(
                 r#"SELECT ci.release_id, r.title, ci.sealed_manifest_hash,
-                      ci.semantic_manifest_hash,
-                      jsonb_path_exists(
-                          wm.manifest_payload,
-                          '$.files[*] ? (@.bytes_read_errors == true)'
-                      ), wm.manifest_payload
+                      ci.semantic_manifest_hash, wm.manifest_payload, wm.id
                  FROM catalog_imports ci
                  JOIN releases r ON r.id = ci.release_id
                  JOIN release_work_item_manifests wm ON wm.id = ci.manifest_row_id
@@ -2157,8 +2179,14 @@ impl PolicyStore {
             .bind(claim.item.id)
             .fetch_optional(pool)
             .await?;
-        let (release_id, title, sealed, semantic, has_corrupt_media, manifest_payload) =
+        let (release_id, title, sealed, semantic, manifest_payload, manifest_row_id) =
             persisted.ok_or(PolicyStoreError::NotCataloged(claim.item.id))?;
+        let evidence = {
+            let mut conn = pool.acquire().await?;
+            manifest_evidence_view_conn(&mut conn, manifest_row_id, manifest_payload.as_ref())
+                .await?
+        };
+        let has_corrupt_media = evidence.has_corrupt_media;
         if release_id != claim.release_id.into_uuid()
             || sealed != claim.source_fingerprint
             || semantic != claim.semantic_manifest_hash
@@ -2276,8 +2304,8 @@ impl PolicyStore {
         let existing_disposition = current_decision
             .as_ref()
             .map(|decision| decision.disposition);
-        let (structured_tag_traits, embedded_external_id_traits) =
-            extract_manifest_traits(&manifest_payload);
+        let structured_tag_traits = evidence.structured_traits.clone();
+        let embedded_external_id_traits = evidence.embedded_traits.clone();
         Ok(PolicyCatalogContext {
             claim: PolicyClaim {
                 item: claim.item.clone(),
@@ -2423,10 +2451,19 @@ impl PolicyStore {
             r#"SELECT w.*, ci.release_id, r.title,
                       ci.sealed_manifest_hash, ci.semantic_manifest_hash,
                       wm.manifest_payload,
-                      jsonb_path_exists(
-                          wm.manifest_payload,
-                          '$.files[*] ? (@.bytes_read_errors == true)'
+                      COALESCE(
+                          jsonb_path_exists(
+                              wm.manifest_payload,
+                              '$.files[*] ? (@.bytes_read_errors == true)'
+                          ),
+                          facts.has_corrupt_media,
+                          false
                       ) AS has_corrupt_media,
+                      facts.structured_traits AS fact_structured_traits,
+                      facts.embedded_traits AS fact_embedded_traits,
+                      facts.release_title AS fact_release_title,
+                      facts.source_path AS fact_source_path,
+                      facts.has_corrupt_media AS fact_has_corrupt_media,
                       COALESCE((
                           SELECT jsonb_agg(to_jsonb(fact) ORDER BY fact.track_id)
                             FROM (
@@ -2434,12 +2471,18 @@ impl PolicyStore {
                                        t.audio_identity_id,
                                        t.playable_media_asset_id AS media_asset_id,
                                        media.byte_hash,
-                                       (SELECT NULLIF(btrim(fp->>'fingerprint'), '')
-                                          FROM jsonb_array_elements(COALESCE(
-                                               wm.manifest_payload->'normalization'->'fingerprints',
-                                               '[]'::jsonb
-                                          )) fp
-                                         WHERE fp->>'source_file' = t.source_path LIMIT 1
+                                       COALESCE(
+                                         (SELECT NULLIF(btrim(fp->>'fingerprint'), '')
+                                            FROM jsonb_array_elements(COALESCE(
+                                                 wm.manifest_payload->'normalization'->'fingerprints',
+                                                 '[]'::jsonb
+                                            )) fp
+                                           WHERE fp->>'source_file' = t.source_path LIMIT 1),
+                                         (SELECT NULLIF(track_fact.fingerprint_digest, '')
+                                            FROM release_work_item_manifest_track_facts track_fact
+                                           WHERE track_fact.manifest_row_id = wm.id
+                                             AND track_fact.relative_path = t.source_path
+                                           LIMIT 1)
                                        ) AS audio_fingerprint,
                                        (EXISTS (
                                            SELECT 1 FROM audio_identity_catalog_assertions assertion
@@ -2539,6 +2582,8 @@ impl PolicyStore {
                  JOIN release_work_items w ON w.id = ci.work_item_id
                  JOIN releases r ON r.id = ci.release_id
                  JOIN release_work_item_manifests wm ON wm.id = ci.manifest_row_id
+                 LEFT JOIN release_work_item_manifest_facts facts
+                   ON facts.manifest_row_id = wm.id
                  LEFT JOIN policy_decisions decision ON decision.release_id = ci.release_id
                 ORDER BY ci.imported_at, ci.release_id
                 LIMIT $1"#,
@@ -3067,105 +3112,105 @@ fn decision_semantically_matches(
         && stored.actor == requested.actor
 }
 
-fn extract_manifest_traits(
-    manifest: &serde_json::Value,
-) -> (
-    Vec<melodee_domain::ReleaseTrait>,
-    Vec<melodee_domain::ReleaseTrait>,
-) {
-    let mut structured = std::collections::BTreeSet::new();
-    let mut embedded = std::collections::BTreeSet::new();
-    let metadata = manifest
-        .get("files")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|file| file.get("metadata"))
-        .chain(
-            manifest
-                .get("tracks")
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|track| track.get("observed_metadata")),
-        );
-    for raw in metadata.filter_map(|metadata| metadata.get("raw")) {
-        let Some(object) = raw.as_object() else {
-            continue;
-        };
-        for (key, value) in object {
-            let normalized_key: String = key
-                .chars()
-                .filter(|char_| char_.is_ascii_alphanumeric())
-                .flat_map(char::to_lowercase)
-                .collect();
-            if normalized_key == "flagcompilation"
-                && (value == &serde_json::Value::Bool(true)
-                    || value.as_str().is_some_and(|value| {
-                        matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true")
-                    }))
-            {
-                structured.insert(melodee_domain::ReleaseTrait::Compilation);
-            } else if normalized_key == "musicbrainzreleasetype" {
-                for token in manifest_trait_tokens(value) {
-                    embedded.insert(token);
-                }
-            }
-        }
-    }
-    (
-        structured.into_iter().collect(),
-        embedded.into_iter().collect(),
-    )
+/// Evidence needed to validate a classification, from either the inline
+/// payload (pre-upgrade) or the compact facts (post-upgrade).
+#[derive(Debug, Clone)]
+struct ManifestEvidenceView {
+    structured_traits: Vec<melodee_domain::ReleaseTrait>,
+    embedded_traits: Vec<melodee_domain::ReleaseTrait>,
+    release_title: Option<String>,
+    source_path: Option<String>,
+    has_corrupt_media: bool,
 }
 
-fn manifest_trait_tokens(value: &serde_json::Value) -> Vec<melodee_domain::ReleaseTrait> {
-    let values: Vec<&str> = match value {
-        serde_json::Value::String(value) => vec![value],
-        serde_json::Value::Array(values) => values
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .collect(),
-        _ => Vec::new(),
-    };
+impl ManifestEvidenceView {
+    fn from_payload(payload: &serde_json::Value) -> Self {
+        let (structured_traits, embedded_traits) =
+            crate::manifest_evidence::extract_traits(payload);
+        let facts = crate::manifest_evidence::extract_facts(payload);
+        Self {
+            structured_traits,
+            embedded_traits,
+            release_title: facts.release_title,
+            source_path: facts.source_path,
+            has_corrupt_media: facts.has_corrupt_media,
+        }
+    }
+}
+
+fn parse_fact_traits(
+    values: &[String],
+) -> Result<Vec<melodee_domain::ReleaseTrait>, PolicyStoreError> {
     values
-        .into_iter()
-        .flat_map(|value| value.split([',', ';', '/']))
-        .filter_map(|token| {
-            let mut normalized = String::new();
-            for char_ in token.trim().chars() {
-                if char_.is_ascii_alphanumeric() {
-                    normalized.extend(char_.to_lowercase());
-                } else if !normalized.ends_with('_') {
-                    normalized.push('_');
-                }
-            }
-            let normalized = normalized.trim_matches('_');
-            melodee_domain::ReleaseTrait::parse(normalized)
+        .iter()
+        .map(|value| {
+            melodee_domain::ReleaseTrait::parse(value)
+                .ok_or_else(|| PolicyStoreError::CorruptValue(value.clone()))
         })
         .collect()
 }
 
+async fn manifest_evidence_view_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    manifest_row_id: i64,
+    payload: Option<&serde_json::Value>,
+) -> Result<ManifestEvidenceView, PolicyStoreError> {
+    manifest_evidence_view_conn(&mut *tx, manifest_row_id, payload).await
+}
+
+async fn manifest_evidence_view_conn(
+    conn: &mut sqlx::PgConnection,
+    manifest_row_id: i64,
+    payload: Option<&serde_json::Value>,
+) -> Result<ManifestEvidenceView, PolicyStoreError> {
+    if let Some(payload) = payload {
+        return Ok(ManifestEvidenceView::from_payload(payload));
+    }
+    #[allow(clippy::type_complexity)]
+    let row: Option<(
+        bool,
+        Vec<String>,
+        Vec<String>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT has_corrupt_media, structured_traits, embedded_traits,
+                    release_title, source_path
+               FROM release_work_item_manifest_facts WHERE manifest_row_id = $1",
+    )
+    .bind(manifest_row_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((has_corrupt_media, structured, embedded, release_title, source_path)) = row else {
+        return Err(PolicyStoreError::IncompleteFacts);
+    };
+    Ok(ManifestEvidenceView {
+        structured_traits: parse_fact_traits(&structured)?,
+        embedded_traits: parse_fact_traits(&embedded)?,
+        release_title,
+        source_path,
+        has_corrupt_media,
+    })
+}
+
 fn validate_manifest_classification_evidence(
     classification: &ReleaseClassification,
-    manifest: &serde_json::Value,
+    evidence: &ManifestEvidenceView,
     catalog_traits: &std::collections::BTreeSet<melodee_domain::ReleaseTrait>,
 ) -> Result<(), PolicyStoreError> {
     if classification.classifier_version != SUPPORTED_CLASSIFIER_VERSION {
         return Err(PolicyStoreError::ForeignFacts);
     }
-    let (structured, embedded) = extract_manifest_traits(manifest);
-    let structured: std::collections::BTreeSet<_> = structured.into_iter().collect();
-    let embedded: std::collections::BTreeSet<_> = embedded.into_iter().collect();
-    let title_traits = manifest
-        .get("release_observation")
-        .and_then(|observation| observation.get("title"))
-        .and_then(serde_json::Value::as_str)
+    let structured: std::collections::BTreeSet<_> =
+        evidence.structured_traits.iter().copied().collect();
+    let embedded: std::collections::BTreeSet<_> =
+        evidence.embedded_traits.iter().copied().collect();
+    let title_traits = evidence
+        .release_title
+        .as_deref()
         .map(classification_title_traits)
         .unwrap_or_default();
-    let source_path = manifest
-        .get("source_path")
-        .and_then(serde_json::Value::as_str);
+    let source_path = evidence.source_path.as_deref();
     let directory_traits = source_path
         .and_then(|path| std::path::Path::new(path).file_name())
         .and_then(|name| name.to_str())
@@ -3629,6 +3674,7 @@ struct CatalogTrackFactRow {
     media_asset_id: Option<Uuid>,
     byte_hash: Option<String>,
     audio_fingerprint: Option<String>,
+    fingerprint_digest: Option<String>,
     has_confirmed_audio_identity: bool,
 }
 
@@ -3653,8 +3699,13 @@ struct DryRunContextRow {
     title: String,
     sealed_manifest_hash: String,
     semantic_manifest_hash: String,
-    manifest_payload: serde_json::Value,
+    manifest_payload: Option<serde_json::Value>,
     has_corrupt_media: bool,
+    fact_structured_traits: Option<Vec<String>>,
+    fact_embedded_traits: Option<Vec<String>>,
+    fact_release_title: Option<String>,
+    fact_source_path: Option<String>,
+    fact_has_corrupt_media: Option<bool>,
     tracks: serde_json::Value,
     catalog_traits: Vec<String>,
     existing_disposition: Option<String>,
@@ -3690,8 +3741,26 @@ impl TryFrom<DryRunContextRow> for PolicyCatalogContext {
             .existing_disposition
             .map(|value| Disposition::parse(&value).ok_or(PolicyStoreError::CorruptValue(value)))
             .transpose()?;
-        let (structured_tag_traits, embedded_external_id_traits) =
-            extract_manifest_traits(&row.manifest_payload);
+        let evidence = match row.manifest_payload.as_ref() {
+            Some(payload) => ManifestEvidenceView::from_payload(payload),
+            None => ManifestEvidenceView {
+                structured_traits: parse_fact_traits(
+                    row.fact_structured_traits
+                        .as_deref()
+                        .ok_or(PolicyStoreError::IncompleteFacts)?,
+                )?,
+                embedded_traits: parse_fact_traits(
+                    row.fact_embedded_traits
+                        .as_deref()
+                        .ok_or(PolicyStoreError::IncompleteFacts)?,
+                )?,
+                release_title: row.fact_release_title.clone(),
+                source_path: row.fact_source_path.clone(),
+                has_corrupt_media: row.fact_has_corrupt_media.unwrap_or(row.has_corrupt_media),
+            },
+        };
+        let structured_tag_traits = evidence.structured_traits.clone();
+        let embedded_external_id_traits = evidence.embedded_traits.clone();
         Ok(Self {
             claim: PolicyClaim {
                 item,

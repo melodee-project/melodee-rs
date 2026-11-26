@@ -7,6 +7,31 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+Import no longer pays for external providers that cannot answer, and the manifest and search-outbox
+history no longer grow without bound. An external provider is now eligible only when it is enabled
+and its credentials are present; catalog import schedules work only for eligible providers as two
+set-based statements, so one new Artist and one new Release with three of nine providers eligible
+create 12 tasks instead of 36. Enabling a provider later backfills the existing catalog in durable
+pages of 250, and disabling suspends unfinished work as `dormant` without losing attempt history.
+Provider eligibility, runnable/dormant counts and backfill progress are at
+`GET /api/admin/v1/processing/enrichment`.
+[ADR-0212](design/adr/ADR-0212-revisioned-provider-eligibility-and-bounded-enrichment-scheduling.md)
+
+Full Release manifests now live as immutable, verified objects under
+`MELODEE__STORAGE__ASSET_ROOT`, including provider provenance documents, lyrics, parsed sidecars and
+complete acoustic fingerprints; PostgreSQL keeps one verified reference and compact query facts.
+Objects above 10 MiB are stored as fixed 4 MiB parts behind a versioned descriptor. Upgrade with
+`melodee-cli migrate --preflight`, then `melodee-cli migrate` (or `--status`/`--verify`), and back up
+the asset directory with the database. Inline manifest bytes are removed only after an independent
+verification pass. [ADR-0213](design/adr/ADR-0213-store-full-manifest-evidence-on-persistent-file-storage.md)
+
+Successful search-outbox detail is retained for 7 days by default
+(`MELODEE__SEARCH__PROCESSED_OUTBOX_RETENTION_DAYS`, range 2–90, Admin-editable) while exact
+per-hour indexed-Track totals are kept for 400 days. `melodee-cli search prune-outbox` previews
+eligible/protected/failed rows; `--apply` uses the same bounded, rebuild-fenced logic as the hourly
+maintenance pass. [ADR-0214](design/adr/ADR-0214-bound-processed-search-outbox-history-with-hourly-aggregates.md)
+See [Search maintenance and outbox retention](docs/src/content/docs/admin/search-maintenance.md).
+
 Artists, Releases and Tracks can now be hard-deleted by an administrator or editor at any
 lifecycle state. Delete on the Artist, Release or Track detail screen — or the catalog and
 Processing Queue bulk actions — opens one confirmation dialog and then removes the catalog rows,

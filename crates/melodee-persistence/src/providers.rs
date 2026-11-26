@@ -374,9 +374,186 @@ impl LastfmLinkStore {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Effective provider eligibility (ADR-0212)
+// ---------------------------------------------------------------------------
+
+/// One external provider's settings contract. The enabled flag and the
+/// credential inventory live here, next to the provider vocabulary, so the
+/// capability endpoint, the catalog importer, the backfill worker and the
+/// enrichment worker share one definition of "eligible" instead of each
+/// re-deriving it from settings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProviderDescriptor {
+    pub provider: &'static str,
+    pub display_name: &'static str,
+    pub wire_id: &'static str,
+    pub enabled_key: &'static str,
+    pub base_url_key: &'static str,
+    pub path: &'static str,
+    pub credential_keys: &'static [&'static str],
+}
+
+pub const MELODEE_PROVIDER_WIRE_ID: &str = "018A798D-7B68-4F3E-80CD-1BAF03998C0B";
+
+/// The enumerated external-provider registry, ordered by provider name.
+/// MusicBrainz is eligible without credentials (the documented local option).
+#[rustfmt::skip]
+#[must_use]
+pub fn provider_descriptors() -> Vec<ProviderDescriptor> {
+    vec![
+        ProviderDescriptor {
+            provider: "musicbrainz",
+            display_name: "Music Brainz Database",
+            wire_id: MELODEE_PROVIDER_WIRE_ID,
+            enabled_key: "searchEngine.musicbrainz.enabled",
+            base_url_key: "searchEngine.musicbrainz.baseUrl",
+            path: "artist",
+            credential_keys: &[],
+        },
+        ProviderDescriptor {
+            provider: "discogs",
+            display_name: "Discogs Search Engine",
+            wire_id: "5A8D2E5B-3C9D-4E7F-9B7A-A1B2C3D4E5F6",
+            enabled_key: "searchEngine.discogs.enabled",
+            base_url_key: "searchEngine.discogs.baseUrl",
+            path: "database/search",
+            credential_keys: &["searchEngine.discogs.userToken"],
+        },
+        ProviderDescriptor {
+            provider: "spotify",
+            display_name: "Spotify Service",
+            wire_id: "BBAC49B7-0EDF-4D31-8A54-C9126509C2CE",
+            enabled_key: "searchEngine.spotify.enabled",
+            base_url_key: "searchEngine.spotify.baseUrl",
+            path: "search",
+            credential_keys: &["searchEngine.spotify.accessToken"],
+        },
+        ProviderDescriptor {
+            provider: "itunes",
+            display_name: "ITunes Search Engine",
+            wire_id: "36E4DB7A-18BB-4A7D-86F7-A3C653A21611",
+            enabled_key: "searchEngine.itunes.enabled",
+            base_url_key: "searchEngine.itunes.baseUrl",
+            path: "search",
+            credential_keys: &[],
+        },
+        ProviderDescriptor {
+            provider: "deezer",
+            display_name: "Deezer Search Engine",
+            wire_id: "A1528971-44B3-42A7-B658-DB96ABCEF10D",
+            enabled_key: "searchEngine.deezer.enabled",
+            base_url_key: "searchEngine.deezer.baseUrl",
+            path: "search/artist",
+            credential_keys: &[],
+        },
+        ProviderDescriptor {
+            provider: "wikidata",
+            display_name: "WikiData Search Engine",
+            wire_id: "7B9C8E1F-2A3D-4E5B-8C7D-9E0F1A2B3C4D",
+            enabled_key: "searchEngine.wikidata.enabled",
+            base_url_key: "searchEngine.wikidata.baseUrl",
+            path: "",
+            credential_keys: &[],
+        },
+        ProviderDescriptor {
+            provider: "brave",
+            display_name: "Brave Search",
+            wire_id: "F8B2C3D1-4E5A-6B7C-8D9E-0F1A2B3C4D5E",
+            enabled_key: "searchEngine.brave.enabled",
+            base_url_key: "searchEngine.brave.baseUrl",
+            path: "res/v1/images/search",
+            credential_keys: &["searchEngine.brave.apiKey"],
+        },
+        ProviderDescriptor {
+            provider: "metalapi",
+            display_name: "Metal-API",
+            wire_id: "2B7F8D4E-5C9A-4E1B-8F3D-A7C2E6B9D4F1",
+            enabled_key: "searchEngine.metalApi.enabled",
+            base_url_key: "searchEngine.metalApi.baseUrl",
+            path: "artists",
+            credential_keys: &[],
+        },
+        ProviderDescriptor {
+            provider: "lastfm",
+            display_name: "Last FM Search Engine",
+            wire_id: "3E43D998-2E9C-45B0-8128-EE6F0A41419E",
+            enabled_key: "searchEngine.lastFm.Enabled",
+            base_url_key: "searchEngine.lastFm.baseUrl",
+            path: "",
+            credential_keys: &["scrobbling.lastFm.apiKey"],
+        },
+    ]
+}
+
+/// The effective eligibility of one provider as derived from settings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResolvedProviderEligibility {
+    pub provider: &'static str,
+    pub metadata_eligible: bool,
+    pub artwork_eligible: bool,
+}
+
+/// Resolves effective eligibility for every external provider.
+///
+/// A provider is eligible when its enabled flag resolves true through the
+/// ordinary settings precedence and every required credential resolves to a
+/// non-blank value. A blank or whitespace-only secret is "not configured";
+/// the local MusicBrainz option requires no credential. Provider credentials
+/// are never returned to callers or stored in the eligibility record.
+pub async fn resolve_provider_eligibility(
+    resolver: &crate::settings::SettingsResolver<'_>,
+) -> Result<Vec<ResolvedProviderEligibility>, crate::settings::SettingsError> {
+    let mut resolved = Vec::with_capacity(KNOWN_PROVIDERS.len());
+    for descriptor in provider_descriptors() {
+        let enabled = resolver
+            .resolve(descriptor.enabled_key)
+            .await?
+            .value
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        let mut configured = enabled;
+        for key in descriptor.credential_keys {
+            let blank = resolver
+                .resolve(key)
+                .await?
+                .value
+                .is_none_or(|value| value.as_str().is_none_or(|text| text.trim().is_empty()));
+            if blank {
+                configured = false;
+            }
+        }
+        resolved.push(ResolvedProviderEligibility {
+            provider: descriptor.provider,
+            metadata_eligible: configured,
+            artwork_eligible: configured,
+        });
+    }
+    Ok(resolved)
+}
+
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
+
+    #[test]
+    fn provider_descriptors_cover_the_vocabulary_once() {
+        let descriptors = provider_descriptors();
+        assert_eq!(descriptors.len(), KNOWN_PROVIDERS.len());
+        let mut names: Vec<_> = descriptors.iter().map(|d| d.provider).collect();
+        names.sort_unstable();
+        assert_eq!(names, KNOWN_PROVIDERS.to_vec());
+        for descriptor in &descriptors {
+            assert!(is_known_provider(descriptor.provider));
+            assert!(!descriptor.enabled_key.is_empty());
+        }
+        let musicbrainz = descriptors
+            .iter()
+            .find(|d| d.provider == "musicbrainz")
+            .expect("musicbrainz descriptor");
+        assert!(musicbrainz.credential_keys.is_empty());
+    }
 
     #[test]
     fn provider_inventory_matches_the_migration_check() {

@@ -1149,6 +1149,16 @@ export interface SearchProjection {
   activeGenerationId: string | null;
   latestRebuildStatus: string | null;
   latestRebuildError: string | null;
+  /** ADR-0214 retention state for successful outbox detail. */
+  retentionDays: number;
+  retentionEligible: number;
+  retentionProtected: number;
+  retentionOldestCompletion: string | null;
+  lastFinalizedHour: string | null;
+  earliestTrustworthyHour: string | null;
+  lastPruneAt: string | null;
+  lastPruneResult: Record<string, unknown> | null;
+  blockingRebuild: string | null;
 }
 
 export interface SearchGeneration {
@@ -1772,4 +1782,64 @@ export interface ProcessingStageHealth {
   lastCompletion: string | null;
   completedHour: number;
   stalled: boolean;
+}
+
+// ---- Provider enrichment (apps/melodee-server/src/admin_system.rs) ----
+
+export interface ProviderQueueStats {
+  provider: string;
+  eligible: boolean;
+  revision: number | null;
+  runnable: number;
+  running: number;
+  dormant: number;
+  retry: number;
+  failed: number;
+  succeeded: number;
+  oldestRunnableAt: string | null;
+}
+
+export interface ProviderBackfill {
+  provider: string;
+  providerRevision: number;
+  entityType: string;
+  status: string;
+  entitiesScanned: number;
+  tasksEnqueued: number;
+  lastEntityId: string | null;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface ManifestEvidenceStatus {
+  storeId: string | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+  manifestsTotal: number;
+  manifestsMigrated: number;
+  bytesMigrated: number;
+  verificationErrors: number;
+  lastManifestRowId: number;
+  pending: number;
+  inlineRemaining: number;
+  evidenceRows: number;
+  evidenceBytes: number;
+  filesystemBytes: number;
+}
+
+/** GET /api/admin/v1/processing/enrichment. Enrichment lag is reported here
+ * separately from time to playable. */
+export interface EnrichmentStatus {
+  eligibilityRevision: number;
+  eligibilityRefreshedAt: string | null;
+  eligibilityError: string | null;
+  eligibilityErrorAt: string | null;
+  eligibilityResolved: boolean;
+  oldestRunnableAt: string | null;
+  providers: ProviderQueueStats[];
+  backfills: ProviderBackfill[];
+  manifestEvidence: ManifestEvidenceStatus;
+  supersededEvidenceBytes: number;
+  unreferencedStoreBytes: number;
 }

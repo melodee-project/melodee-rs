@@ -5,10 +5,11 @@ use std::{fmt, time::Duration};
 
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use melodee_persistence::{
-    ClaimedEnrichmentTask, DEFAULT_ENRICHMENT_LEASE_SECONDS, EnrichmentEntityType,
-    EnrichmentOutcome, ProviderArtworkStore, ProviderCacheStore, ProviderEnrichmentStore,
-    ProviderEnrichmentStoreError, ProviderIdentityCandidateObservation,
-    ProviderIdentityCandidateStore,
+    ClaimedEnrichmentTask, DEFAULT_ENRICHMENT_LEASE_SECONDS, EligibilityRefreshOutcome,
+    EnrichmentEntityType, EnrichmentOutcome, ProviderArtworkStore, ProviderCacheStore,
+    ProviderEligibilityStore, ProviderEnrichmentStore, ProviderEnrichmentStoreError,
+    ProviderIdentityCandidateObservation, ProviderIdentityCandidateStore,
+    ResolvedProviderEligibilityOwned, SettingsResolver, resolve_provider_eligibility,
 };
 use sqlx::PgPool;
 use time::OffsetDateTime;
@@ -25,6 +26,14 @@ pub const ENV_ENRICHMENT_WORKER_LEASE_SECONDS: &str = "MELODEE__ENRICHMENT__WORK
 
 const DEFAULT_POLL_SECONDS: u64 = 15;
 const DEFAULT_BATCH_SIZE: i64 = 8;
+/// Upper bound on immediately refilled batches in one tick. A full batch is
+/// drained again promptly, but one poll cannot run unbounded work.
+const MAX_BATCH_DRAINS: u32 = 8;
+/// At most this many backfill keyset pages advance per tick, so backfill
+/// cannot starve ordinary enrichment.
+const MAX_BACKFILL_PAGES_PER_TICK: u32 = 4;
+/// Reconciliation cadence for effective provider eligibility.
+pub const ELIGIBILITY_REFRESH_SECONDS: i64 = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EnrichmentWorkerConfig {
@@ -92,6 +101,12 @@ pub struct EnrichmentWorkerStats {
     pub disabled: u64,
     pub retried: u64,
     pub failed: u64,
+    /// Claims released because disablement was observed before any I/O.
+    pub released: u64,
+    /// Backfill keyset pages advanced in this pass.
+    pub backfill_pages: u64,
+    /// Newly enqueued jobs from backfill pages.
+    pub backfill_tasks: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -104,8 +119,69 @@ pub enum EnrichmentWorkerError {
     Runtime(#[from] ProviderError),
 }
 
-/// Runs one bounded claim/process pass. A provider error is recorded against
-/// its task and does not fail the catalog or abort other claimed tasks.
+/// Reconciles the installation's effective provider eligibility at most once
+/// per minute. A resolver error records a diagnostic and deliberately retains
+/// the last known state, so a transient settings-read failure cannot silently
+/// stop enrichment.
+pub async fn reconcile_provider_eligibility(
+    pool: &PgPool,
+    now: OffsetDateTime,
+) -> Result<EligibilityRefreshOutcome, ProviderError> {
+    let state = ProviderEligibilityStore::state(pool)
+        .await
+        .map_err(eligibility_error)?;
+    if state.refreshed_at.is_some_and(|refreshed| {
+        refreshed > now - time::Duration::seconds(ELIGIBILITY_REFRESH_SECONDS)
+    }) {
+        return Ok(EligibilityRefreshOutcome {
+            revision: state.revision,
+            ..EligibilityRefreshOutcome::default()
+        });
+    }
+    let resolver = SettingsResolver::from_env(pool).map_err(settings_error)?;
+    let resolved = match resolve_provider_eligibility(&resolver).await {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            let message = error.to_string();
+            ProviderEligibilityStore::record_resolver_failure(pool, &message, now)
+                .await
+                .map_err(eligibility_error)?;
+            return Err(ProviderError {
+                category: "configuration",
+                message: format!(
+                    "provider eligibility resolver failed; retaining last known state: {message}"
+                ),
+            });
+        }
+    };
+    let owned = resolved
+        .into_iter()
+        .map(ResolvedProviderEligibilityOwned::from)
+        .collect::<Vec<_>>();
+    let outcome = ProviderEligibilityStore::refresh(pool, &owned, now)
+        .await
+        .map_err(eligibility_error)?;
+    if !outcome.changed_providers.is_empty() {
+        info!(
+            revision = outcome.revision,
+            providers = ?outcome.changed_providers,
+            dormant_revived = outcome.dormant_revived,
+            dormant_suspended = outcome.dormant_suspended,
+            never_attempted_removed = outcome.never_attempted_removed,
+            backfills_created = outcome.backfills_created,
+            "provider eligibility changed"
+        );
+    }
+    Ok(outcome)
+}
+
+/// Runs one bounded claim/process pass.
+///
+/// ADR-0212: eligibility is reconciled (throttled) before claiming, the
+/// capability snapshot is resolved once per batch, a full batch is refilled
+/// promptly, and at most a bounded number of backfill pages advance. A
+/// provider error is recorded against its task and does not fail the catalog
+/// or abort other claimed tasks.
 pub async fn run_enrichment_once(
     pool: &PgPool,
     config: &EnrichmentWorkerConfig,
@@ -115,43 +191,90 @@ pub async fn run_enrichment_once(
     if let Err(error) = ProviderCacheStore::new().purge_expired(pool, now).await {
         warn!(%error, "expired external-provider cache cleanup failed; enrichment will continue");
     }
+    if let Err(error) = reconcile_provider_eligibility(pool, now).await {
+        warn!(%error, "provider eligibility reconciliation failed; retaining last known state");
+    }
     let store = ProviderEnrichmentStore;
-    let tasks = store
-        .claim(pool, worker, config.batch_size, config.lease_seconds, now)
-        .await?;
     let runtime = ProviderRuntime::new(pool.clone())?;
     let artwork = ProviderArtworkStore;
-    let mut stats = EnrichmentWorkerStats {
-        claimed: tasks.len() as u64,
-        ..EnrichmentWorkerStats::default()
-    };
-    let mut pending = FuturesUnordered::new();
-    for task in tasks {
-        let task_pool = pool.clone();
-        let task_runtime = runtime.clone();
-        let task_store = store;
-        let task_artwork = artwork;
-        let task_worker = worker.to_owned();
-        pending.push(async move {
-            let result = process_task(
-                task_pool,
-                task_runtime,
-                task_store,
-                task_artwork,
-                task_worker,
-                task.clone(),
+    let mut stats = EnrichmentWorkerStats::default();
+
+    // One capability snapshot per batch: the eligibility of nine providers is
+    // resolved once, not once per task.
+    let capabilities = runtime.capabilities().await?;
+    let eligible = capabilities
+        .into_iter()
+        .map(|capability| (capability.provider, capability.enabled))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    for _ in 0..MAX_BATCH_DRAINS {
+        let tasks = store
+            .claim(
+                pool,
+                worker,
+                config.batch_size,
+                config.lease_seconds,
+                OffsetDateTime::now_utc(),
             )
-            .await;
-            (task, result)
-        });
-        if pending.len() >= 8
-            && let Some((task, result)) = pending.next().await
-        {
+            .await?;
+        if tasks.is_empty() {
+            break;
+        }
+        let full_batch = i64::try_from(tasks.len()).unwrap_or(0) >= config.batch_size;
+        stats.claimed += tasks.len() as u64;
+        let mut pending = FuturesUnordered::new();
+        for task in tasks {
+            let task_pool = pool.clone();
+            let task_runtime = runtime.clone();
+            let task_store = store;
+            let task_artwork = artwork;
+            let task_worker = worker.to_owned();
+            let task_eligible = eligible.get(&task.provider).copied().unwrap_or(false);
+            pending.push(async move {
+                let result = process_task(
+                    task_pool,
+                    task_runtime,
+                    task_store,
+                    task_artwork,
+                    task_worker,
+                    task.clone(),
+                    task_eligible,
+                )
+                .await;
+                (task, result)
+            });
+            if pending.len() >= 8
+                && let Some((task, result)) = pending.next().await
+            {
+                record_task_result(pool, &store, worker, task, result, &mut stats).await;
+            }
+        }
+        while let Some((task, result)) = pending.next().await {
             record_task_result(pool, &store, worker, task, result, &mut stats).await;
         }
+        if !full_batch {
+            break;
+        }
     }
-    while let Some((task, result)) = pending.next().await {
-        record_task_result(pool, &store, worker, task, result, &mut stats).await;
+
+    for _ in 0..MAX_BACKFILL_PAGES_PER_TICK {
+        match ProviderEligibilityStore::advance_backfill(
+            pool,
+            OffsetDateTime::now_utc(),
+            melodee_persistence::BACKFILL_PAGE_SIZE,
+        )
+        .await
+        {
+            Ok(Some(page)) => {
+                stats.backfill_pages += 1;
+                stats.backfill_tasks += page.tasks_enqueued;
+            }
+            Ok(None) => break,
+            Err(error) => {
+                warn!(%error, "provider eligibility backfill page failed");
+                break;
+            }
+        }
     }
     Ok(stats)
 }
@@ -161,11 +284,12 @@ async fn record_task_result(
     store: &ProviderEnrichmentStore,
     worker: &str,
     task: ClaimedEnrichmentTask,
-    result: Result<EnrichmentOutcome, ProviderError>,
+    result: Result<Option<EnrichmentOutcome>, ProviderError>,
     stats: &mut EnrichmentWorkerStats,
 ) {
     match result {
-        Ok(outcome) => match outcome {
+        Ok(None) => stats.released += 1,
+        Ok(Some(outcome)) => match outcome {
             EnrichmentOutcome::CacheHit => stats.cache_hits += 1,
             EnrichmentOutcome::Disabled => stats.disabled += 1,
             _ => stats.succeeded += 1,
@@ -213,6 +337,7 @@ async fn record_task_result(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_task(
     pool: PgPool,
     runtime: ProviderRuntime,
@@ -220,25 +345,16 @@ async fn process_task(
     artwork: ProviderArtworkStore,
     worker: String,
     task: ClaimedEnrichmentTask,
-) -> Result<EnrichmentOutcome, ProviderError> {
-    let capability = runtime
-        .capabilities()
-        .await?
-        .into_iter()
-        .find(|capability| capability.provider == task.provider);
-    if capability.is_none_or(|capability| !capability.enabled) {
+    eligible: bool,
+) -> Result<Option<EnrichmentOutcome>, ProviderError> {
+    if !eligible {
+        // Disablement observed before any provider I/O: release the claim
+        // instead of recording a fabricated `disabled` attempt.
         store
-            .complete(
-                &pool,
-                &task,
-                &worker,
-                EnrichmentOutcome::Disabled,
-                Some(&task.request_key),
-                OffsetDateTime::now_utc(),
-            )
+            .release_claim(&pool, &task, &worker, OffsetDateTime::now_utc())
             .await
             .map_err(store_error)?;
-        return Ok(EnrichmentOutcome::Disabled);
+        return Ok(None);
     }
     if task.purpose.ends_with("artwork")
         && has_administrator_override(&pool, &task)
@@ -256,7 +372,7 @@ async fn process_task(
             )
             .await
             .map_err(store_error)?;
-        return Ok(EnrichmentOutcome::Success);
+        return Ok(Some(EnrichmentOutcome::Success));
     }
     let query = entity_name(&pool, &task).await.map_err(database_error)?;
     let Some(query) = query else {
@@ -271,7 +387,7 @@ async fn process_task(
             )
             .await
             .map_err(store_error)?;
-        return Ok(EnrichmentOutcome::Success);
+        return Ok(Some(EnrichmentOutcome::Success));
     };
     let (image_url, cache_hit, cache_key) = match task.entity_type.as_str() {
         "artist" => {
@@ -384,7 +500,7 @@ async fn process_task(
         )
         .await
         .map_err(store_error)?;
-    Ok(outcome)
+    Ok(Some(outcome))
 }
 
 async fn entity_name(
@@ -485,6 +601,20 @@ fn backoff_seconds(attempt: i32, category: &str) -> i64 {
             2_i64.saturating_pow(u32::try_from(attempt.saturating_sub(1)).unwrap_or(0).min(8)),
         )
         .min(3_600)
+}
+
+fn eligibility_error(error: melodee_persistence::ProviderEligibilityError) -> ProviderError {
+    ProviderError {
+        category: "persistence",
+        message: error.to_string(),
+    }
+}
+
+fn settings_error(error: melodee_persistence::SettingsError) -> ProviderError {
+    ProviderError {
+        category: "configuration",
+        message: error.to_string(),
+    }
 }
 
 fn store_error(error: ProviderEnrichmentStoreError) -> ProviderError {

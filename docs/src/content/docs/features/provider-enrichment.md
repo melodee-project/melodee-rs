@@ -49,7 +49,11 @@ Common examples:
 
 The runtime capability endpoint reports whether a provider is enabled and configured. Blank secret
 values do not count as configured. Secrets are not written to the provider cache, enrichment task
-rows, attempt history, or logs.
+rows, attempt history, eligibility records, or logs.
+
+Only eligible providers receive background work. Turning a provider on later automatically covers
+the existing catalog through a durable, resumable backfill instead of requiring a re-import;
+turning one off suspends its unfinished work as `dormant` without losing attempt history.
 
 ## Artwork precedence
 

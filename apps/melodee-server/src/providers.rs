@@ -16,7 +16,7 @@ use std::{
 use decentdb::{Db, DbConfig, Value};
 use image::{ImageFormat, ImageReader};
 use melodee_persistence::{
-    KNOWN_PROVIDERS, ProviderCacheEntry, ProviderCacheStore, SettingsResolver,
+    KNOWN_PROVIDERS, ProviderCacheEntry, ProviderCacheStore, ProviderDescriptor, SettingsResolver,
 };
 use reqwest::{Client, StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
@@ -181,23 +181,23 @@ impl ProviderRuntime {
             enabled: true,
             configured: true,
         });
+        // ADR-0212: the capability endpoint publishes the same effective
+        // eligibility the importer, backfill and worker use. Credentials are
+        // never reflected in the response; only the derived booleans are.
+        let resolved = melodee_persistence::resolve_provider_eligibility(&resolver)
+            .await
+            .map_err(settings_error)?;
         for descriptor in descriptors() {
-            let enabled = setting_bool(&resolver, descriptor.enabled_key, false).await?;
-            let mut configured = enabled;
-            for key in descriptor.credential_keys {
-                if setting_text(&resolver, key)
-                    .await?
-                    .is_none_or(|value| value.trim().is_empty())
-                {
-                    configured = false;
-                }
-            }
+            let eligibility = resolved
+                .iter()
+                .find(|entry| entry.provider == descriptor.provider);
+            let eligible = eligibility.is_some_and(|entry| entry.metadata_eligible);
             capabilities.push(ProviderCapability {
                 provider: descriptor.provider.to_owned(),
                 display_name: descriptor.display_name,
                 wire_id: descriptor.wire_id,
-                enabled: enabled && configured,
-                configured,
+                enabled: eligible,
+                configured: eligible,
             });
         }
         Ok(capabilities)
@@ -880,101 +880,8 @@ impl ProviderRuntime {
     }
 }
 
-#[derive(Clone, Copy)]
-struct ProviderDescriptor {
-    provider: &'static str,
-    display_name: &'static str,
-    wire_id: &'static str,
-    enabled_key: &'static str,
-    base_url_key: &'static str,
-    path: &'static str,
-    credential_keys: &'static [&'static str],
-}
-
 fn descriptors() -> Vec<ProviderDescriptor> {
-    vec![
-        ProviderDescriptor {
-            provider: "musicbrainz",
-            display_name: "Music Brainz Database",
-            wire_id: MELODEE_PROVIDER_ID,
-            enabled_key: "searchEngine.musicbrainz.enabled",
-            base_url_key: "searchEngine.musicbrainz.baseUrl",
-            path: "artist",
-            credential_keys: &[],
-        },
-        ProviderDescriptor {
-            provider: "discogs",
-            display_name: "Discogs Search Engine",
-            wire_id: DISCOGS_PROVIDER_ID,
-            enabled_key: "searchEngine.discogs.enabled",
-            base_url_key: "searchEngine.discogs.baseUrl",
-            path: "database/search",
-            credential_keys: &["searchEngine.discogs.userToken"],
-        },
-        ProviderDescriptor {
-            provider: "spotify",
-            display_name: "Spotify Service",
-            wire_id: SPOTIFY_PROVIDER_ID,
-            enabled_key: "searchEngine.spotify.enabled",
-            base_url_key: "searchEngine.spotify.baseUrl",
-            path: "search",
-            credential_keys: &["searchEngine.spotify.accessToken"],
-        },
-        ProviderDescriptor {
-            provider: "itunes",
-            display_name: "ITunes Search Engine",
-            wire_id: ITUNES_PROVIDER_ID,
-            enabled_key: "searchEngine.itunes.enabled",
-            base_url_key: "searchEngine.itunes.baseUrl",
-            path: "search",
-            credential_keys: &[],
-        },
-        ProviderDescriptor {
-            provider: "deezer",
-            display_name: "Deezer Search Engine",
-            wire_id: DEEZER_PROVIDER_ID,
-            enabled_key: "searchEngine.deezer.enabled",
-            base_url_key: "searchEngine.deezer.baseUrl",
-            path: "search/artist",
-            credential_keys: &[],
-        },
-        ProviderDescriptor {
-            provider: "wikidata",
-            display_name: "WikiData Search Engine",
-            wire_id: WIKIDATA_PROVIDER_ID,
-            enabled_key: "searchEngine.wikidata.enabled",
-            base_url_key: "searchEngine.wikidata.baseUrl",
-            path: "",
-            credential_keys: &[],
-        },
-        ProviderDescriptor {
-            provider: "brave",
-            display_name: "Brave Search",
-            wire_id: BRAVE_PROVIDER_ID,
-            enabled_key: "searchEngine.brave.enabled",
-            base_url_key: "searchEngine.brave.baseUrl",
-            path: "res/v1/images/search",
-            credential_keys: &["searchEngine.brave.apiKey"],
-        },
-        ProviderDescriptor {
-            provider: "metalapi",
-            display_name: "Metal-API",
-            wire_id: METAL_API_PROVIDER_ID,
-            enabled_key: "searchEngine.metalApi.enabled",
-            base_url_key: "searchEngine.metalApi.baseUrl",
-            path: "artists",
-            credential_keys: &[],
-        },
-        ProviderDescriptor {
-            provider: "lastfm",
-            display_name: "Last FM Search Engine",
-            wire_id: LAST_FM_PROVIDER_ID,
-            enabled_key: "searchEngine.lastFm.Enabled",
-            base_url_key: "searchEngine.lastFm.baseUrl",
-            path: "",
-            credential_keys: &["scrobbling.lastFm.apiKey"],
-        },
-    ]
+    melodee_persistence::provider_descriptors()
 }
 
 async fn setting_text(
@@ -987,20 +894,6 @@ async fn setting_text(
         .map_err(settings_error)?
         .value
         .and_then(|value| value.as_str().map(ToOwned::to_owned)))
-}
-
-async fn setting_bool(
-    resolver: &SettingsResolver<'_>,
-    key: &str,
-    default: bool,
-) -> Result<bool, ProviderError> {
-    Ok(resolver
-        .resolve(key)
-        .await
-        .map_err(settings_error)?
-        .value
-        .and_then(|value| value.as_bool())
-        .unwrap_or(default))
 }
 
 async fn setting_u64(

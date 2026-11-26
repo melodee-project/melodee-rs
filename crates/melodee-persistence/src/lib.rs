@@ -24,11 +24,13 @@ mod group_admin;
 mod identity_review;
 mod installation;
 mod job_history;
+pub mod manifest_evidence;
 mod migrate;
 mod native_user_state;
 mod notifications;
 mod policy;
 pub mod processing;
+mod provider_eligibility;
 mod provider_enrichment;
 mod providers;
 mod radio;
@@ -38,6 +40,7 @@ pub use review_delete::ReviewDeletionAuthorization;
 pub mod runtime_settings;
 mod scripts;
 mod search;
+mod search_retention;
 mod settings;
 mod user_admin;
 mod user_profile;
@@ -147,6 +150,12 @@ pub use policy::{
     PolicyStore, PolicyStoreError, PolicyTestSampleRelease, StoredNoveltyEvaluation,
     StoredPolicyDecision, StoredReleaseClassification, StoredTrackNovelty,
 };
+pub use provider_eligibility::{
+    BACKFILL_PAGE_SIZE, BackfillPage, EligibilityRefreshOutcome, ProviderBackfill,
+    ProviderEligibility, ProviderEligibilityError, ProviderEligibilityState,
+    ProviderEligibilityStore, ProviderQueueStats, ResolvedProviderEligibilityOwned,
+    schedule_catalog_enrichment,
+};
 pub use provider_enrichment::{
     ClaimedEnrichmentTask, DEFAULT_ENRICHMENT_LEASE_SECONDS, EnrichmentEntityType,
     EnrichmentOutcome, EnrichmentPurpose, MAX_ENRICHMENT_ATTEMPTS, MAX_ENRICHMENT_BATCH,
@@ -157,8 +166,10 @@ pub use provider_enrichment::{
 pub use providers::{
     KNOWN_PROVIDERS, LastfmLinkRecord, LastfmLinkStore, MAX_LASTFM_USERNAME_CHARS,
     MAX_PROVIDER_CHARS, MAX_PROVIDER_PAYLOAD_BYTES, MAX_REQUEST_KEY_CHARS,
-    MAX_SESSION_KEY_CIPHERTEXT_BYTES, MIN_SESSION_KEY_CIPHERTEXT_BYTES, ProviderCacheEntry,
-    ProviderCacheStore, ProviderStoreError, SESSION_KEY_DIGEST_BYTES, is_known_provider,
+    MAX_SESSION_KEY_CIPHERTEXT_BYTES, MELODEE_PROVIDER_WIRE_ID, MIN_SESSION_KEY_CIPHERTEXT_BYTES,
+    ProviderCacheEntry, ProviderCacheStore, ProviderDescriptor, ProviderStoreError,
+    ResolvedProviderEligibility, SESSION_KEY_DIGEST_BYTES, is_known_provider, provider_descriptors,
+    resolve_provider_eligibility,
 };
 pub use radio::{
     MAX_RADIO_NAME_CHARS, MAX_RADIO_URL_CHARS, NewRadioStation, RadioStation, RadioStationStore,
@@ -176,6 +187,12 @@ pub use search::{
     SearchEntityType, SearchOperation, SearchOutboxItem, SearchProjectionStatus,
     SearchProjectionStore, SearchReleaseRecord, SearchSnapshotReader, SearchStoreError,
     SearchTrackRecord, StoredSearchGeneration, StoredSearchRebuildJob,
+};
+pub use search_retention::{
+    DEFAULT_PROCESSED_OUTBOX_RETENTION_DAYS, HOURLY_TOTAL_RETENTION_DAYS,
+    MAX_PROCESSED_OUTBOX_RETENTION_DAYS, MIN_PROCESSED_OUTBOX_RETENTION_DAYS, OutboxPruneResult,
+    OutboxRetentionConfig, OutboxRetentionStatus, finalize_closed_hours, maintenance_snapshot,
+    projection_high_water, prune_processed_outbox, retention_status,
 };
 pub use settings::{
     CONFIG_EXPORT_FORMAT, CONFIG_EXPORT_WARNING, ConfigExportDocument, ConfigImportPlan,

@@ -457,6 +457,7 @@ pub static KNOWN_SETTINGS: &[KnownSetting] = &[
     KnownSetting { key: "scrobbling.lastFm.Enabled", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
     KnownSetting { key: "scrobbling.lastFm.apiKey", kind: SettingKind::Text, secret: true, default: Some(""), env: None },
     KnownSetting { key: "scrobbling.lastFm.sharedSecret", kind: SettingKind::Text, secret: true, default: Some(""), env: None },
+    KnownSetting { key: "search.processedOutboxRetentionDays", kind: SettingKind::Int { min: 2, max: Some(90) }, secret: false, default: Some("7"), env: Some("MELODEE__SEARCH__PROCESSED_OUTBOX_RETENTION_DAYS") },
     KnownSetting { key: "searchEngine.artistSearchDatabaseRefreshInDays", kind: SettingKind::Int { min: 0, max: None }, secret: false, default: Some("14"), env: None },
     KnownSetting { key: "searchEngine.brave.apiKey", kind: SettingKind::Text, secret: true, default: None, env: None },
     KnownSetting { key: "searchEngine.brave.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://api.search.brave.com"), env: None },
@@ -1527,8 +1528,8 @@ mod tests {
         // timeout settings, and `transcoding.maxConcurrent`.
         assert_eq!(
             KNOWN_SETTINGS.len(),
-            209,
-            "190-key legacy inventory + provider runtime settings + timeouts + ADR-0147"
+            210,
+            "190-key legacy inventory + provider runtime settings + timeouts + ADR-0147 + ADR-0214"
         );
         for pair in KNOWN_SETTINGS.windows(2) {
             assert!(

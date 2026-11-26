@@ -15,7 +15,7 @@ Melodee uses separate locations for ingestion, publication and mutable artwork.
 | Staging | `MELODEE__INGEST__STAGING_ROOT` | Durable Melodee-owned original source for processing, review, quarantine, and failed recovery. | Writable and persistent. |
 | Work area | `MELODEE__NORMALIZATION__WORK_AREA` | Disposable attempt-isolated generated output. | Writable; never staging. |
 | Canonical library | `MELODEE__STORAGE__ROOT` | Long-term immutable published Release bundles. | Writable for publication. |
-| Asset files | `MELODEE__STORAGE__ASSET_ROOT` | Provider artwork, editor uploads, avatars, playlist images and theme files. | Persistent, writable by the service account. |
+| Asset files | `MELODEE__STORAGE__ASSET_ROOT` | Provider artwork, editor uploads, avatars, playlist images, theme files and full Release manifest evidence. | Persistent, writable by the service account. |
 
 The staging root is required whenever inbound ingestion is configured. The ingestion and publication paths must be
 absolute, symlink-safe, and non-overlapping. `Staged` remains an ingestion state-machine name; it
@@ -34,6 +34,15 @@ dedicated named volume. Without an explicit setting, native installations use
 `$XDG_DATA_HOME/melodee/assets` or `$HOME/.local/share/melodee/assets`.
 
 The server writes each distinct file once and verifies its SHA-256 before recording a reference.
+Full Release manifests — including provider provenance documents, raw text, lyrics, parsed sidecars
+and complete acoustic fingerprints — live here too; PostgreSQL keeps a verified reference and
+compact query facts. Objects up to 10 MiB are single files; larger evidence is stored as fixed
+4 MiB parts behind a versioned descriptor. Upload limits are unchanged.
+
+A database backup alone cannot reconstruct manifests. Back up the database snapshot first, then the
+entire asset directory including its marker, and restore them as a pair. Superseded evidence files
+are retained and their filesystem cost is reported; the server never deletes them automatically.
+`melodee-cli migrate --preflight` reports evidence bytes, store binding and free space.
 Keep the hidden `.melodee-asset-store` identity marker with the files when copying or restoring
 the directory. Replaced images can still be required by a database backup. Keep the complete
 store, including unreferenced files. System statistics show the logical bytes and number of

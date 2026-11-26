@@ -213,6 +213,20 @@ Tune the stages independently.
 | `MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE` | `1000` | Maximum PostgreSQL rows held per entity page during rebuild. |
 | `MELODEE__SEARCH__DEFAULT_LIMIT` | `200` | Default operator query limit. |
 | `MELODEE__SEARCH__MAX_LIMIT` | `1000` | Maximum operator query limit. |
+| `MELODEE__SEARCH__PROCESSED_OUTBOX_RETENTION_DAYS` | `7` | Days of successful search-outbox detail retained after indexing (`2`–`90`). Exact hourly index totals are kept for 400 days regardless. Also editable in the Admin settings editor as `search.processedOutboxRetentionDays`. |
+
+### Manifest evidence storage
+
+Full Release manifests — including provider provenance documents, raw fallback text, lyrics,
+parsed sidecars and complete acoustic fingerprints — are stored as immutable, verified objects
+under `MELODEE__STORAGE__ASSET_ROOT`. PostgreSQL keeps the manifest row, its version and hashes,
+one verified reference, and compact query facts (release title, source path, corrupt-media flag,
+release traits, per-Track audio fields, fingerprint digests, genre and lyrics presence). Browse,
+search, policy batches and Admin listings never read a full manifest file. Evidence above 10 MiB
+is stored as fixed 4 MiB parts behind a versioned descriptor.
+
+`MELODEE__STORAGE__ASSET_ROOT` must be an existing absolute directory on persistent storage. It
+is part of the backup pair with PostgreSQL; a database-only restore cannot rebuild manifests.
 
 ### Native API podcasts
 

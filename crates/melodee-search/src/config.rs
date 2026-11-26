@@ -27,6 +27,8 @@ pub const ENV_SEARCH_POLL_INTERVAL_MS: &str = "MELODEE__SEARCH__POLL_INTERVAL_MS
 pub const ENV_SEARCH_SNAPSHOT_PAGE_SIZE: &str = "MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE";
 pub const ENV_SEARCH_DEFAULT_LIMIT: &str = "MELODEE__SEARCH__DEFAULT_LIMIT";
 pub const ENV_SEARCH_MAX_LIMIT: &str = "MELODEE__SEARCH__MAX_LIMIT";
+pub const ENV_SEARCH_PROCESSED_OUTBOX_RETENTION_DAYS: &str =
+    "MELODEE__SEARCH__PROCESSED_OUTBOX_RETENTION_DAYS";
 
 const MAX_SEARCH_LEASE_SECONDS: u64 = 3_600;
 const MAX_SEARCH_POLL_INTERVAL_MS: u64 = 60_000;
@@ -52,6 +54,11 @@ pub struct SearchConfig {
     pub max_limit: usize,
     /// Whether the search worker is enabled at server startup.
     pub enabled: bool,
+    /// Days of successful outbox detail retained before pruning (ADR-0214).
+    /// The Admin-editable setting `search.processedOutboxRetentionDays`
+    /// (`MELODEE__SEARCH__PROCESSED_OUTBOX_RETENTION_DAYS`) takes precedence at
+    /// runtime; this is the effective default.
+    pub processed_outbox_retention_days: i64,
     #[cfg(feature = "test-support")]
     #[serde(skip)]
     #[doc(hidden)]
@@ -74,6 +81,8 @@ impl Default for SearchConfig {
             default_limit: 200,
             max_limit: 1000,
             enabled: false,
+            processed_outbox_retention_days:
+                melodee_persistence::DEFAULT_PROCESSED_OUTBOX_RETENTION_DAYS,
             #[cfg(feature = "test-support")]
             apply_test_barrier: None,
             #[cfg(feature = "test-support")]
@@ -105,6 +114,10 @@ impl SearchConfig {
             )?,
             default_limit: parse_usize(ENV_SEARCH_DEFAULT_LIMIT, defaults.default_limit)?,
             max_limit: parse_usize(ENV_SEARCH_MAX_LIMIT, defaults.max_limit)?,
+            processed_outbox_retention_days: parse_u64(
+                ENV_SEARCH_PROCESSED_OUTBOX_RETENTION_DAYS,
+                u64::try_from(defaults.processed_outbox_retention_days).unwrap_or(7),
+            )? as i64,
             #[cfg(feature = "test-support")]
             apply_test_barrier: None,
             #[cfg(feature = "test-support")]
@@ -162,6 +175,16 @@ impl SearchConfig {
         }
         if self.default_limit == 0 || self.default_limit > self.max_limit {
             return Err("default_limit must be in (0, max_limit]".to_string());
+        }
+        if !(melodee_persistence::MIN_PROCESSED_OUTBOX_RETENTION_DAYS
+            ..=melodee_persistence::MAX_PROCESSED_OUTBOX_RETENTION_DAYS)
+            .contains(&self.processed_outbox_retention_days)
+        {
+            return Err(format!(
+                "processed_outbox_retention_days must be between {} and {}",
+                melodee_persistence::MIN_PROCESSED_OUTBOX_RETENTION_DAYS,
+                melodee_persistence::MAX_PROCESSED_OUTBOX_RETENTION_DAYS
+            ));
         }
         if self.max_limit == 0 || self.max_limit > crate::store::MAX_SEARCH_RESULTS {
             return Err(format!(

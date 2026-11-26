@@ -60,6 +60,7 @@ import type {
   ScriptRun,
   ScriptTestRunResult,
   SearchRebuild,
+  EnrichmentStatus,
   SearchStatus,
   SplitArtistResult,
   SplitAssignmentInput,
@@ -228,6 +229,10 @@ export function resumeJob(name: string): Promise<WorkerPool> {
 
 export function getSearchStatus(): Promise<SearchStatus> {
   return apiFetch<SearchStatus>(`${ADMIN}/search/status`);
+}
+
+export function getEnrichmentStatus(): Promise<EnrichmentStatus> {
+  return apiFetch<EnrichmentStatus>(`${ADMIN}/processing/enrichment`);
 }
 
 /**

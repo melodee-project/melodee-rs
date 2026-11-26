@@ -468,12 +468,16 @@ const CHILD_SELECT: &str = "SELECT track.public_api_id, track.title, track.sort_
   WHERE track.public_api_id = ANY($2)";
 
 /// Genre display values use ADR-0165's indexed serving projection. Audio bit
-/// depth remains immutable manifest evidence and is read only for the bounded
-/// set of selected Tracks.
+/// depth is a compact manifest fact (ADR-0213), so a child listing never reads
+/// a manifest evidence file.
 const CHILD_MANIFEST_SELECT: &str = "SELECT DISTINCT ON (track.public_api_id)
     track.public_api_id,
     genre.value,
-    (file.value->'audio'->>'bit_depth')::integer
+    (SELECT track_fact.bit_depth
+       FROM release_work_item_manifest_track_facts track_fact
+      WHERE track_fact.manifest_row_id = catalog_import.manifest_row_id
+        AND track_fact.relative_path = track.source_path
+      LIMIT 1)
   FROM tracks track
   LEFT JOIN LATERAL (
     SELECT string_agg(term.match_value, ';' ORDER BY term.source_order) AS value
@@ -481,11 +485,7 @@ const CHILD_MANIFEST_SELECT: &str = "SELECT DISTINCT ON (track.public_api_id)
     WHERE term.track_id=track.id AND term.surface='opensubsonic'
   ) genre ON true
   JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
-  JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-  CROSS JOIN LATERAL jsonb_array_elements(
-    COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
   WHERE track.public_api_id = ANY($1)
-    AND file.value->>'relative_path' = track.source_path
   ORDER BY track.public_api_id, catalog_import.imported_at DESC";
 
 fn suffix_from(source_path: Option<&str>) -> String {

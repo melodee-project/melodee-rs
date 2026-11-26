@@ -6,8 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use melodee_persistence::{
-    SEARCH_PROJECTION_NAME, SearchCatalogRecord, SearchDocumentCounts, SearchEntityType,
-    SearchOperation, SearchOutboxItem, SearchProjectionStore, WorkItemStore,
+    OutboxRetentionConfig, SEARCH_PROJECTION_NAME, SearchCatalogRecord, SearchDocumentCounts,
+    SearchEntityType, SearchOperation, SearchOutboxItem, SearchProjectionStore, SettingsResolver,
+    WorkItemStore, prune_processed_outbox, retention_status,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -23,6 +24,10 @@ use crate::error::SearchError;
 use crate::generation::SearchRoot;
 use crate::rebuild::run_rebuild_once_with_cancel;
 use crate::store::SearchStore;
+
+/// OpenSubsonic/Native: successful outbox detail is retained for a bounded
+/// window; see ADR-0214. Maintenance runs hourly in bounded passes.
+const OUTBOX_MAINTENANCE_INTERVAL: time::Duration = time::Duration::hours(1);
 
 /// Upper bound on lifecycles completed per projection pass. Completions are set
 /// based and cheap; the bound keeps one pass from monopolising a worker while a
@@ -251,6 +256,10 @@ pub fn start_search_loop(config: SearchConfig, pool: PgPool) -> SearchSchedulerH
             if task_cancel.stopped.load(Ordering::Acquire) {
                 break;
             }
+            if task_cancel.stopped.load(Ordering::Acquire) {
+                break;
+            }
+            run_outbox_maintenance_if_due(&config, &pool).await;
             match apply_outbox_once_with_cancel(&config, &pool, Arc::clone(&task_cancel)).await {
                 Ok(stats) if stats.claimed > 0 => info!(
                     claimed = stats.claimed,
@@ -273,6 +282,91 @@ pub fn start_search_loop(config: SearchConfig, pool: PgPool) -> SearchSchedulerH
         }
     });
     SearchSchedulerHandle { cancel, task }
+}
+
+/// Runs bounded outbox retention once per hour.
+///
+/// The durable `last_prune_at` is consulted so a restart cannot re-run an
+/// interval that already completed. Failures are logged and retried on the
+/// next pass; retention never blocks projection work.
+async fn run_outbox_maintenance_if_due(config: &SearchConfig, pool: &PgPool) {
+    let now = OffsetDateTime::now_utc();
+    let retention_days = match resolve_retention_days(config, pool).await {
+        Ok(days) => days,
+        Err(error) => {
+            warn!(error = %error, "search outbox retention setting could not be resolved");
+            return;
+        }
+    };
+    let root = SearchRoot::open(&config.search_root).ok();
+    let root_text = root
+        .as_ref()
+        .map(|root| root.path().to_string_lossy().to_string());
+    let current = match retention_status(
+        pool,
+        OutboxRetentionConfig { retention_days },
+        now,
+        root_text.as_deref(),
+    )
+    .await
+    {
+        Ok(status) => status,
+        Err(error) => {
+            warn!(error = %error, "search outbox retention status could not be read");
+            return;
+        }
+    };
+    if current
+        .last_prune_at
+        .is_some_and(|last| last > now - OUTBOX_MAINTENANCE_INTERVAL)
+    {
+        return;
+    }
+    match prune_processed_outbox(
+        pool,
+        OutboxRetentionConfig { retention_days },
+        true,
+        // One hourly pass stays bounded; the next tick resumes.
+        32,
+        root_text.as_deref(),
+        now,
+    )
+    .await
+    {
+        Ok(result) => {
+            if result.rows_pruned > 0 || result.status.blocking_rebuild.is_some() {
+                info!(
+                    rows_pruned = result.rows_pruned,
+                    batches = result.batches,
+                    eligible = result.status.eligible,
+                    protected = result.status.protected,
+                    blocking_rebuild = ?result.status.blocking_rebuild,
+                    "search outbox retention pass completed"
+                );
+            }
+        }
+        Err(error) => warn!(error = %error, "search outbox retention pass failed"),
+    }
+}
+
+/// Effective processed-outbox retention, from the ordinary Admin-editable
+/// setting (environment → config file → database → default), clamped to the
+/// documented range.
+async fn resolve_retention_days(
+    config: &SearchConfig,
+    pool: &PgPool,
+) -> Result<i64, melodee_persistence::SettingsError> {
+    let resolver = SettingsResolver::from_env(pool)?;
+    let value = resolver
+        .resolve("search.processedOutboxRetentionDays")
+        .await?
+        .value
+        .and_then(|value| value.as_i64())
+        .unwrap_or(config.processed_outbox_retention_days);
+    Ok(value.clamp(
+        melodee_persistence::MIN_PROCESSED_OUTBOX_RETENTION_DAYS,
+        melodee_persistence::MAX_PROCESSED_OUTBOX_RETENTION_DAYS,
+    ))
 }
 
 /// Advance Releases whose search projection is durable from `indexing` to the

@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 sha2.workspace = true
+blake3.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 getrandom.workspace = true

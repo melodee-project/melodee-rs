@@ -60,8 +60,33 @@ pub async fn save_review_correction(
             ));
         }
     } else {
+        // ADR-0213: an allowed pre-seal edit replaces the evidence reference
+        // after verifying the expected prior revision, and never stores the
+        // payload inline. The update is fenced by the expected hash, the
+        // pre-seal schema version and the absence of downstream bindings.
+        let manifest_row_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM release_work_item_manifests
+              WHERE work_item_id=$1 AND manifest_hash=$2 AND schema_version=2
+              FOR UPDATE",
+        )
+        .bind(id)
+        .bind(correction.expected_hash)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(manifest_row_id) = manifest_row_id else {
+            return Err(WorkStoreError::ManifestConflict(id));
+        };
+        let payload = serde_json::to_value(correction.manifest)?;
+        crate::manifest_evidence::store_evidence_in_transaction(
+            &mut tx,
+            manifest_row_id,
+            &payload,
+            now,
+        )
+        .await?;
         let changed = sqlx::query(
-            "UPDATE release_work_item_manifests m SET manifest_hash=$3, manifest_payload=$4
+            "UPDATE release_work_item_manifests m
+                SET manifest_hash=$3, manifest_payload=NULL
              WHERE work_item_id=$1 AND manifest_hash=$2 AND schema_version=2
              AND NOT EXISTS (SELECT 1 FROM review_deletion_authorizations WHERE work_item_id=$1)
              AND NOT EXISTS (SELECT 1 FROM release_publication_authorizations WHERE work_item_id=$1)
@@ -71,7 +96,6 @@ pub async fn save_review_correction(
         .bind(id)
         .bind(correction.expected_hash)
         .bind(correction.new_hash)
-        .bind(sqlx::types::Json(correction.manifest))
         .execute(&mut *tx)
         .await?;
         if changed.rows_affected() != 1 {

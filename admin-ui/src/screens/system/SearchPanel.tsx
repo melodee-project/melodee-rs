@@ -8,11 +8,11 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { getSearchStatus, requestSearchRebuild } from '../../api/admin';
+import { getEnrichmentStatus, getSearchStatus, requestSearchRebuild } from '../../api/admin';
 import { ApiError } from '../../api/client';
-import type { SearchStatus } from '../../api/types';
+import type { EnrichmentStatus, SearchStatus } from '../../api/types';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
-import { formatNumber } from '../../i18n/format';
+import { formatDateTime, formatNumber } from '../../i18n/format';
 
 /**
  * Search index status + rebuild trigger panel (SPEC §22), shared by the
@@ -46,6 +46,7 @@ export function SearchPanel({
 }) {
   const { t } = useTranslation();
   const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null);
+  const [enrichment, setEnrichment] = useState<EnrichmentStatus | null>(null);
   const [searchError, setSearchError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
@@ -69,6 +70,15 @@ export function SearchPanel({
   useEffect(() => {
     const signal = { cancelled: false };
     void fetchSearch(signal);
+    void getEnrichmentStatus()
+      .then((result) => {
+        if (!signal.cancelled) {
+          setEnrichment(result);
+        }
+      })
+      .catch(() => {
+        // Enrichment status is supplementary; the search panel still renders.
+      });
     return () => {
       signal.cancelled = true;
     };
@@ -170,6 +180,106 @@ export function SearchPanel({
                 </dd>
               </div>
             ) : null}
+            <div className="melodee-fact">
+              <dt>{t('system.search.retentionDays')}</dt>
+              <dd>
+                {formatNumber(searchStatus.projection?.retentionDays ?? 0)}
+              </dd>
+            </div>
+            <div className="melodee-fact">
+              <dt>{t('system.search.retentionEligible')}</dt>
+              <dd>
+                {formatNumber(searchStatus.projection?.retentionEligible ?? 0)}
+              </dd>
+            </div>
+            <div className="melodee-fact">
+              <dt>{t('system.search.retentionProtected')}</dt>
+              <dd>
+                {formatNumber(searchStatus.projection?.retentionProtected ?? 0)}
+              </dd>
+            </div>
+            <div className="melodee-fact">
+              <dt>{t('system.search.lastFinalizedHour')}</dt>
+              <dd>
+                {searchStatus.projection?.lastFinalizedHour
+                  ? formatDateTime(searchStatus.projection.lastFinalizedHour)
+                  : t('common.notAvailable')}
+              </dd>
+            </div>
+            <div className="melodee-fact">
+              <dt>{t('system.search.lastPrune')}</dt>
+              <dd>
+                {searchStatus.projection?.lastPruneAt
+                  ? formatDateTime(searchStatus.projection.lastPruneAt)
+                  : t('common.notAvailable')}
+              </dd>
+            </div>
+            {searchStatus.projection?.blockingRebuild ? (
+              <div className="melodee-fact">
+                <dt>{t('system.search.blockingRebuild')}</dt>
+                <dd>
+                  <ProcessingStateTag
+                    state={searchStatus.projection.blockingRebuild}
+                  />
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+        {enrichment ? (
+          <dl className="melodee-fact-list">
+            <div className="melodee-fact">
+              <dt>{t('system.enrichment.eligibilityRevision')}</dt>
+              <dd>{formatNumber(enrichment.eligibilityRevision)}</dd>
+            </div>
+            <div className="melodee-fact">
+              <dt>{t('system.enrichment.oldestRunnable')}</dt>
+              <dd>
+                {enrichment.oldestRunnableAt
+                  ? formatDateTime(enrichment.oldestRunnableAt)
+                  : t('system.enrichment.noRunnable')}
+              </dd>
+            </div>
+            {enrichment.eligibilityError ? (
+              <div className="melodee-fact">
+                <dt>{t('system.enrichment.resolverDiagnostic')}</dt>
+                <dd>{enrichment.eligibilityError}</dd>
+              </div>
+            ) : null}
+            {enrichment.providers.map((provider) => (
+              <div className="melodee-fact" key={provider.provider}>
+                <dt>{provider.provider}</dt>
+                <dd>
+                  {t('system.enrichment.providerCounts', {
+                    runnable: formatNumber(provider.runnable),
+                    dormant: formatNumber(provider.dormant),
+                    failed: formatNumber(provider.failed),
+                  })}
+                  {provider.eligible
+                    ? ''
+                    : ` — ${t('system.enrichment.ineligible')}`}
+                </dd>
+              </div>
+            ))}
+            {enrichment.backfills.map((backfill) => (
+              <div
+                className="melodee-fact"
+                key={`${backfill.provider}-${backfill.providerRevision}-${backfill.entityType}`}
+              >
+                <dt>{t('system.enrichment.backfill')}</dt>
+                <dd>
+                  <ProcessingStateTag state={backfill.status} />
+                  <span className="melodee-fact__detail">
+                    {t('system.enrichment.backfillDetail', {
+                      provider: backfill.provider,
+                      entityType: backfill.entityType,
+                      scanned: formatNumber(backfill.entitiesScanned),
+                      enqueued: formatNumber(backfill.tasksEnqueued),
+                    })}
+                  </span>
+                </dd>
+              </div>
+            ))}
           </dl>
         ) : null}
         <div className="melodee-panel__footer">

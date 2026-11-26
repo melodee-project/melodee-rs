@@ -417,7 +417,10 @@
       "crates/melodee-media/src/lib.rs (deterministic media observations)",
       "crates/melodee-media/src/normalize.rs (normalization observations embedded in manifest)",
       "crates/melodee-ingestion/src/validate.rs and publication.rs (complete canonical asset mapping and explicit v3 upgrade)",
-      "crates/melodee-persistence/src/catalog.rs (validated immutable v3/plan/receipt catalog consumer)"
+      "crates/melodee-persistence/src/catalog.rs (validated immutable v3/plan/receipt catalog consumer)",
+      "crates/melodee-persistence/src/manifest_evidence.rs (versioned evidence object, compact facts, chunked >10 MiB) — ADR-0213",
+      "crates/melodee-persistence/migrations/0059_manifest_evidence_files.sql",
+      "apps/melodee-cli/src/commands/migrate.rs (preflight/status/verify and resumable upgrade)"
     ],
     "tests": [
       "crates/melodee-media/src/lib.rs (manifest_hash_excludes_volatile_provenance)",
@@ -428,7 +431,8 @@
       "crates/melodee-ingestion/tests/inspection.rs",
       "crates/melodee-ingestion/tests/publication.rs (complete v3 canonical inventory)",
       "crates/melodee-ingestion/tests/normalization.rs (real-format/pathology and 200-Release v3 publication)",
-      "crates/melodee-persistence/tests/catalog_import.rs and catalog_performance.rs (end-to-end v3 insertion without media reread)"
+      "crates/melodee-persistence/tests/catalog_import.rs and catalog_performance.rs (end-to-end v3 insertion without media reread)",
+      "crates/melodee-persistence/tests/manifest_evidence.rs (round trip, >10 MiB chunking, upgrade, verification)"
     ]
   },
   {
@@ -1308,12 +1312,15 @@
       "crates/melodee-ingestion/src/publication.rs (ID/hash-derived canonical paths without Artist/title components)",
       "design/adr/ADR-0106-use-release-centric-canonical-storage.md",
       "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md",
-      "crates/melodee-persistence/src/catalog_identity.rs and design/adr/ADR-0176-complete-artist-merge-coalescing-and-multi-select-administration.md (Artist correction changes catalog ownership and projections without moving canonical media)"
+      "crates/melodee-persistence/src/catalog_identity.rs and design/adr/ADR-0176-complete-artist-merge-coalescing-and-multi-select-administration.md (Artist correction changes catalog ownership and projections without moving canonical media)",
+      "crates/melodee-persistence/src/asset_files.rs (chunked evidence objects and unreferenced-cost report)",
+      "crates/melodee-persistence/src/manifest_evidence.rs (verify-then-bind persistent evidence) — ADR-0213"
     ],
     "tests": [
       "crates/melodee-domain/tests/manifest_versions.rs (stable UUID-to-layout golden vector)",
       "crates/melodee-ingestion/tests/publication.rs (canonical publication from Unicode/display-derived source observations uses lowercase ID/hash path)",
-      "crates/melodee-persistence/tests/catalog_merge_split.rs (multi-source merge preserves every source and target media path)"
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (multi-source merge preserves every source and target media path)",
+      "crates/melodee-persistence/tests/manifest_evidence.rs"
     ]
   },
   {
@@ -1535,11 +1542,14 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-search/src/rebuild.rs and generation.rs",
-      "apps/melodee-cli/src/main.rs (search rebuild)"
+      "apps/melodee-cli/src/main.rs (search rebuild)",
+      "crates/melodee-persistence/src/search_retention.rs (finalized hourly totals, bounded pruning, replay tombstones) — ADR-0214",
+      "apps/melodee-cli/src/commands/search.rs (search prune-outbox)"
     ],
     "tests": [
       "crates/melodee-search/tests/rebuild_integration.rs",
-      "crates/melodee-persistence/tests/search_phase6.rs"
+      "crates/melodee-persistence/tests/search_phase6.rs",
+      "crates/melodee-persistence/tests/search_outbox_retention.rs"
     ]
   },
   {
@@ -2692,12 +2702,16 @@
       "apps/melodee-server/src/enrichment_worker.rs (lease-based task processing and expired-cache cleanup)",
       "apps/melodee-server/src/lastfm.rs (single-attempt scrobble submission with 10 s timeout; failures degrade and drop the scrobble, never the ingestion/playback work — evidence doc section 5)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
-      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: the enrichment worker caches provider responses and writes provenance on external_provider_cache)"
+      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: the enrichment worker caches provider responses and writes provenance on external_provider_cache)",
+      "crates/melodee-persistence/src/provider_eligibility.rs (revisioned effective eligibility, bounded native backlog reconciliation, dormant work) — ADR-0212",
+      "crates/melodee-persistence/migrations/0057_provider_eligibility_and_backfills.sql"
     ],
     "tests": [
       "crates/melodee-persistence/tests/providers.rs (cache round-trip, freshness/expiry, bounded purge, SQL CHECK backstops)",
       "apps/melodee-server/tests/lastfm_scrobble.rs (fail-degraded dispatch outcomes; invalid-session link clearing)",
-      "apps/melodee-server/tests/provider_enrichment_worker.rs (fresh-cache hit avoids a second HTTP request; bounded 429 retry)"
+      "apps/melodee-server/tests/provider_enrichment_worker.rs (fresh-cache hit avoids a second HTTP request; bounded 429 retry)",
+      "crates/melodee-persistence/tests/provider_eligibility.rs",
+      "apps/melodee-server/tests/enrichment_capacity.rs (rate-limited provider isolation)"
     ]
   },
   {
@@ -2712,12 +2726,15 @@
       "apps/melodee-server/src/providers.rs (provider/purpose/query cache keys and provenance payloads)",
       "apps/melodee-server/src/enrichment_worker.rs (provider candidate evidence and artwork provenance)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
-      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: enrichment writes provider-scoped provenance/evidence rows on external_provider_cache)"
+      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: enrichment writes provider-scoped provenance/evidence rows on external_provider_cache)",
+      "crates/melodee-persistence/src/manifest_evidence.rs (full manifest evidence, provenance documents and facts) — ADR-0213",
+      "crates/melodee-persistence/src/providers.rs (shared provider eligibility predicate)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/providers.rs",
       "crates/melodee-persistence/tests/provider_enrichment.rs",
-      "apps/melodee-server/tests/provider_enrichment_worker.rs"
+      "apps/melodee-server/tests/provider_enrichment_worker.rs",
+      "crates/melodee-persistence/tests/manifest_evidence.rs"
     ]
   },
   {
@@ -3205,12 +3222,16 @@
       "crates/melodee-ingestion/src/scheduler.rs (graceful periodic reconcile task)",
       "crates/melodee-ingestion/src/reconcile.rs (reconcile_all_sources and per-source loop)",
       "apps/melodee-server/src/discovery_worker.rs (periodic chart/recommendation aggregate maintenance loop)",
-      "crates/melodee-persistence/src/discovery.rs (NativeDiscoveryStore::refresh_discovery_aggregates bounded set-based reconciliation)"
+      "crates/melodee-persistence/src/discovery.rs (NativeDiscoveryStore::refresh_discovery_aggregates bounded set-based reconciliation)",
+      "crates/melodee-search/src/worker.rs (hourly bounded outbox retention maintenance)",
+      "apps/melodee-server/src/enrichment_worker.rs (eligibility reconciliation and backfill steps)",
+      "apps/melodee-server/src/admin_system.rs (processing/enrichment and retention status)"
     ],
     "tests": [
       "crates/melodee-ingestion/tests/reconciliation.rs (scheduler_runs_periodic_reconciliation_with_restart_signal)",
       "apps/melodee-server/tests/discovery_worker.rs (drift/missing-row reconciliation, idempotency, bounded-batch convergence, periodic run, graceful stop)",
-      "crates/melodee-persistence/tests/native_discovery_phase7.rs (discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identity)"
+      "crates/melodee-persistence/tests/native_discovery_phase7.rs (discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identity)",
+      "crates/melodee-persistence/tests/search_outbox_retention.rs"
     ]
   },
   {
@@ -3389,7 +3410,9 @@
       "crates/melodee-persistence/tests/catalog_performance.rs (repeatable 200-manifest PostgreSQL catalog workload)",
       "crates/melodee-search/src/bin/phase6_benchmark.rs",
       "apps/melodee-server/tests/native_phase7_performance.rs",
-      "crates/melodee-persistence/src/processing/bulk_report.sql (registered bulk and concurrent ordinary arrival-to-playable evidence)"
+      "crates/melodee-persistence/src/processing/bulk_report.sql (registered bulk and concurrent ordinary arrival-to-playable evidence)",
+      "scripts/measure_manifest_storage.py (reproducible baseline/candidate PostgreSQL byte measurement)",
+      "apps/melodee-server/tests/enrichment_capacity.rs (timed 1,980-job capacity harness)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
@@ -3397,7 +3420,8 @@
       "apps/melodee-server/tests/policy_worker.rs (200-Release policy workload)",
       "cargo run --release -p melodee-search --bin phase6_benchmark (10M streaming search workload)",
       "cargo test --release -p melodee-server --test native_phase7_performance native_api_current_catalog_scale_evidence -- --ignored --exact --nocapture",
-      "crates/melodee-persistence/tests/processing_throughput.rs (weighted admission and bounded cohort window)"
+      "crates/melodee-persistence/tests/processing_throughput.rs (weighted admission and bounded cohort window)",
+      "design/evidence/storage/ENRICHMENT-AND-STORAGE-CLOSEOUT.md"
     ]
   },
   {
@@ -3481,14 +3505,17 @@
       "crates/melodee-search/src/worker.rs, rebuild.rs, and service.rs (bounded projection/query paths with no filesystem-tree or media scan)",
       "apps/melodee-server/src/native/catalog.rs (bounded browse/random/detail SQL paths)",
       "crates/melodee-persistence/migrations/0038_catalog_genre_serving_projection.sql and design/adr/ADR-0165-materialize-catalog-genre-serving-facts.md (indexed, transactionally maintained genre serving facts)",
-      "apps/melodee-server/src/opensubsonic/lists.rs (indexed circular random candidate windows; bounded randomization)"
+      "apps/melodee-server/src/opensubsonic/lists.rs (indexed circular random candidate windows; bounded randomization)",
+      "crates/melodee-persistence/src/search_retention.rs (indexed, ordered, bounded prune selection)",
+      "crates/melodee-persistence/src/provider_eligibility.rs (keyset backfill pages of 250)"
     ],
     "tests": [
       "crates/melodee-search/tests/rebuild_integration.rs",
       "crates/melodee-persistence/tests/search_phase6.rs",
       "apps/melodee-server/tests/native_phase7_performance.rs",
       "tests/python/test_scalability_query_shapes.py",
-      "apps/melodee-server/tests/opensubsonic_lists_api.rs and opensubsonic_browse_api.rs"
+      "apps/melodee-server/tests/opensubsonic_lists_api.rs and opensubsonic_browse_api.rs",
+      "crates/melodee-persistence/tests/search_outbox_retention.rs"
     ]
   },
   {

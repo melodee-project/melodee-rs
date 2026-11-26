@@ -779,6 +779,17 @@ pub struct SearchProjectionDto {
     pub active_generation_id: Option<Uuid>,
     pub latest_rebuild_status: Option<String>,
     pub latest_rebuild_error: Option<String>,
+    /// ADR-0214 retention state: successful detail is bounded, exact hourly
+    /// totals are not.
+    pub retention_days: i64,
+    pub retention_eligible: i64,
+    pub retention_protected: i64,
+    pub retention_oldest_completion: Option<OffsetDateTime>,
+    pub last_finalized_hour: Option<OffsetDateTime>,
+    pub earliest_trustworthy_hour: Option<OffsetDateTime>,
+    pub last_prune_at: Option<OffsetDateTime>,
+    pub last_prune_result: Option<serde_json::Value>,
+    pub blocking_rebuild: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -809,6 +820,52 @@ pub struct SearchRebuildDto {
     pub requested_by: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderQueueStatsDto {
+    pub provider: String,
+    pub eligible: bool,
+    pub revision: Option<i64>,
+    pub runnable: i64,
+    pub running: i64,
+    pub dormant: i64,
+    pub retry: i64,
+    pub failed: i64,
+    pub succeeded: i64,
+    pub oldest_runnable_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderBackfillDto {
+    pub provider: String,
+    pub provider_revision: i64,
+    pub entity_type: String,
+    pub status: String,
+    pub entities_scanned: i64,
+    pub tasks_enqueued: i64,
+    pub last_entity_id: Option<Uuid>,
+    pub updated_at: OffsetDateTime,
+    pub completed_at: Option<OffsetDateTime>,
+}
+
+/// Optional enrichment lag, reported separately from time-to-playable.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrichmentStatusDto {
+    pub eligibility_revision: i64,
+    pub eligibility_refreshed_at: Option<OffsetDateTime>,
+    pub eligibility_error: Option<String>,
+    pub eligibility_error_at: Option<OffsetDateTime>,
+    pub eligibility_resolved: bool,
+    pub oldest_runnable_at: Option<OffsetDateTime>,
+    pub providers: Vec<ProviderQueueStatsDto>,
+    pub backfills: Vec<ProviderBackfillDto>,
+    pub manifest_evidence: melodee_persistence::manifest_evidence::EvidenceMigrationStatus,
+    pub superseded_evidence_bytes: i64,
+    pub unreferenced_store_bytes: i64,
+}
+
 pub fn router() -> Router<AdminSystemState> {
     Router::new()
         .route("/api/admin/v1/dashboard", get(dashboard))
@@ -828,6 +885,10 @@ pub fn router() -> Router<AdminSystemState> {
         )
         .route("/api/admin/v1/jobs/{name}/run-now", post(job_run_now))
         .route("/api/admin/v1/search/status", get(search_status))
+        .route(
+            "/api/admin/v1/processing/enrichment",
+            get(enrichment_status),
+        )
         .route("/api/admin/v1/search/rebuild", post(search_rebuild))
         .route("/api/admin/v1/system/health", get(system_health))
         .route_layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
@@ -1370,6 +1431,19 @@ async fn search_status(State(state): State<AdminSystemState>, _admin: AdminPrinc
         })
         .into_response();
     };
+    let retention = melodee_persistence::retention_status(
+        &state.admin.pool,
+        melodee_persistence::OutboxRetentionConfig {
+            retention_days: config.processed_outbox_retention_days.clamp(
+                melodee_persistence::MIN_PROCESSED_OUTBOX_RETENTION_DAYS,
+                melodee_persistence::MAX_PROCESSED_OUTBOX_RETENTION_DAYS,
+            ),
+        },
+        OffsetDateTime::now_utc(),
+        Some(config.search_root.to_string_lossy().as_ref()),
+    )
+    .await
+    .ok();
     match melodee_search::diagnostic(config, &state.admin.pool).await {
         Ok(diagnostic) => Json(SearchStatusDto {
             enabled: true,
@@ -1382,6 +1456,31 @@ async fn search_status(State(state): State<AdminSystemState>, _admin: AdminPrinc
                 active_generation_id: diagnostic.projection.active_generation_id,
                 latest_rebuild_status: diagnostic.projection.latest_rebuild_status,
                 latest_rebuild_error: diagnostic.projection.latest_rebuild_error,
+                retention_days: retention
+                    .as_ref()
+                    .map_or(7, |retention| retention.retention_days),
+                retention_eligible: retention.as_ref().map_or(0, |retention| retention.eligible),
+                retention_protected: retention
+                    .as_ref()
+                    .map_or(0, |retention| retention.protected),
+                retention_oldest_completion: retention
+                    .as_ref()
+                    .and_then(|retention| retention.oldest_retained_completion),
+                last_finalized_hour: retention
+                    .as_ref()
+                    .and_then(|retention| retention.last_finalized_hour),
+                earliest_trustworthy_hour: retention
+                    .as_ref()
+                    .and_then(|retention| retention.earliest_trustworthy_hour),
+                last_prune_at: retention
+                    .as_ref()
+                    .and_then(|retention| retention.last_prune_at),
+                last_prune_result: retention
+                    .as_ref()
+                    .and_then(|retention| retention.last_prune_result.clone()),
+                blocking_rebuild: retention
+                    .as_ref()
+                    .and_then(|retention| retention.blocking_rebuild.clone()),
             }),
             generation: diagnostic.generation.map(|generation| SearchGenerationDto {
                 artists: generation.artists,
@@ -1396,6 +1495,92 @@ async fn search_status(State(state): State<AdminSystemState>, _admin: AdminPrinc
         .into_response(),
         Err(error) => store_failure("search diagnostic failed", &error.operator_message()),
     }
+}
+
+/// GET /api/admin/v1/processing/enrichment — provider eligibility, runnable
+/// and dormant counts, backfill progress, and manifest evidence/outbox
+/// maintenance state. Enrichment lag is reported here, never as time to
+/// playable.
+async fn enrichment_status(
+    State(state): State<AdminSystemState>,
+    _admin: AdminPrincipal,
+) -> Response {
+    let pool = &state.admin.pool;
+    let state_row = match melodee_persistence::ProviderEligibilityStore::state(pool).await {
+        Ok(state_row) => state_row,
+        Err(error) => {
+            return store_failure("provider eligibility state failed", &error.to_string());
+        }
+    };
+    let eligibility = melodee_persistence::ProviderEligibilityStore::list(pool)
+        .await
+        .unwrap_or_default();
+    let stats = melodee_persistence::ProviderEligibilityStore::queue_stats(pool)
+        .await
+        .unwrap_or_default();
+    let backfills = melodee_persistence::ProviderEligibilityStore::list_backfills(pool)
+        .await
+        .unwrap_or_default();
+    let oldest = melodee_persistence::ProviderEligibilityStore::oldest_runnable_at(pool)
+        .await
+        .unwrap_or(None);
+    let manifest_evidence = match melodee_persistence::manifest_evidence::status(pool).await {
+        Ok(status) => status,
+        Err(error) => return store_failure("manifest evidence status failed", &error.to_string()),
+    };
+    let superseded = melodee_persistence::manifest_evidence::superseded_evidence_bytes(pool)
+        .await
+        .unwrap_or(0);
+    let unreferenced = melodee_persistence::asset_files::unreferenced_store_bytes(pool)
+        .await
+        .unwrap_or(0);
+    let providers = stats
+        .into_iter()
+        .map(|row| {
+            let eligibility_row = eligibility
+                .iter()
+                .find(|entry| entry.provider == row.provider);
+            ProviderQueueStatsDto {
+                provider: row.provider,
+                eligible: eligibility_row.is_some_and(|entry| entry.metadata_eligible),
+                revision: eligibility_row.map(|entry| entry.revision),
+                runnable: row.runnable,
+                running: row.running,
+                dormant: row.dormant,
+                retry: row.retry,
+                failed: row.failed,
+                succeeded: row.succeeded,
+                oldest_runnable_at: row.oldest_runnable_at,
+            }
+        })
+        .collect();
+    Json(EnrichmentStatusDto {
+        eligibility_revision: state_row.revision,
+        eligibility_refreshed_at: state_row.refreshed_at,
+        eligibility_error: state_row.last_error,
+        eligibility_error_at: state_row.last_error_at,
+        eligibility_resolved: !eligibility.is_empty(),
+        oldest_runnable_at: oldest,
+        providers,
+        backfills: backfills
+            .into_iter()
+            .map(|backfill| ProviderBackfillDto {
+                provider: backfill.provider,
+                provider_revision: backfill.provider_revision,
+                entity_type: backfill.entity_type,
+                status: backfill.status,
+                entities_scanned: backfill.entities_scanned,
+                tasks_enqueued: backfill.tasks_enqueued,
+                last_entity_id: backfill.last_entity_id,
+                updated_at: backfill.updated_at,
+                completed_at: backfill.completed_at,
+            })
+            .collect(),
+        manifest_evidence,
+        superseded_evidence_bytes: superseded,
+        unreferenced_store_bytes: unreferenced,
+    })
+    .into_response()
 }
 
 /// POST /api/admin/v1/search/rebuild — durably request a generational

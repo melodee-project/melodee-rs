@@ -113,7 +113,44 @@ pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
     }
     crate::catalog_mutations::repair_import_overlay_references(pool)
         .await
-        .map_err(|error| MigrateError::Source(Box::new(error)))
+        .map_err(|error| MigrateError::Source(Box::new(error)))?;
+    // ADR-0213: a server start may not bypass the manifest evidence gate. The
+    // upgrade is resumable and a completed installation performs no bulk work.
+    upgrade_manifest_evidence(pool).await
+}
+
+/// Applies the manifest evidence upgrade gate.
+///
+/// Pending inline evidence is backfilled, independently verified, and only
+/// then removed. When the installation is already complete this is a cheap
+/// presence check, so a repeat startup does not reread every evidence file.
+async fn upgrade_manifest_evidence(pool: &PgPool) -> Result<(), MigrateError> {
+    use crate::manifest_evidence::{self, ManifestEvidenceError};
+
+    let status = manifest_evidence::status(pool)
+        .await
+        .map_err(manifest_evidence_error)?;
+    if status.pending > 0 || status.manifests_migrated < status.evidence_rows {
+        let report = manifest_evidence::upgrade(pool, time::OffsetDateTime::now_utc())
+            .await
+            .map_err(manifest_evidence_error)?;
+        if !report.is_clean() {
+            tracing::error!(
+                discrepancies = ?report.discrepancies,
+                "manifest evidence upgrade verification failed; inline evidence was preserved"
+            );
+            return Err(manifest_evidence_error(
+                ManifestEvidenceError::Verification(0, report.discrepancies.join("; ")),
+            ));
+        }
+    }
+    manifest_evidence::require_complete(pool)
+        .await
+        .map_err(manifest_evidence_error)
+}
+
+fn manifest_evidence_error(error: crate::manifest_evidence::ManifestEvidenceError) -> MigrateError {
+    MigrateError::Source(Box::new(error))
 }
 
 /// Builds a one-run migrator for exact historical checksums created by

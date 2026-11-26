@@ -2429,6 +2429,7 @@ name = "melodee-persistence"
 version = "0.3.0"
 dependencies = [
  "bcrypt",
+ "blake3",
  "getrandom 0.4.3",
  "melodee-auth",
  "melodee-domain",

@@ -37,6 +37,7 @@ OUTPUT = REPO / "apps/melodee-server/src/settings_inventory.rs"
 #: Keys whose consumer resolves the name dynamically (constructed key strings).
 DYNAMIC_CONSUMERS = {
     "searchEngine.": "providers",
+    "search.": "search_worker",
     "email.": "notifications",
     "mpd.": "playback",
     "mpv.": "playback",

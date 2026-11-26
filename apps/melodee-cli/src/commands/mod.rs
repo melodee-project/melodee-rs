@@ -10,6 +10,7 @@ pub(crate) mod doctor;
 pub(crate) mod groups;
 pub(crate) mod ingest;
 pub(crate) mod jobs;
+pub(crate) mod migrate;
 pub(crate) mod notifications;
 pub(crate) mod podcasts;
 pub(crate) mod policy;

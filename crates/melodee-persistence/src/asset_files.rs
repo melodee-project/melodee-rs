@@ -9,7 +9,15 @@ use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 pub const ENV_ASSET_ROOT: &str = "MELODEE__STORAGE__ASSET_ROOT";
+/// Largest single stored object. Upload limits for artwork, avatars,
+/// playlists and themes are unchanged; larger evidence is chunked (ADR-0213).
 const MAX_BYTES: usize = 10 * 1024 * 1024;
+/// Fixed evidence chunk size for objects above `MAX_BYTES`.
+pub const EVIDENCE_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+/// Refuse absurd reconstructions before allocating; a manifest is metadata,
+/// not media.
+pub const MAX_EVIDENCE_BYTES: usize = 512 * 1024 * 1024;
+const CHUNK_DESCRIPTOR_FORMAT: &str = "melodee-chunked-evidence";
 const MARKER: &str = ".melodee-asset-store";
 
 fn invalid(message: &str) -> io::Error {
@@ -208,6 +216,231 @@ pub async fn put_on(conn: &mut PgConnection, bytes: &[u8]) -> Result<String, sql
     .execute(conn)
     .await?;
     Ok(key)
+}
+
+/// One verified evidence object: a single file, or a chunked descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredEvidence {
+    /// Content-addressed key of the object that must be read.
+    pub key: String,
+    /// `object` for one file, `chunked` for a descriptor over 4 MiB parts.
+    pub storage_kind: &'static str,
+    /// Lowercase hex SHA-256 of the reconstructed content.
+    pub sha256: String,
+    /// Reconstructed content length in bytes.
+    pub length: i64,
+    /// Number of chunk objects (0 for a single object).
+    pub chunk_count: i64,
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    crate::migrate::checksum_hex(&Sha256::digest(bytes))
+}
+
+fn chunk_descriptor(chunks: &[String], sha256: &str, length: usize) -> Vec<u8> {
+    // Versioned, deterministic serialization: readers reject unknown versions
+    // and any length/chunk-count mismatch instead of guessing.
+    let descriptor = serde_json::json!({
+        "format": CHUNK_DESCRIPTOR_FORMAT,
+        "version": 1,
+        "chunkBytes": EVIDENCE_CHUNK_BYTES,
+        "chunks": chunks,
+        "sha256": sha256,
+        "length": length,
+    });
+    serde_json::to_vec(&descriptor).unwrap_or_default()
+}
+
+/// Writes an immutable evidence object of any supported size.
+///
+/// Objects up to 10 MiB use the ordinary store path. Larger evidence is
+/// streamed in fixed 4 MiB parts and represented by a versioned descriptor;
+/// every part is registered in `asset_files`, so a shared part survives the
+/// deletion of one owner. A retry reuses the existing immutable objects.
+pub async fn put_evidence(pool: &PgPool, bytes: &[u8]) -> Result<StoredEvidence, sqlx::Error> {
+    if bytes.is_empty() {
+        return Err(invalid("evidence is empty").into());
+    }
+    if bytes.len() > MAX_EVIDENCE_BYTES {
+        return Err(invalid("evidence exceeds the supported maximum").into());
+    }
+    let sha256 = sha256_hex(bytes);
+    let length =
+        i64::try_from(bytes.len()).map_err(|_| invalid("evidence length is not representable"))?;
+    if bytes.len() <= MAX_BYTES {
+        let key = put(pool, bytes).await?;
+        return Ok(StoredEvidence {
+            key,
+            storage_kind: "object",
+            sha256,
+            length,
+            chunk_count: 0,
+        });
+    }
+    let mut chunks = Vec::with_capacity(bytes.len().div_ceil(EVIDENCE_CHUNK_BYTES));
+    let mut chunk_count = 0_i64;
+    for chunk in bytes.chunks(EVIDENCE_CHUNK_BYTES) {
+        chunks.push(put(pool, chunk).await?);
+        chunk_count += 1;
+    }
+    let descriptor = chunk_descriptor(&chunks, &sha256, bytes.len());
+    let key = put(pool, &descriptor).await?;
+    Ok(StoredEvidence {
+        key,
+        storage_kind: "chunked",
+        sha256,
+        length,
+        chunk_count,
+    })
+}
+
+/// Writes evidence using the caller's connection so a lifecycle transaction
+/// can bind the reference atomically with its owner.
+pub async fn put_evidence_on(
+    conn: &mut PgConnection,
+    bytes: &[u8],
+) -> Result<StoredEvidence, sqlx::Error> {
+    if bytes.is_empty() {
+        return Err(invalid("evidence is empty").into());
+    }
+    if bytes.len() > MAX_EVIDENCE_BYTES {
+        return Err(invalid("evidence exceeds the supported maximum").into());
+    }
+    let sha256 = sha256_hex(bytes);
+    let length =
+        i64::try_from(bytes.len()).map_err(|_| invalid("evidence length is not representable"))?;
+    if bytes.len() <= MAX_BYTES {
+        let key = put_on(conn, bytes).await?;
+        return Ok(StoredEvidence {
+            key,
+            storage_kind: "object",
+            sha256,
+            length,
+            chunk_count: 0,
+        });
+    }
+    let mut chunks = Vec::with_capacity(bytes.len().div_ceil(EVIDENCE_CHUNK_BYTES));
+    let mut chunk_count = 0_i64;
+    for chunk in bytes.chunks(EVIDENCE_CHUNK_BYTES) {
+        chunks.push(put_on(&mut *conn, chunk).await?);
+        chunk_count += 1;
+    }
+    let descriptor = chunk_descriptor(&chunks, &sha256, bytes.len());
+    let key = put_on(conn, &descriptor).await?;
+    Ok(StoredEvidence {
+        key,
+        storage_kind: "chunked",
+        sha256,
+        length,
+        chunk_count,
+    })
+}
+
+/// The database's registered store identity, if it has one.
+pub async fn bound_store_id(pool: &PgPool) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar("SELECT store_id FROM asset_store_binding WHERE singleton")
+        .fetch_optional(pool)
+        .await
+}
+
+/// Filesystem bytes held by the store that no owner references.
+///
+/// The store never deletes superseded objects on its own (ADR-0210), so the
+/// operator interface reports their cost instead of silently reclaiming it.
+pub async fn unreferenced_store_bytes(pool: &PgPool) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT COALESCE(sum(files.size_bytes), 0)::bigint
+           FROM asset_files files
+          WHERE NOT EXISTS (SELECT 1 FROM catalog_provider_images WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM catalog_entity_images WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM native_user_avatars WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM native_theme_assets WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM native_playlists WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM native_users WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM release_work_item_manifest_evidence
+                             WHERE asset_key = files.asset_key)
+            AND NOT EXISTS (SELECT 1 FROM release_work_item_manifest_evidence_revision
+                             WHERE asset_key = files.asset_key)",
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Reads and verifies a stored evidence object.
+///
+/// Reconstruction verifies the descriptor version, every part digest and
+/// length, then the overall SHA-256 and length. A truncated, reordered or
+/// substituted part fails closed.
+pub async fn read_evidence(
+    key: String,
+    storage_kind: String,
+    expected_sha256: String,
+    expected_length: i64,
+) -> Result<Vec<u8>, sqlx::Error> {
+    let bytes = blocking(move || read_evidence_blocking(&key, &storage_kind)).await?;
+    if bytes.len() as i64 != expected_length || sha256_hex(&bytes) != expected_sha256 {
+        return Err(invalid("evidence content differs from its recorded receipt").into());
+    }
+    Ok(bytes)
+}
+
+fn read_evidence_blocking(key: &str, storage_kind: &str) -> io::Result<Vec<u8>> {
+    let root_path = root()?;
+    match storage_kind {
+        "object" => read_verified(&root_path, key),
+        "chunked" => {
+            let descriptor = read_verified(&root_path, key)?;
+            if descriptor.len() > 1024 * 1024 {
+                return Err(invalid("evidence descriptor is oversized"));
+            }
+            let parsed: serde_json::Value = serde_json::from_slice(&descriptor)
+                .map_err(|_| invalid("evidence descriptor is not valid JSON"))?;
+            if parsed.get("format").and_then(serde_json::Value::as_str)
+                != Some(CHUNK_DESCRIPTOR_FORMAT)
+                || parsed.get("version").and_then(serde_json::Value::as_u64) != Some(1)
+                || parsed.get("chunkBytes").and_then(serde_json::Value::as_u64)
+                    != Some(EVIDENCE_CHUNK_BYTES as u64)
+            {
+                return Err(invalid("unsupported evidence descriptor"));
+            }
+            let length = parsed
+                .get("length")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| invalid("evidence descriptor has no length"))?;
+            let length = usize::try_from(length)
+                .map_err(|_| invalid("evidence descriptor length is out of range"))?;
+            if length == 0 || length > MAX_EVIDENCE_BYTES {
+                return Err(invalid("evidence descriptor length is out of range"));
+            }
+            let expected = parsed
+                .get("sha256")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| invalid("evidence descriptor has no digest"))?;
+            let chunks = parsed
+                .get("chunks")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| invalid("evidence descriptor has no chunks"))?;
+            let expected_chunks = length.div_ceil(EVIDENCE_CHUNK_BYTES);
+            if chunks.len() != expected_chunks {
+                return Err(invalid("evidence descriptor chunk count is inconsistent"));
+            }
+            let mut bytes = Vec::with_capacity(length);
+            for chunk in chunks {
+                let key = chunk
+                    .as_str()
+                    .ok_or_else(|| invalid("evidence descriptor chunk is not a key"))?;
+                bytes.extend_from_slice(&read_verified(&root_path, key)?);
+                if bytes.len() > length {
+                    return Err(invalid("evidence reconstruction exceeded its length"));
+                }
+            }
+            if bytes.len() != length || sha256_hex(&bytes) != expected {
+                return Err(invalid("evidence reconstruction failed verification"));
+            }
+            Ok(bytes)
+        }
+        _ => Err(invalid("unknown evidence storage kind")),
+    }
 }
 
 /// Removes one content-addressed file whose database references have already

@@ -23,9 +23,13 @@ use uuid::Uuid;
 mod common;
 use common::TestDb;
 
+/// ADR-0212: a provider that is not eligible produces no work at all. The
+/// worker reconciles eligibility before claiming, so a never-attempted queued
+/// row for an ineligible provider is removed instead of being claimed and
+/// recorded as a fabricated `disabled` attempt.
 #[tokio::test]
-async fn disabled_provider_task_is_claimed_and_completed_without_http() {
-    let db = TestDb::create("disabled").await;
+async fn ineligible_provider_task_is_never_claimed_or_attempted() {
+    let db = TestDb::create("ineligible").await;
     let task_store = ProviderEnrichmentStore;
     let entity_id = Uuid::now_v7();
     task_store
@@ -39,7 +43,7 @@ async fn disabled_provider_task_is_claimed_and_completed_without_http() {
             OffsetDateTime::now_utc(),
         )
         .await
-        .expect("schedule disabled provider task");
+        .expect("schedule provider task");
 
     let stats = run_enrichment_once(
         &db.pool,
@@ -51,26 +55,29 @@ async fn disabled_provider_task_is_claimed_and_completed_without_http() {
     )
     .await
     .expect("run production enrichment pass");
-    assert_eq!(stats.claimed, 1);
-    assert_eq!(stats.disabled, 1);
+    assert_eq!(stats.claimed, 0, "ineligible work is never dispatched");
+    assert_eq!(stats.disabled, 0, "no fabricated disabled attempt");
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT status FROM provider_enrichment_tasks WHERE request_key='worker-test-discogs'",
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM provider_enrichment_tasks WHERE request_key='worker-test-discogs'",
         )
         .fetch_one(&db.pool)
         .await
-        .expect("read task status"),
-        "succeeded"
+        .expect("task removed"),
+        0
     );
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT outcome FROM provider_enrichment_attempts
-             WHERE task_id=(SELECT id FROM provider_enrichment_tasks WHERE request_key='worker-test-discogs')",
-        )
-        .fetch_one(&db.pool)
-        .await
-        .expect("read disabled attempt"),
-        "disabled"
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM provider_enrichment_attempts")
+            .fetch_one(&db.pool)
+            .await
+            .expect("no attempts"),
+        0
+    );
+    assert!(
+        melodee_persistence::ProviderEligibilityStore::is_resolved(&db.pool)
+            .await
+            .expect("eligibility resolved"),
+        "the pass reconciles the installation state"
     );
     db.drop().await;
 }

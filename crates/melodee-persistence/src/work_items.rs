@@ -1113,26 +1113,35 @@ impl WorkItemStore {
                 return Err(WorkStoreError::ManifestConflict(id));
             }
         } else {
-            sqlx::query(
+            // ADR-0213: the payload is evidence, not a database column. The
+            // object is published and verified before the reference is bound.
+            let manifest_row_id: i64 = sqlx::query_scalar(
                 "INSERT INTO release_work_item_manifests (
                     work_item_id, schema_version, manifest_hash, source_snapshot_id,
                     source_signature, manifest_payload, ffprobe_path, ffprobe_version,
                     tool_metadata, source_stable, generation_duration_ms, generated_at
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+                ) VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9,$10,$11)
+                RETURNING id",
             )
             .bind(id)
             .bind(i32::from(manifest.schema_version))
             .bind(manifest_hash)
             .bind(source_snapshot_id)
             .bind(source_signature)
-            .bind(payload)
             .bind(manifest.inspection.ffprobe_path.clone())
             .bind(manifest.inspection.ffprobe_version.clone())
             .bind(serde_json::json!({ "schema_version": manifest.schema_version }))
             .bind(manifest.inspection.source_stable)
             .bind(generation_duration_ms.max(0))
             .bind(now)
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
+            .await?;
+            crate::manifest_evidence::store_evidence_in_transaction(
+                &mut tx,
+                manifest_row_id,
+                &payload,
+                now,
+            )
             .await?;
         }
 
@@ -1380,18 +1389,31 @@ impl WorkItemStore {
 
         item.state
             .ensure_transition(IngestionState::Validating, TransitionKind::Worker)?;
+        let manifest_row_id: i64 = sqlx::query_scalar(
+            "SELECT id FROM release_work_item_manifests WHERE work_item_id = $1 FOR UPDATE",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(WorkStoreError::ManifestNotFound(id))?;
+        crate::manifest_evidence::store_evidence_in_transaction(
+            &mut tx,
+            manifest_row_id,
+            &payload,
+            now,
+        )
+        .await?;
         let manifest_update = sqlx::query(
             "UPDATE release_work_item_manifests
              SET schema_version = $2,
-                 manifest_payload = $3,
-                 manifest_hash = $4,
-                 normalization_provenance = $5,
-                 normalization_completed_at = $6
+                 manifest_payload = NULL,
+                 manifest_hash = $3,
+                 normalization_provenance = $4,
+                 normalization_completed_at = $5
              WHERE work_item_id = $1",
         )
         .bind(id)
         .bind(i32::from(manifest.schema_version))
-        .bind(payload)
         .bind(manifest_hash)
         .bind(provenance)
         .bind(now)
@@ -1453,7 +1475,7 @@ impl WorkItemStore {
                 Uuid,
                 i32,
                 String,
-                serde_json::Value,
+                Option<serde_json::Value>,
                 Option<i64>,
                 Option<String>,
                 OffsetDateTime,
@@ -1466,27 +1488,39 @@ impl WorkItemStore {
         .bind(work_item_id)
         .fetch_optional(pool)
         .await?;
-        Ok(row.map(
-            |(
-                id,
-                work_item_id,
-                schema_version,
-                manifest_hash,
-                payload,
-                source_snapshot_id,
-                source_signature,
-                generated_at,
-            )| StoredManifest {
-                id,
-                work_item_id,
-                schema_version,
-                manifest_hash,
-                payload,
-                source_snapshot_id,
-                source_signature,
-                generated_at,
-            },
-        ))
+        let Some((
+            id,
+            work_item_id,
+            schema_version,
+            manifest_hash,
+            payload,
+            source_snapshot_id,
+            source_signature,
+            generated_at,
+        )) = row
+        else {
+            return Ok(None);
+        };
+        // ADR-0213: an upgraded manifest has no inline payload. The verified
+        // evidence file is read only here, for an authorized lifecycle read.
+        let payload = match payload {
+            Some(payload) => payload,
+            None => crate::manifest_evidence::load_manifest(pool, id)
+                .await
+                .map_err(|error| {
+                    WorkStoreError::Database(sqlx::Error::Protocol(error.to_string()))
+                })?,
+        };
+        Ok(Some(StoredManifest {
+            id,
+            work_item_id,
+            schema_version,
+            manifest_hash,
+            payload,
+            source_snapshot_id,
+            source_signature,
+            generated_at,
+        }))
     }
 
     /// Atomically persists immutable authorization and publication intent,
@@ -1581,14 +1615,29 @@ impl WorkItemStore {
         .bind(now)
         .execute(&mut *tx)
         .await?;
+        // ADR-0213: the v3 payload is evidence. Replace the reference only
+        // after the new object has been published and verified.
+        let manifest_row_id: i64 = sqlx::query_scalar(
+            "SELECT id FROM release_work_item_manifests WHERE work_item_id = $1 FOR UPDATE",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(WorkStoreError::ManifestNotFound(id))?;
+        crate::manifest_evidence::store_evidence_in_transaction(
+            &mut tx,
+            manifest_row_id,
+            &manifest_payload,
+            now,
+        )
+        .await?;
         sqlx::query(
             "UPDATE release_work_item_manifests
-             SET schema_version = $2, manifest_payload = $3
+             SET schema_version = $2, manifest_payload = NULL
              WHERE work_item_id = $1",
         )
         .bind(id)
         .bind(i32::from(manifest.schema_version))
-        .bind(manifest_payload)
         .execute(&mut *tx)
         .await?;
         sqlx::query(

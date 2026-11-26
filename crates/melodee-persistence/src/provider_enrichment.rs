@@ -25,6 +25,16 @@ pub enum EnrichmentEntityType {
 }
 
 impl EnrichmentEntityType {
+    /// Parses the store's stable `entity_type` vocabulary.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "artist" => Some(Self::Artist),
+            "release" => Some(Self::Release),
+            _ => None,
+        }
+    }
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Artist => "artist",
@@ -378,14 +388,30 @@ impl ProviderEnrichmentStore {
         let lease_seconds = lease_seconds.clamp(5, 900);
         let mut tx = pool.begin().await?;
         let lease_expires_at = now + Duration::seconds(lease_seconds);
+        // ADR-0212: the claim statement re-checks current eligibility, so work
+        // enqueued before a disablement is never dispatched, and it only scans
+        // runnable/recoverable shapes. Dormant history, terminal failures and
+        // successes are outside the index predicate.
         let rows = sqlx::query_as::<_, (Uuid, String, Uuid, String, String, String, i32)>(
-            "SELECT id, entity_type, entity_id, provider, purpose, request_key,
-                    attempt_count
-             FROM provider_enrichment_tasks
-             WHERE (status IN ('queued','retry') AND next_attempt_at <= $1)
-                OR (status = 'running' AND lease_expires_at < $1)
-             ORDER BY next_attempt_at, updated_at, id
-             FOR UPDATE SKIP LOCKED
+            "SELECT task.id, task.entity_type, task.entity_id, task.provider,
+                    task.purpose, task.request_key, task.attempt_count
+             FROM provider_enrichment_tasks task
+             LEFT JOIN provider_eligibility eligibility
+               ON eligibility.provider = task.provider
+             WHERE (
+                     (task.status IN ('queued','retry') AND task.next_attempt_at <= $1)
+                     OR (task.status = 'running' AND task.lease_expires_at < $1)
+                   )
+               AND (
+                     eligibility.provider IS NULL
+                     OR CASE
+                          WHEN task.purpose IN ('artist_artwork','release_artwork')
+                          THEN eligibility.artwork_eligible
+                          ELSE eligibility.metadata_eligible
+                        END
+                   )
+             ORDER BY task.next_attempt_at, task.updated_at, task.id
+             FOR UPDATE OF task SKIP LOCKED
              LIMIT $2",
         )
         .bind(now)
@@ -438,6 +464,42 @@ impl ProviderEnrichmentStore {
         }
         tx.commit().await?;
         Ok(claimed)
+    }
+
+    /// Releases a claim that observed disablement before any provider I/O.
+    ///
+    /// ADR-0212: no attempt row is written and the attempt counter is
+    /// restored, so a disablement race cannot burn a genuine retry budget or
+    /// fabricate `disabled` history. The row returns to the runnable set, where
+    /// the claim statement's eligibility check keeps it parked until the
+    /// provider is eligible again.
+    pub async fn release_claim(
+        &self,
+        pool: &PgPool,
+        task: &ClaimedEnrichmentTask,
+        worker: &str,
+        now: OffsetDateTime,
+    ) -> Result<(), ProviderEnrichmentStoreError> {
+        let updated = sqlx::query(
+            "UPDATE provider_enrichment_tasks
+             SET status = CASE WHEN attempt_count <= 1 THEN 'queued' ELSE 'retry' END,
+                 attempt_count = GREATEST(attempt_count - 1, 0),
+                 next_attempt_at = $4,
+                 lease_owner = NULL, lease_acquired_at = NULL,
+                 lease_expires_at = NULL, updated_at = $4
+             WHERE id = $1 AND status = 'running' AND lease_owner = $2
+               AND attempt_count = $3",
+        )
+        .bind(task.id)
+        .bind(worker)
+        .bind(task.attempt_count)
+        .bind(now)
+        .execute(pool)
+        .await?;
+        if updated.rows_affected() != 1 {
+            return Err(ProviderEnrichmentStoreError::LeaseLost);
+        }
+        Ok(())
     }
 
     pub async fn complete(

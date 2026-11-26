@@ -71,9 +71,12 @@ async fn cataloged_policy_input_exists_without_readable_source_or_canonical_medi
         snapshot.tracks[0].byte_hash.as_deref(),
         Some(fixture.published.normalized_byte_hash.as_str())
     );
+    // ADR-0213/ADR-0186: the sealed fingerprint lives in evidence, and the
+    // durable comparison fact is its BLAKE3 digest.
+    assert_eq!(snapshot.tracks[0].audio_fingerprint, None);
     assert_eq!(
-        snapshot.tracks[0].audio_fingerprint.as_deref(),
-        Some("fixture-fingerprint-0001")
+        snapshot.tracks[0].audio_fingerprint_digest.as_deref(),
+        Some(melodee_domain::acoustic_fingerprint_digest("fixture-fingerprint-0001").as_str())
     );
     assert!(
         !snapshot.tracks[0].has_confirmed_audio_identity,

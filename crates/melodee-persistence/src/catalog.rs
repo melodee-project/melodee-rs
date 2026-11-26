@@ -27,10 +27,7 @@ use uuid::Uuid;
 use crate::catalog_mutations::ensure_correction_scope;
 use crate::config::WorkEngineConfig;
 use crate::error::WorkStoreError;
-use crate::provider_enrichment::{
-    EnrichmentEntityType, EnrichmentPurpose, schedule_in_transaction,
-};
-use crate::providers::KNOWN_PROVIDERS;
+use crate::provider_eligibility::schedule_catalog_enrichment;
 use crate::work_items::{
     WorkItemRow, WorkItemStore, ensure_active_lease, insert_event, lock_for_update,
 };
@@ -117,6 +114,10 @@ pub enum CatalogStoreError {
     MutationConflict,
     #[error("provider enrichment scheduling failed")]
     ProviderEnrichment(#[from] crate::provider_enrichment::ProviderEnrichmentStoreError),
+    #[error("provider eligibility scheduling failed")]
+    ProviderEligibility(#[from] crate::provider_eligibility::ProviderEligibilityError),
+    #[error("manifest evidence could not be read: {0}")]
+    ManifestEvidence(String),
 }
 
 /// Legacy catalog entity namespace for immutable public-ID mapping evidence.
@@ -3353,7 +3354,7 @@ async fn load_manifest_binding(
             i64,
             i32,
             String,
-            serde_json::Value,
+            Option<serde_json::Value>,
             Uuid,
             String,
             serde_json::Value,
@@ -3372,11 +3373,19 @@ async fn load_manifest_binding(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or(CatalogStoreError::ImportConflict(work_item_id))?;
+    // ADR-0213: catalog import is an authorized lifecycle read of the full
+    // evidence object; routine policy/browse paths use the compact facts.
+    let payload = match row.3 {
+        Some(payload) => payload,
+        None => crate::manifest_evidence::load_manifest_on_connection(&mut *tx, row.0)
+            .await
+            .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?,
+    };
     Ok(ManifestBinding {
         manifest_row_id: row.0,
         schema_version: row.1,
         semantic_hash: row.2,
-        payload: row.3,
+        payload,
         receipt_release_id: row.4,
         plan_hash: row.5,
         plan_payload: row.6,
@@ -4303,56 +4312,22 @@ async fn persist_prepared_import(
 
 const MAX_AUDIO_IDENTITY_PROPOSALS_PER_IMPORT: usize = 256;
 
-async fn schedule_provider_enrichment<I>(
+/// Schedules provider work for the Artists and Release an import created.
+///
+/// ADR-0212: scheduling is two set-based statements regardless of how many
+/// Artists or providers exist. Eligibility is joined from the installation
+/// record inside this transaction; there is no per-entity capability lookup,
+/// network call or catalog scan on the import path.
+async fn schedule_provider_enrichment(
     tx: &mut Transaction<'_, Postgres>,
     release_id: Uuid,
-    artist_ids: I,
+    artist_ids: impl IntoIterator<Item = Uuid>,
     now: OffsetDateTime,
-) -> Result<(), CatalogStoreError>
-where
-    I: IntoIterator<Item = Uuid>,
-{
+) -> Result<(), CatalogStoreError> {
     let mut artists = artist_ids.into_iter().collect::<Vec<_>>();
     artists.sort_unstable();
     artists.dedup();
-    for artist_id in artists {
-        for provider in KNOWN_PROVIDERS {
-            for purpose in [
-                EnrichmentPurpose::ArtistMetadata,
-                EnrichmentPurpose::ArtistArtwork,
-            ] {
-                let request_key = format!("artist:{artist_id}:{provider}:{}", purpose.as_str());
-                schedule_in_transaction(
-                    tx,
-                    EnrichmentEntityType::Artist,
-                    artist_id,
-                    provider,
-                    purpose,
-                    &request_key,
-                    now,
-                )
-                .await?;
-            }
-        }
-    }
-    for provider in KNOWN_PROVIDERS {
-        for purpose in [
-            EnrichmentPurpose::ReleaseMetadata,
-            EnrichmentPurpose::ReleaseArtwork,
-        ] {
-            let request_key = format!("release:{release_id}:{provider}:{}", purpose.as_str());
-            schedule_in_transaction(
-                tx,
-                EnrichmentEntityType::Release,
-                release_id,
-                provider,
-                purpose,
-                &request_key,
-                now,
-            )
-            .await?;
-        }
-    }
+    schedule_catalog_enrichment(tx, release_id, &artists, now).await?;
     Ok(())
 }
 

@@ -45,6 +45,9 @@ pub enum WorkStoreError {
     #[error("manifest serialization error")]
     ManifestSerialization(#[from] serde_json::Error),
 
+    #[error("manifest evidence storage failed")]
+    ManifestEvidence(#[from] crate::manifest_evidence::ManifestEvidenceError),
+
     #[error("a different manifest is already authoritative for work item {0}")]
     ManifestConflict(Uuid),
 

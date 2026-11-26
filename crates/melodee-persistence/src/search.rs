@@ -255,6 +255,15 @@ impl SearchProjectionStore {
         validate_nonblank("search root", search_root)?;
         validate_nonblank("requested by", requested_by)?;
         let job_id = Uuid::now_v7();
+        // ADR-0214: pruning pauses while a rebuild is requested or resumable.
+        // Registration takes the same exclusive advisory key as a prune batch,
+        // so a registration that commits concurrently with a prune either
+        // blocks the delete or observes the new job.
+        let mut tx = pool.begin().await?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind((i64::from(19_761_125_i32) << 32) | i64::from(301_i32))
+            .execute(&mut *tx)
+            .await?;
         let result = sqlx::query(
             "INSERT INTO search_rebuild_jobs (
                 job_id, search_root, requested_at, requested_by, status, available_at
@@ -264,8 +273,9 @@ impl SearchProjectionStore {
         .bind(search_root)
         .bind(now)
         .bind(requested_by)
-        .execute(pool)
+        .execute(&mut *tx)
         .await;
+        tx.commit().await?;
         match result {
             Ok(_) => Self::get_rebuild_job(pool, job_id).await,
             Err(error) if is_unique_violation(&error) => {
@@ -427,14 +437,20 @@ impl SearchProjectionStore {
         let status: String = row.try_get(1)?;
         let generation_id: Option<Uuid> = row.try_get(2)?;
         if status == "requested" {
-            let high_water_mark = sqlx::query_scalar::<_, Option<i64>>(
-                "SELECT max(id) FROM catalog_projection_outbox
-                 WHERE projection_name = $1",
+            // `max(id)` cannot prove completeness once processed detail has
+            // been pruned; the durable per-projection watermark participates.
+            let high_water_mark = sqlx::query_scalar::<_, i64>(
+                "SELECT GREATEST(
+                            COALESCE((SELECT max(id) FROM catalog_projection_outbox
+                                       WHERE projection_name = $1), 0),
+                            COALESCE((SELECT highest_pruned_id
+                                        FROM search_outbox_maintenance
+                                       WHERE projection_name = $1), 0)
+                        )",
             )
             .bind(SEARCH_PROJECTION_NAME)
             .fetch_one(&mut *tx)
-            .await?
-            .unwrap_or(0);
+            .await?;
             let new_generation_id = Uuid::now_v7();
             sqlx::query(
                 "INSERT INTO search_generations (
@@ -1079,6 +1095,13 @@ impl SearchProjectionStore {
             ));
         }
         let mut tx = pool.begin().await?;
+        // ADR-0214: hour finalization takes the exclusive form of this key, so
+        // a completion that is in flight when an hour closes is visible to the
+        // aggregate and a late commit cannot lose a count.
+        sqlx::query("SELECT pg_advisory_xact_lock_shared($1)")
+            .bind((i64::from(19_761_125_i32) << 32) | i64::from(302_i32))
+            .execute(&mut *tx)
+            .await?;
         let updated = sqlx::query(
             "UPDATE catalog_projection_outbox
              SET processed_at = $4, lease_owner = NULL, lease_expires_at = NULL,
@@ -1349,22 +1372,22 @@ impl SearchProjectionStore {
         }
     }
 
-    /// Per-hour counts of Track projection rows processed since `since`,
-    /// oldest first.
+    /// Distinct Tracks successfully indexed per UTC hour, oldest first.
     ///
     /// This is the durable evidence behind "Tracks indexed per hour": the
     /// outbox row is marked `processed_at` only after the Tantivy commit that
     /// made the document queryable, so the series measures real index work
-    /// rather than a work-item state. Counts distinct Tracks per hour, so a
+    /// rather than a work-item state. Counts are distinct Tracks per hour, so a
     /// Track re-projected several times in one hour is not counted repeatedly.
-    /// Bounded by the window (the `processed_at` index backs the range) and
-    /// grouped to one row per hour.
+    ///
+    /// ADR-0214: a closed hour comes from its immutable finalized total, while
+    /// hours at or after `finalized_through` (including the live partial hour)
+    /// still come from raw detail. The result is identical before and after
+    /// pruning, and the zero-filled spine keeps the Admin chart axis stable.
     pub async fn processed_tracks_hourly(
         pool: &PgPool,
         since: OffsetDateTime,
     ) -> Result<Vec<HourlyCompletionCount>, SearchStoreError> {
-        // Zero-filled hour spine over the same window as the completion series so
-        // both chart series share one axis and empty hours plot as 0.
         let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
             "WITH spine AS (
                SELECT generate_series(
@@ -1373,15 +1396,31 @@ impl SearchProjectionStore {
                         interval '1 hour'
                       ) AS hour
              ),
-             counted AS (
-               SELECT date_trunc('hour', processed_at) AS hour,
-                      COUNT(DISTINCT entity_id)::bigint AS count
-                 FROM catalog_projection_outbox
+             maintenance AS (
+               SELECT finalized_through FROM search_outbox_maintenance
                 WHERE projection_name = $1
-                  AND entity_type = 'track'
-                  AND processed_at IS NOT NULL
-                  AND processed_at >= $2
-                GROUP BY 1
+             ),
+             counted AS (
+               SELECT hour, sum(indexed_tracks)::bigint AS count
+                 FROM (
+                   SELECT totals.hour, totals.indexed_tracks
+                     FROM search_outbox_hourly_totals totals
+                    WHERE totals.projection_name = $1
+                      AND totals.hour >= date_trunc('hour', $2::timestamptz)
+                   UNION ALL
+                   SELECT date_trunc('hour', outbox.processed_at) AS hour,
+                          COUNT(DISTINCT outbox.entity_id)::bigint AS indexed_tracks
+                     FROM catalog_projection_outbox outbox
+                    WHERE outbox.projection_name = $1
+                      AND outbox.entity_type = 'track'
+                      AND outbox.processed_at IS NOT NULL
+                      AND outbox.processed_at >= $2
+                      AND date_trunc('hour', outbox.processed_at) > COALESCE(
+                            (SELECT finalized_through FROM maintenance),
+                            '-infinity'::timestamptz)
+                    GROUP BY 1
+                 ) merged
+                GROUP BY hour
              )
              SELECT spine.hour, COALESCE(counted.count, 0)
                FROM spine LEFT JOIN counted USING (hour)
@@ -1398,13 +1437,20 @@ impl SearchProjectionStore {
     }
 
     pub async fn max_outbox_id(pool: &PgPool) -> Result<i64, SearchStoreError> {
-        Ok(sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT max(id) FROM catalog_projection_outbox WHERE projection_name = $1",
+        // ADR-0214: after pruning, the highest existing id is no longer the
+        // highest id that ever existed. The pruned watermark supplies the rest.
+        Ok(sqlx::query_scalar::<_, i64>(
+            "SELECT GREATEST(
+                        COALESCE((SELECT max(id) FROM catalog_projection_outbox
+                                   WHERE projection_name = $1), 0),
+                        COALESCE((SELECT highest_pruned_id
+                                    FROM search_outbox_maintenance
+                                   WHERE projection_name = $1), 0)
+                    )",
         )
         .bind(SEARCH_PROJECTION_NAME)
         .fetch_one(pool)
-        .await?
-        .unwrap_or(0))
+        .await?)
     }
 }
 

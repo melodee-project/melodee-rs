@@ -1495,11 +1495,12 @@ async fn coalesce_extended_artist_data(
     sqlx::query(
         "UPDATE provider_enrichment_tasks
             SET status='failed', lease_owner=NULL, lease_acquired_at=NULL,
-                lease_expires_at=NULL, last_error_category='artist_merged',
+                lease_expires_at=NULL, dormant_at=NULL,
+                last_error_category='artist_merged',
                 last_error_message='duplicate provider task retained on merged Artist tombstone',
                 updated_at=$2, completed_at=$2
           WHERE entity_type='artist' AND entity_id=$1
-            AND status IN ('queued','running','retry')",
+            AND status IN ('queued','running','retry','dormant')",
     )
     .bind(source_id)
     .bind(now)

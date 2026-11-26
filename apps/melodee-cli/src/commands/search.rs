@@ -40,6 +40,17 @@ pub(crate) enum SearchCommands {
     Parse { expression: String },
     /// Parse, validate, and print the framework-free query plan.
     Explain { expression: String },
+    /// Preview or apply bounded processed-outbox retention (ADR-0214).
+    ///
+    /// A bare invocation shows the dry-run preview. `--apply` uses exactly the
+    /// same selection, fencing and audit logic as the scheduled maintenance
+    /// job; `--dry-run` is accepted for explicitness.
+    PruneOutbox {
+        #[arg(long, conflicts_with = "apply")]
+        dry_run: bool,
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 pub(crate) async fn run(command: SearchCommands) {
@@ -102,6 +113,54 @@ pub(crate) async fn run(command: SearchCommands) {
                     std::process::exit(1);
                 })
             );
+        }
+        SearchCommands::PruneOutbox { dry_run, apply } => {
+            let pool = pool().await;
+            if dry_run && apply {
+                eprintln!("error: --dry-run and --apply are mutually exclusive");
+                std::process::exit(2);
+            }
+            let retention_days = match melodee_persistence::SettingsResolver::from_env(&pool) {
+                Ok(resolver) => resolver
+                    .resolve("search.processedOutboxRetentionDays")
+                    .await
+                    .ok()
+                    .and_then(|setting| setting.value)
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or(config.processed_outbox_retention_days),
+                Err(_) => config.processed_outbox_retention_days,
+            };
+            let retention_days = retention_days.clamp(
+                melodee_persistence::MIN_PROCESSED_OUTBOX_RETENTION_DAYS,
+                melodee_persistence::MAX_PROCESSED_OUTBOX_RETENTION_DAYS,
+            );
+            let root = config.search_root.to_string_lossy().to_string();
+            let now = time::OffsetDateTime::now_utc();
+            let result = melodee_persistence::prune_processed_outbox(
+                &pool,
+                melodee_persistence::OutboxRetentionConfig { retention_days },
+                apply,
+                // One CLI pass stays bounded; rerun to continue.
+                32,
+                Some(root.as_str()),
+                now,
+            )
+            .await;
+            match result {
+                Ok(result) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&result).unwrap_or_else(|error| {
+                            eprintln!("error: cannot serialize retention result: {error}");
+                            std::process::exit(1);
+                        })
+                    );
+                }
+                Err(error) => {
+                    eprintln!("error: outbox retention failed: {error}");
+                    std::process::exit(1);
+                }
+            }
         }
         SearchCommands::Status => {
             let pool = pool().await;

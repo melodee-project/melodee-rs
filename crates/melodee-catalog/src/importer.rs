@@ -668,6 +668,20 @@ fn failure_disposition(error: &CatalogStoreError) -> (&'static str, FailureClass
             "catalog.provider_enrichment_invalid",
             FailureClass::Permanent,
         ),
+        CatalogStoreError::ProviderEligibility(
+            melodee_persistence::ProviderEligibilityError::Database(_),
+        ) => (
+            "catalog.provider_eligibility_database",
+            FailureClass::Retryable,
+        ),
+        CatalogStoreError::ProviderEligibility(_) => (
+            "catalog.provider_eligibility_invalid",
+            FailureClass::Permanent,
+        ),
+        CatalogStoreError::ManifestEvidence(_) => (
+            "catalog.manifest_evidence_unavailable",
+            FailureClass::Retryable,
+        ),
         CatalogStoreError::Serialization(_) => {
             ("catalog.manifest_invalid", FailureClass::Permanent)
         }

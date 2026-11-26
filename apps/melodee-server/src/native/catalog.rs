@@ -1954,19 +1954,69 @@ pub async fn get_song(
     ))
 }
 
+/// Extracts plain-text lyrics from one manifest payload, preferring embedded
+/// tag text and falling back to a parsed lyrics sidecar (unchanged precedence).
+fn lyrics_from_manifest(manifest: &serde_json::Value) -> Option<String> {
+    let files = manifest
+        .get("files")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    for file in files {
+        let metadata = file.get("metadata");
+        let candidate = metadata
+            .and_then(|metadata| metadata.get("raw"))
+            .and_then(|raw| raw.get("lyrics"))
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| {
+                metadata
+                    .and_then(|metadata| metadata.get("lyrics"))
+                    .and_then(serde_json::Value::as_str)
+            });
+        if let Some(value) = candidate.filter(|value| !value.is_empty()) {
+            return Some(value.to_owned());
+        }
+    }
+    let sidecars = manifest
+        .get("normalization")
+        .and_then(|normalization| normalization.get("parsed_sidecars"))
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    sidecars
+        .iter()
+        .filter(|sidecar| {
+            sidecar
+                .get("sidecar_type")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|kind| matches!(kind, "txt" | "lyrics" | "lrc"))
+        })
+        .find_map(|sidecar| {
+            let parsed = sidecar.get("parsed");
+            parsed
+                .and_then(|parsed| parsed.get("value"))
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| {
+                    parsed
+                        .and_then(|parsed| parsed.get("content"))
+                        .and_then(serde_json::Value::as_str)
+                })
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+}
+
 pub async fn song_lyrics(
     State(state): State<NativeState>,
     Authenticated(principal, _binding): Authenticated,
     Path(id): Path<Uuid>,
 ) -> Result<Json<LyricsDto>, NativeApiError> {
+    // ADR-0213: lyrics are large manifest evidence. This is an authorized
+    // single-Track detail request, so it reads exactly one evidence object and
+    // never touches a browse or listing path.
     let row = sqlx::query(
         "SELECT track.title, COALESCE(track.display_artist, primary_artist.canonical_name),
-                NULLIF(COALESCE(
-                  file.value->'metadata'->'raw'->>'lyrics',
-                  file.value->'metadata'->>'lyrics',
-                  lyrics_sidecar.value->'parsed'->>'value',
-                  lyrics_sidecar.value->'parsed'->>'content'
-                ), '') AS lyrics
+                catalog_import.manifest_row_id
          FROM tracks track
          JOIN releases release ON release.id=track.release_id AND release.status='active'
          JOIN LATERAL (
@@ -1976,14 +2026,6 @@ pub async fn song_lyrics(
            ORDER BY billing.presentation_order, billing.id LIMIT 1
          ) primary_artist ON true
          LEFT JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
-         LEFT JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-         LEFT JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-           ON file.value->>'relative_path' = track.source_path
-         LEFT JOIN LATERAL jsonb_array_elements(
-           COALESCE(manifest.manifest_payload->'normalization'->'parsed_sidecars', '[]')
-         ) lyrics_sidecar(value)
-           ON lyrics_sidecar.value->>'sidecar_type' IN ('txt', 'lyrics', 'lrc')
-          AND lyrics_sidecar.value->>'relative_path' = regexp_replace(track.source_path, '\\.[^./]+$', '.txt')
          WHERE track.public_api_id = $1
            AND native_user_can_access_release($2, track.release_id)
          ORDER BY catalog_import.imported_at DESC NULLS LAST LIMIT 1",
@@ -1993,7 +2035,17 @@ pub async fn song_lyrics(
     .fetch_optional(&state.pool)
     .await?
     .ok_or(NativeApiError::CapturedNotFound("Song not found"))?;
-    let plain_text: Option<String> = row.try_get(2)?;
+    let manifest_row_id: Option<i64> = row.try_get(2)?;
+    let plain_text = match manifest_row_id {
+        Some(manifest_row_id) => {
+            let manifest =
+                melodee_persistence::manifest_evidence::load_manifest(&state.pool, manifest_row_id)
+                    .await
+                    .map_err(|_| NativeApiError::CapturedNotFound("Lyrics not found"))?;
+            lyrics_from_manifest(&manifest)
+        }
+        None => None,
+    };
     let plain_text = plain_text.ok_or(NativeApiError::CapturedNotFound("Lyrics not found"))?;
     Ok(Json(LyricsDto {
         song_id: id,

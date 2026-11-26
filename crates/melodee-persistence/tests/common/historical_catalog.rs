@@ -25,7 +25,17 @@ pub async fn import(
         },
     )
     .await;
-    let handoff: serde_json::Value = sqlx::query_scalar(
+    let manifest_row_id: i64 =
+        sqlx::query_scalar("SELECT id FROM release_work_item_manifests WHERE work_item_id=$1")
+            .bind(fixture.work_item_id)
+            .fetch_one(&source.pool)
+            .await
+            .expect("read synthetic manifest row");
+    let manifest_payload =
+        melodee_persistence::manifest_evidence::load_manifest(&source.pool, manifest_row_id)
+            .await
+            .expect("read synthetic manifest evidence");
+    let mut handoff: serde_json::Value = sqlx::query_scalar(
         "SELECT jsonb_build_array(to_jsonb(w),to_jsonb(m),to_jsonb(a),to_jsonb(p),to_jsonb(r))
            FROM release_work_items w
            JOIN release_work_item_manifests m ON m.work_item_id=w.id
@@ -37,6 +47,12 @@ pub async fn import(
     .fetch_one(&source.pool)
     .await
     .expect("read synthetic v3 publication");
+    // ADR-0213: current manifests keep their payload as evidence, while the
+    // historical snapshot still requires an inline column. The fixture
+    // restores the payload for the copy only.
+    if let Some(manifest) = handoff.get_mut(1) {
+        manifest["manifest_payload"] = manifest_payload;
+    }
     for (index, insert) in [
         "INSERT INTO release_work_items SELECT * FROM jsonb_populate_record(NULL::release_work_items,$1)",
         "INSERT INTO release_work_item_manifests OVERRIDING SYSTEM VALUE SELECT * FROM jsonb_populate_record(NULL::release_work_item_manifests,$1)",

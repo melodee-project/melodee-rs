@@ -9,6 +9,37 @@ Provider enrichment is a durable background workflow. Catalog import schedules i
 and Release metadata/artwork tasks and does not wait for the network. PostgreSQL is authoritative
 for task state; the response cache is rebuildable evidence.
 
+## Which providers are scheduled
+
+An external provider is **eligible** when it is enabled in effective settings *and* every required
+credential resolves to a non-blank value. A blank or whitespace-only secret counts as "not
+configured". MusicBrainz is the local option and needs no credential. Built-in Melodee search stays
+available in interactive search but never creates background work.
+
+Eligibility is recorded once per installation as booleans plus a revision — never credentials —
+and refreshed at startup, on settings changes and at least once per minute. The capability
+endpoint, the catalog importer, the backfill and the worker all use that one record.
+
+- An import schedules work only for eligible providers. With three of nine providers eligible,
+  one new Artist and one new Release create **12** tasks; with none eligible the import creates
+  zero tasks and still reaches playable, cataloged media.
+- Repeating an import creates no additional tasks.
+- Enabling a provider later starts one durable backfill per revision. It walks live Artists and
+  Releases by stable keyset in pages of 250 and creates only the missing purposes, so the existing
+  catalog is covered without a re-import. Disabling fences a running scan.
+- Disabling a provider reconciles the installed backlog: never-attempted queued rows are removed,
+  historically attempted unfinished work and `disabled`-only successes become `dormant`, genuine
+  successes and exhausted genuine failures are preserved. Dormant rows keep their task ID,
+  attempt history and retry budget, are not claimed, and become runnable exactly once when the
+  provider is enabled again.
+- A disablement observed before any request releases the claim without burning an attempt or
+  recording a `disabled` attempt. Requests already in flight finish under their lease.
+
+Provider eligibility, runnable/dormant/retry/failed counts, oldest runnable age and backfill
+progress are available at `GET /api/admin/v1/processing/enrichment` and in the Admin
+System → Search panel. Enrichment lag is reported separately from time to playable: a Release is
+playable as soon as it is cataloged, whether or not a provider has answered.
+
 ## Task lifecycle
 
 Each task records its provider, purpose, request key, attempt count, status, lease, next attempt,
@@ -47,8 +78,10 @@ raw authorization header is included.
 
 For direct database inspection, query `provider_enrichment_tasks` for the current state and
 `provider_enrichment_attempts` for the full attempt history. A task with `status = 'retry'` is
-waiting for `next_attempt_at`; `failed` means its bounded attempt budget was exhausted. A disabled
-provider is recorded as a successful `disabled` attempt rather than treated as a catalog failure.
+waiting for `next_attempt_at`; `failed` means its bounded attempt budget was exhausted;
+`dormant` means the provider is not eligible and the work is suspended with its history intact.
+Rows written before this behavior (a successful `disabled` attempt) are reconciled to `dormant`
+the first time eligibility is resolved.
 
 Provider failures do not quarantine or delete media. To recover after correcting a URL or
 credential, leave the task queued for its next retry or re-run the bounded worker pass; repeating

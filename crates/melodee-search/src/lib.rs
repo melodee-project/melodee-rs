@@ -22,8 +22,8 @@ pub mod worker;
 pub use config::{
     ENV_SEARCH_BATCH_SIZE, ENV_SEARCH_DEFAULT_LIMIT, ENV_SEARCH_ENABLED, ENV_SEARCH_LEASE_SECONDS,
     ENV_SEARCH_MAX_LIMIT, ENV_SEARCH_MAX_OUTBOX_ATTEMPTS, ENV_SEARCH_POLL_INTERVAL_MS,
-    ENV_SEARCH_ROOT, ENV_SEARCH_SNAPSHOT_PAGE_SIZE, SearchConfig, is_inside_root,
-    reject_root_overlap, validate_search_root,
+    ENV_SEARCH_PROCESSED_OUTBOX_RETENTION_DAYS, ENV_SEARCH_ROOT, ENV_SEARCH_SNAPSHOT_PAGE_SIZE,
+    SearchConfig, is_inside_root, reject_root_overlap, validate_search_root,
 };
 pub use documents::{ArtistDoc, ReleaseDoc, TrackDoc};
 pub use error::SearchError;

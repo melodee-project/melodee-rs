@@ -32,7 +32,10 @@ enum Commands {
         deep: bool,
     },
     /// Apply database migrations (explicit SQL, from empty or current).
-    Migrate,
+    ///
+    /// Without flags this resumes the normal upgrade, including the independent
+    /// manifest evidence check before finalization.
+    Migrate(commands::migrate::MigrateArgs),
     /// Inspect durable Release work items.
     Work {
         #[command(subcommand)]
@@ -131,14 +134,7 @@ async fn main() {
 
     match cli.command {
         Commands::Doctor { deep } => commands::doctor::run_doctor(deep).await,
-        Commands::Migrate => {
-            let pool = commands::common::pool().await;
-            if let Err(e) = melodee_persistence::migrate(&pool).await {
-                eprintln!("error: migration failed: {e}");
-                std::process::exit(1);
-            }
-            println!("migrations applied");
-        }
+        Commands::Migrate(args) => commands::migrate::run(args).await,
         Commands::Work { command } => commands::work::run(command).await,
         Commands::Ingest { command } => commands::ingest::run(command).await,
         Commands::Policy { command } => commands::policy::run(command).await,

@@ -117,6 +117,51 @@ representative Artist searches afterward. An older image expects the previous sc
 so restore the pre-upgrade database backup with the previous image for rollback; do not delete
 snapshot history or decrement entity revisions.
 
+## Manifest evidence migration (0059) and search-outbox retention (0058)
+
+Migration `0059_manifest_evidence_files.sql` adds the manifest evidence reference, compact query
+facts, resumable progress and per-row receipts, and makes the inline `manifest_payload` column
+nullable. It does **not** remove inline bytes. The upgrade then runs, through the normal
+`melodee-cli migrate` entry point (or the same gate at server startup):
+
+1. **backfill** — up to 50 manifests per checkpoint in stable ID order, one large manifest in
+   flight, each object read back and compared with its inline source before a receipt is written;
+2. **independent verification** — every evidence file read from its final path, SHA-256 and length
+   checked, reconstructed JSON compared with any remaining inline payload, and recomputed query
+   facts compared with the stored facts;
+3. **finalize** — inline payloads cleared only after that check, per row, fenced by the manifest
+   hash.
+
+Read-only operator commands are safe before and after the upgrade:
+
+```bash
+docker compose exec melodee melodee-cli migrate --preflight
+docker compose exec melodee melodee-cli migrate --status
+docker compose exec melodee melodee-cli migrate --verify
+```
+
+`--preflight` reports migration currency, the bound asset store and its root, headroom, manifest and
+evidence byte counts, search-outbox backlog and resolved provider eligibility. `--status` reports
+resumable progress. `--verify` runs the independent check and **exits nonzero** on any discrepancy.
+A populated SQL-only upgrade that lacks verified receipts fails closed; do not clear inline payloads
+by hand.
+
+Space and time: allow free space on the asset filesystem for the full serialized manifests (larger
+than the JSONB they replace, because serialization is not compressed) on top of the existing store,
+and PostgreSQL headroom for WAL and the small fact/receipt tables. The inline `jsonb`/TOAST bytes are
+released only when the finalize transaction commits. An interrupted backfill resumes from the last
+committed row; the source remains authoritative until then.
+
+An interrupted upgrade is recovered by re-running `melodee-cli migrate`. Retrying with the candidate
+is safe. To return to the previous binary instead, restore the **pre-upgrade database backup and the
+matching pre-upgrade asset store directory**, because the schema and evidence references move
+together.
+
+Migration `0058_search_outbox_retention.sql` is additive. It adds exact hourly totals, per-projection
+maintenance state and bounded replay tombstones; successful detail starts expiring under the
+configured retention after the first hourly maintenance pass. Perfectly safe before the first pass;
+the chart keeps serving from raw detail until each hour is finalized.
+
 ## Rollback
 
 An image rollback and a database-schema rollback are different operations. The current migrations
