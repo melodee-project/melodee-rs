@@ -130,14 +130,17 @@ fn is_permanent_rebuild_error(error: &SearchError) -> bool {
 /// the blocking pool, and return the store so the next page reuses it. The
 /// spawn_blocking queue depth is bounded to one page per rebuild, so this moves
 /// index CPU/IO off the async runtime without an unbounded blocking backlog.
-async fn index_page_blocking(
+async fn run_index_blocking(
     mut store: SearchStore,
     work: impl FnOnce(&mut SearchStore) -> Result<(), SearchError> + Send + 'static,
+    commit: bool,
 ) -> Result<SearchStore, SearchError> {
     let started = std::time::Instant::now();
     let result = tokio::task::spawn_blocking(move || {
         work(&mut store)?;
-        store.commit()?;
+        if commit {
+            store.commit()?;
+        }
         Ok::<SearchStore, SearchError>(store)
     })
     .await
@@ -147,6 +150,16 @@ async fn index_page_blocking(
         started.elapsed(),
     );
     result
+}
+
+/// Commits buffered documents on the blocking pool and returns the store.
+async fn commit_store_blocking(mut store: SearchStore) -> Result<SearchStore, SearchError> {
+    tokio::task::spawn_blocking(move || {
+        store.commit()?;
+        Ok::<SearchStore, SearchError>(store)
+    })
+    .await
+    .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?
 }
 
 async fn execute_claimed_rebuild(
@@ -178,6 +191,14 @@ async fn execute_claimed_rebuild(
             releases: 0,
             tracks: 0,
         };
+        // PERF-006 / RM-14: explicit document and time bounds for rebuild
+        // commits. The previous per-page commit produced ~N/page commits; the
+        // uncommitted buffer is bounded by documents and wall time.
+        let commit_documents = u64::try_from(config.snapshot_commit_documents)
+            .map_err(|_| SearchError::InvalidQuery("commit bound is too large".to_string()))?;
+        let commit_interval = std::time::Duration::from_millis(config.snapshot_commit_interval_ms);
+        let mut pending_documents = 0_u64;
+        let mut last_commit = std::time::Instant::now();
         let mut after = None;
         loop {
             check_cancel(cancel)?;
@@ -191,13 +212,24 @@ async fn execute_claimed_rebuild(
             after = page.last().map(|record| record.internal_id);
             let page_count = u64::try_from(page.len())
                 .map_err(|_| SearchError::InvalidQuery("Artist count overflow".to_string()))?;
-            store = index_page_blocking(store, move |store| {
-                for record in page {
-                    store.insert_artist_fresh(&ArtistDoc::from(record))?;
-                }
-                Ok(())
-            })
+            pending_documents = pending_documents.saturating_add(page_count);
+            let should_commit =
+                pending_documents >= commit_documents || last_commit.elapsed() >= commit_interval;
+            store = run_index_blocking(
+                store,
+                move |store| {
+                    for record in page {
+                        store.insert_artist_fresh(&ArtistDoc::from(record))?;
+                    }
+                    Ok(())
+                },
+                should_commit,
+            )
             .await?;
+            if should_commit {
+                pending_documents = 0;
+                last_commit = std::time::Instant::now();
+            }
             counts.artists = counts
                 .artists
                 .checked_add(page_count)
@@ -216,13 +248,24 @@ async fn execute_claimed_rebuild(
             after = page.last().map(|record| record.internal_id);
             let page_count = u64::try_from(page.len())
                 .map_err(|_| SearchError::InvalidQuery("Release count overflow".to_string()))?;
-            store = index_page_blocking(store, move |store| {
-                for record in page {
-                    store.insert_release_fresh(&ReleaseDoc::from(record))?;
-                }
-                Ok(())
-            })
+            pending_documents = pending_documents.saturating_add(page_count);
+            let should_commit =
+                pending_documents >= commit_documents || last_commit.elapsed() >= commit_interval;
+            store = run_index_blocking(
+                store,
+                move |store| {
+                    for record in page {
+                        store.insert_release_fresh(&ReleaseDoc::from(record))?;
+                    }
+                    Ok(())
+                },
+                should_commit,
+            )
             .await?;
+            if should_commit {
+                pending_documents = 0;
+                last_commit = std::time::Instant::now();
+            }
             counts.releases = counts
                 .releases
                 .checked_add(page_count)
@@ -241,17 +284,31 @@ async fn execute_claimed_rebuild(
             after = page.last().map(|record| record.internal_id);
             let page_count = u64::try_from(page.len())
                 .map_err(|_| SearchError::InvalidQuery("Track count overflow".to_string()))?;
-            store = index_page_blocking(store, move |store| {
-                for record in page {
-                    store.insert_track_fresh(&TrackDoc::from(record))?;
-                }
-                Ok(())
-            })
+            pending_documents = pending_documents.saturating_add(page_count);
+            let should_commit =
+                pending_documents >= commit_documents || last_commit.elapsed() >= commit_interval;
+            store = run_index_blocking(
+                store,
+                move |store| {
+                    for record in page {
+                        store.insert_track_fresh(&TrackDoc::from(record))?;
+                    }
+                    Ok(())
+                },
+                should_commit,
+            )
             .await?;
+            if should_commit {
+                pending_documents = 0;
+                last_commit = std::time::Instant::now();
+            }
             counts.tracks = counts
                 .tracks
                 .checked_add(page_count)
                 .ok_or_else(|| SearchError::InvalidQuery("Track count overflow".to_string()))?;
+        }
+        if pending_documents > 0 {
+            store = commit_store_blocking(store).await?;
         }
         snapshot.finish().await?;
         let stats = store.stats()?;

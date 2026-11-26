@@ -23,15 +23,17 @@ pub enum Metric {
     SearchQuery,
     DiscoveryPass,
     CatalogImportPass,
+    PoolAcquire,
 }
 
 impl Metric {
-    pub const ALL: [Metric; 5] = [
+    pub const ALL: [Metric; 6] = [
         Metric::SearchOutboxPass,
         Metric::SearchRebuildPage,
         Metric::SearchQuery,
         Metric::DiscoveryPass,
         Metric::CatalogImportPass,
+        Metric::PoolAcquire,
     ];
 
     const fn index(self) -> usize {
@@ -41,6 +43,7 @@ impl Metric {
             Metric::SearchQuery => 2,
             Metric::DiscoveryPass => 3,
             Metric::CatalogImportPass => 4,
+            Metric::PoolAcquire => 5,
         }
     }
 
@@ -52,6 +55,7 @@ impl Metric {
             Metric::SearchQuery => "search_query",
             Metric::DiscoveryPass => "discovery_pass",
             Metric::CatalogImportPass => "catalog_import_pass",
+            Metric::PoolAcquire => "pool_acquire",
         }
     }
 }
@@ -60,7 +64,7 @@ impl Metric {
 /// unbounded overflow bucket.
 pub const BUCKET_BOUNDS_MS: [u64; 8] = [1, 5, 25, 100, 500, 2_500, 10_000, 60_000];
 const BUCKETS: usize = BUCKET_BOUNDS_MS.len() + 1;
-const METRICS: usize = 5;
+const METRICS: usize = 6;
 
 #[derive(Debug, Clone, Default)]
 struct MetricsState {
@@ -178,6 +182,7 @@ mod tests {
                 "search_query",
                 "discovery_pass",
                 "catalog_import_pass",
+                "pool_acquire",
             ]
         );
     }

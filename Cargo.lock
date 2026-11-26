@@ -2381,6 +2381,7 @@ name = "melodee-ingestion"
 version = "0.3.0"
 dependencies = [
  "blake3",
+ "futures-util",
  "melodee-domain",
  "melodee-media",
  "melodee-persistence",

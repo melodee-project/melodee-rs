@@ -655,3 +655,56 @@ async fn coalesced_drain_converges_legacy_duplicate_artist_identities() {
     assert_eq!(seed_count(&db.pool).await, 0);
     db.drop().await;
 }
+
+/// PERF-004 / RM-09: seed ids are allocated before commit, so a lower id can
+/// become visible after a drain captured its batch. Deleting an id range would
+/// discard that seed without ever reconciling it. The drain must delete only
+/// the ids it examined.
+#[tokio::test]
+async fn late_committing_lower_id_seed_is_not_deleted_by_a_coalesced_drain() {
+    let db = TestDb::create("catalog_identity_late_seed").await;
+    let mut late = db.pool.begin().await.expect("begin late seed transaction");
+    let late_id: i64 = sqlx::query_scalar(
+        "INSERT INTO catalog_identity_reconciliation_seed (normalized_name, created_at)
+         VALUES ('late committing seed', now()) RETURNING id",
+    )
+    .fetch_one(&mut *late)
+    .await
+    .expect("allocate lower seed id in the uncommitted transaction");
+    let committed_id: i64 = sqlx::query_scalar(
+        "INSERT INTO catalog_identity_reconciliation_seed (normalized_name, created_at)
+         VALUES ('committed seed', now()) RETURNING id",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("commit a higher seed id");
+    assert!(
+        committed_id > late_id,
+        "the uncommitted seed holds the lower allocated id"
+    );
+
+    assert!(
+        melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
+        "the drain examines the visible seed"
+    );
+
+    late.commit()
+        .await
+        .expect("commit the late lower-id seed after the capture");
+    let remaining: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM catalog_identity_reconciliation_seed ORDER BY id")
+            .fetch_all(&db.pool)
+            .await
+            .expect("read remaining seeds");
+    assert!(
+        remaining.contains(&late_id),
+        "the late lower-id seed must remain durable for a later drain; got {remaining:?}"
+    );
+
+    assert!(
+        melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
+        "the next drain examines the late seed"
+    );
+    assert_eq!(seed_count(&db.pool).await, 0);
+    db.drop().await;
+}

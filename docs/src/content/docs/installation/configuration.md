@@ -152,7 +152,7 @@ Tune the stages independently.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `MELODEE__INSPECTION__CONCURRENCY` | `2` | Maximum number of Release inspections claimed by one server worker batch. |
+| `MELODEE__INSPECTION__CONCURRENCY` | `2` | Maximum number of Release inspections executed concurrently by one server worker (claim batch size and actual in-flight inspections). |
 | `MELODEE__INSPECTION__FFPROBE_PATH` | `ffprobe` | Explicit ffprobe executable path. |
 | `MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS` | `30` | Maximum time allowed for one ffprobe process. |
 
@@ -210,6 +210,10 @@ Tune the stages independently.
 | `MELODEE__SEARCH__BATCH_SIZE` | `256` | Outbox/catch-up rows per bounded pass (maximum `512`). |
 | `MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS` | `5` | Failed attempts before a retryable outbox row becomes a permanent, operator-visible failure (maximum `100`). |
 | `MELODEE__SEARCH__POLL_INTERVAL_MS` | `1000` | Delay between worker passes. |
+- `MELODEE__SEARCH__SNAPSHOT_COMMIT_DOCUMENTS` (default `10000`) and
+  `MELODEE__SEARCH__SNAPSHOT_COMMIT_INTERVAL_MS` (default `2000`) bound how many documents and how
+  much wall time a rebuild buffers before committing. Lower them to bound uncommitted memory more
+  tightly or raise them to reduce commit overhead.
 | `MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE` | `1000` | Maximum PostgreSQL rows held per entity page during rebuild. |
 | `MELODEE__SEARCH__DEFAULT_LIMIT` | `200` | Default operator query limit. |
 | `MELODEE__SEARCH__MAX_LIMIT` | `1000` | Maximum operator query limit. |

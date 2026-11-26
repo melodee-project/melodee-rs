@@ -241,6 +241,10 @@ const IDENTITY_RECONCILIATION_LOCK_KEY: i64 = (19_761_125_i64 << 32) | 312;
 /// convergence while remaining bounded. Remaining work stays durable as seeds.
 const MAX_IDENTITY_CLOSURE_ITERATIONS: usize = 4;
 
+/// Seeds examined per coalesced drain. Seeds beyond this bound remain durable
+/// for the next pass.
+const IDENTITY_DRAIN_BATCH: i64 = 10_000;
+
 /// Drains the durable affected-identity queue with one coalesced closure pass.
 ///
 /// PERF-004 / RM-09: ordinary imports persist affected identity facts in their
@@ -253,14 +257,22 @@ const MAX_IDENTITY_CLOSURE_ITERATIONS: usize = 4;
 ///
 /// Returns whether a drain ran.
 pub async fn reconcile_affected_identities_once(store: &CatalogStore, pool: &PgPool) -> bool {
-    let watermark = match store.identity_reconciliation_seed_watermark(pool).await {
-        Ok(Some(watermark)) => watermark,
-        Ok(None) => return false,
+    // Capture an explicit, bounded id set. Never delete by an id range: outbox
+    // and identity values are allocated before commit, so a lower id can appear
+    // after this read, and deleting `id <= watermark` would lose it.
+    let claimed_ids = match store
+        .claim_identity_reconciliation_seed_ids(pool, IDENTITY_DRAIN_BATCH)
+        .await
+    {
+        Ok(ids) => ids,
         Err(error) => {
-            warn!(%error, "identity reconciliation seed watermark could not be read");
+            warn!(%error, "identity reconciliation seeds could not be claimed");
             return false;
         }
     };
+    if claimed_ids.is_empty() {
+        return false;
+    }
     let Ok(mut connection) = pool.acquire().await else {
         warn!("identity reconciliation drain could not acquire a connection");
         return false;
@@ -271,17 +283,22 @@ pub async fn reconcile_affected_identities_once(store: &CatalogStore, pool: &PgP
         .await
         .unwrap_or(false);
     if !acquired {
-        // Another worker owns the closure; its drain covers this batch.
+        // Another worker owns the closure; its drain covers this batch. The
+        // claimed ids remain durable because nothing has been deleted yet.
         return false;
     }
     let mut iterations = 0usize;
+    let mut converged = false;
     loop {
         iterations += 1;
         let artist_candidates = reconcile_artist_identities_once(store, pool).await;
         let release_candidates = reconcile_strong_release_identities(store, pool).await;
-        if artist_candidates + release_candidates == 0
-            || iterations >= MAX_IDENTITY_CLOSURE_ITERATIONS
-        {
+        let remaining = artist_candidates + release_candidates;
+        if remaining == 0 {
+            converged = true;
+            break;
+        }
+        if iterations >= MAX_IDENTITY_CLOSURE_ITERATIONS {
             break;
         }
     }
@@ -289,13 +306,25 @@ pub async fn reconcile_affected_identities_once(store: &CatalogStore, pool: &PgP
         .bind(IDENTITY_RECONCILIATION_LOCK_KEY)
         .execute(&mut *connection)
         .await;
-    // Only the captured watermark is cleared, so seeds that arrived during the
-    // pass remain queued for the next drain.
-    if let Err(error) = store
-        .delete_identity_reconciliation_seeds_through(pool, watermark)
-        .await
-    {
-        warn!(%error, "identity reconciliation seeds could not be cleared; they will replay");
+    if converged {
+        // Exactly the examined ids are cleared. Seeds that committed after the
+        // capture, and seeds beyond the drain batch, remain durable.
+        if let Err(error) = store
+            .delete_identity_reconciliation_seeds(pool, &claimed_ids)
+            .await
+        {
+            warn!(%error, "identity reconciliation seeds could not be cleared; they will replay");
+        }
+    } else {
+        // The bounded iteration budget was exhausted with candidates still
+        // present. Keep the claimed seeds durable so a later drain (and the
+        // periodic global backstop) retries them rather than silently dropping
+        // unexamined identity work.
+        debug!(
+            iterations,
+            claimed = claimed_ids.len(),
+            "identity reconciliation did not reach a fixed point; seeds retained"
+        );
     }
     true
 }

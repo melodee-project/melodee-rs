@@ -12,6 +12,7 @@ test-support = []
 
 [dependencies]
 blake3.workspace = true
+futures-util.workspace = true
 melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
 melodee-persistence = { path = "../melodee-persistence", version = "0.3.0" }
 melodee-media = { path = "../melodee-media", version = "0.3.0" }

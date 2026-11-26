@@ -25,6 +25,9 @@ pub const ENV_SEARCH_BATCH_SIZE: &str = "MELODEE__SEARCH__BATCH_SIZE";
 pub const ENV_SEARCH_MAX_OUTBOX_ATTEMPTS: &str = "MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS";
 pub const ENV_SEARCH_POLL_INTERVAL_MS: &str = "MELODEE__SEARCH__POLL_INTERVAL_MS";
 pub const ENV_SEARCH_SNAPSHOT_PAGE_SIZE: &str = "MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE";
+pub const ENV_SEARCH_SNAPSHOT_COMMIT_DOCUMENTS: &str = "MELODEE__SEARCH__SNAPSHOT_COMMIT_DOCUMENTS";
+pub const ENV_SEARCH_SNAPSHOT_COMMIT_INTERVAL_MS: &str =
+    "MELODEE__SEARCH__SNAPSHOT_COMMIT_INTERVAL_MS";
 pub const ENV_SEARCH_DEFAULT_LIMIT: &str = "MELODEE__SEARCH__DEFAULT_LIMIT";
 pub const ENV_SEARCH_MAX_LIMIT: &str = "MELODEE__SEARCH__MAX_LIMIT";
 pub const ENV_SEARCH_PROCESSED_OUTBOX_RETENTION_DAYS: &str =
@@ -48,6 +51,14 @@ pub struct SearchConfig {
     pub poll_interval_ms: u64,
     /// Rows streamed from PostgreSQL at once during a rebuild.
     pub snapshot_page_size: usize,
+    /// Documents buffered before a rebuild commit. Bounds writer memory; a
+    /// smaller value commits more often. At 560K documents the previous
+    /// per-page commit produced ~560 commits; this bound reduces that while
+    /// keeping the uncommitted buffer explicit.
+    pub snapshot_commit_documents: usize,
+    /// Maximum wall time between rebuild commits, bounding how long a
+    /// partially built generation stays uncommitted.
+    pub snapshot_commit_interval_ms: u64,
     /// Default query result limit.
     pub default_limit: usize,
     /// Maximum query result limit.
@@ -82,6 +93,8 @@ impl Default for SearchConfig {
             max_outbox_attempts: 5,
             poll_interval_ms: 1_000,
             snapshot_page_size: 1_000,
+            snapshot_commit_documents: 10_000,
+            snapshot_commit_interval_ms: 2_000,
             default_limit: 200,
             max_limit: 1000,
             enabled: false,
@@ -117,6 +130,14 @@ impl SearchConfig {
             snapshot_page_size: parse_usize(
                 ENV_SEARCH_SNAPSHOT_PAGE_SIZE,
                 defaults.snapshot_page_size,
+            )?,
+            snapshot_commit_documents: parse_usize(
+                ENV_SEARCH_SNAPSHOT_COMMIT_DOCUMENTS,
+                defaults.snapshot_commit_documents,
+            )?,
+            snapshot_commit_interval_ms: parse_u64(
+                ENV_SEARCH_SNAPSHOT_COMMIT_INTERVAL_MS,
+                defaults.snapshot_commit_interval_ms,
             )?,
             default_limit: parse_usize(ENV_SEARCH_DEFAULT_LIMIT, defaults.default_limit)?,
             max_limit: parse_usize(ENV_SEARCH_MAX_LIMIT, defaults.max_limit)?,
@@ -169,6 +190,12 @@ impl SearchConfig {
                 "max_outbox_attempts must be between 1 and {}",
                 melodee_persistence::MAX_SEARCH_OUTBOX_ATTEMPTS
             ));
+        }
+        if !(1..=1_000_000).contains(&self.snapshot_commit_documents) {
+            return Err("snapshot_commit_documents must be between 1 and 1000000".to_string());
+        }
+        if !(100..=60_000).contains(&self.snapshot_commit_interval_ms) {
+            return Err("snapshot_commit_interval_ms must be between 100 and 60000".to_string());
         }
         if !(1..=melodee_persistence::MAX_SEARCH_SNAPSHOT_PAGE).contains(&self.snapshot_page_size) {
             return Err(format!(

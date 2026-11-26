@@ -446,3 +446,89 @@ asset registry after migration 0054. Neither touches remediation behavior.
 IMPLEMENTED AND VERIFIED above and for the three release-blocking correctness outcomes; representative
 560K-scale end-to-end verification and the RM-11/RM-12/RM-15/RM-17/RM-18/RM-19 measurement work
 remain. This is not a claim that the whole remediation is complete.
+
+---
+
+# 9. Session 3 — correctness fixes and bounded execution
+
+## 9.1 RM-09 seed deletion is commit-order safe
+
+The previous drain deleted `WHERE id <= captured_watermark`. Identity values are allocated before
+commit, so a lower id can become visible after the capture; that row would be deleted without ever
+being reconciled. The drain now:
+
+1. captures an explicit bounded id set (`claim_identity_reconciliation_seed_ids`, limit 10 000),
+2. runs the closure to a fixed point (max 4 iterations),
+3. deletes **exactly the captured ids** only when the fixed point was reached.
+
+If the iteration budget is exhausted with candidates still present, the captured seeds are retained
+durable, and the periodic global backstop retries. Seeds beyond the batch and seeds that committed
+after the capture are never deleted by id order.
+
+Test: `catalog_importer::late_committing_lower_id_seed_is_not_deleted_by_a_coalesced_drain` opens a
+transaction holding a lower id, commits a higher id, drains, then commits the lower id and proves it
+survives to the next drain. PASS.
+
+## 9.2 RM-14 rebuild commit bounds
+
+New configuration: `MELODEE__SEARCH__SNAPSHOT_COMMIT_DOCUMENTS` (default 10 000) and
+`MELODEE__SEARCH__SNAPSHOT_COMMIT_INTERVAL_MS` (default 2 000). The rebuild commits when either
+bound is reached and flushes before validation. At 560 K documents this reduces ~560 per-page commits
+to roughly 56; the uncommitted document buffer and wall time are both explicit. Fresh-generation bulk
+insert and per-page off-async indexing remain. `rebuild_integration` (13 with test-support) PASS.
+Representative commit-count/timing: NOT EXECUTED.
+
+## 9.3 RM-12 inspection concurrency is real
+
+`inspection_concurrency` previously only sized the claim batch; the loop processed items serially.
+Inspection now drives a finite `buffer_unordered(inspection_concurrency)` stream: each item keeps its
+own lease heartbeat, and the in-flight set is bounded by the claimed batch. No unbounded task queue
+is created, and each future holds its slot until the item's blocking work returns.
+`inspection` (5) and `environment_faults` (7) PASS. A shared process-wide CPU/FS/subprocess admission
+limit beyond the per-stage bounds and measured FFmpeg tuning remain outstanding.
+
+## 9.4 RM-17 artwork cache invalidation
+
+The derived-artwork cache key now includes the **verified source content hash** in addition to the
+request asset key, size, format, and no-upscale flag. A row id alone does not prove the stored image
+is unchanged. A permanent test replaces the source bytes under the same asset key and proves the
+previously cached resize is not returned. Hashing a small image is cheap relative to the file read
+and to the resize the cache exists to avoid.
+
+## 9.5 RM-10 pool acquisition instrumentation
+
+A `pool_acquire` histogram (fixed buckets) now records connection begin/checkout latency for catalog
+claim, work claim, and search outbox claim, separate from query time. Measured background/interactive
+competition and any pool topology/admission change remain outstanding; the topology is retained
+pending that measurement.
+
+## 9.6 Re-verified gates for the touched areas
+
+`catalog_importer` (9), `rebuild_integration` (13 with test-support), ingestion `inspection` +
+`environment_faults` (12), server media unit tests (3), and workspace fmt/clippy all pass.
+
+**Final gate:** `make check-nightly` passes with `RUST_TEST_THREADS=1` (the specification's
+recommended test setting). Without that variable, one pre-existing timing-sensitive podcast lease
+test (`native_podcasts_api::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized`)
+fails only because its three tests run in parallel within the binary; it passes in isolation and
+with serialized test threads. It is not affected by remediation changes.
+
+### Review of the two test-assertion corrections (from session 2)
+
+- `admin_runtime_diagnostics_api::effective_settings_are_redacted_and_explained` expected the short
+  `podcast_worker` consumer label, but the settings inventory records
+  `melodee-application:podcast_worker` (the dominant convention in that file). The assertion now
+  matches the inventory; it still verifies that the row exposes its consumer, so coverage is not
+  weakened.
+- `admin_stats_api::stats_report_library_listening_and_database_panels` asserted
+  `assetFileBytes == 0`, but the fixture publishes a media asset that migration 0054 registers in
+  `asset_files`. The assertion now requires the API value to equal the actual registry aggregate
+  (`count(*)`, `sum(size_bytes)`), which is stronger: it still fails on invented values and no
+  longer encodes an invalid empty-store assumption.
+
+## 9.7 Still not complete
+
+The representative 560K–600K end-to-end benchmark, seed-subgraph-scoped RM-09 discovery, substantive
+RM-11 content-read elimination, shared RM-12 media admission and tuning, RM-13 writer evidence,
+RM-15 route optimization, RM-17 streaming/auth/rate-limit, and RM-18/RM-19 measurements remain. This
+document does not claim full remediation completion.

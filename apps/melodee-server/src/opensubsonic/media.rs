@@ -644,6 +644,13 @@ struct StoredArtworkCacheKey {
     /// `artist_<uuid>`, `playlist_<uuid>`), not a content digest computed per
     /// request.
     asset_key: String,
+    /// Content identity of the source image. The request id alone does not
+    /// prove the stored artwork is unchanged: an operator can replace a
+    /// Release/Artist/playlist image while keeping the same row id. Keying by
+    /// the verified source digest guarantees replacement invalidates the
+    /// derived bytes. Hashing a small image is cheap relative to the file read
+    /// that precedes it and to the resize this cache exists to avoid.
+    source_sha256: String,
     target_size: u32,
     /// Transformation parameters that affect the bytes.
     format: String,
@@ -730,6 +737,7 @@ async fn resized_stored_artwork(
 ) -> Option<Vec<u8>> {
     let key = StoredArtworkCacheKey {
         asset_key: asset_key.to_owned(),
+        source_sha256: sha256_hex(&bytes),
         target_size,
         format: mime_type.to_owned(),
         no_upscale: true,
@@ -1227,5 +1235,54 @@ mod tests {
             .decode()
             .expect("decode resized fixture");
         assert_eq!((decoded.width(), decoded.height()), (100, 50));
+    }
+
+    /// PERF-013 / RM-17: replacing a stored image while keeping the same
+    /// request id must invalidate the derived cache. A key of the row id alone
+    /// would serve the previous artwork indefinitely.
+    #[tokio::test]
+    async fn stored_artwork_cache_invalidates_when_source_content_changes() {
+        let encode = |width: u32, height: u32, tint: u8| {
+            let image = DynamicImage::ImageRgba8(RgbaImage::from_fn(width, height, |x, y| {
+                image::Rgba([
+                    tint,
+                    u8::try_from(x % 255).unwrap_or(0),
+                    u8::try_from(y % 255).unwrap_or(0),
+                    255,
+                ])
+            }));
+            let mut encoded = Cursor::new(Vec::new());
+            image
+                .write_to(&mut encoded, ImageFormat::Png)
+                .expect("encode fixture");
+            encoded.into_inner()
+        };
+        let wide = encode(400, 200, 10);
+        let tall = encode(200, 400, 200);
+        assert_ne!(wide, tall, "fixtures differ in content");
+
+        let first = resized_stored_artwork(wide, "image/png", 100, "album_replace")
+            .await
+            .expect("resize first artwork");
+        let first_decoded = ImageReader::new(Cursor::new(first))
+            .with_guessed_format()
+            .expect("guess first format")
+            .decode()
+            .expect("decode first artwork");
+        assert_eq!((first_decoded.width(), first_decoded.height()), (100, 50));
+
+        let replacement = resized_stored_artwork(tall, "image/png", 100, "album_replace")
+            .await
+            .expect("resize replacement artwork");
+        let replacement_decoded = ImageReader::new(Cursor::new(replacement))
+            .with_guessed_format()
+            .expect("guess replacement format")
+            .decode()
+            .expect("decode replacement artwork");
+        assert_eq!(
+            (replacement_decoded.width(), replacement_decoded.height()),
+            (50, 100),
+            "replacement content must not reuse the previous cached resize"
+        );
     }
 }

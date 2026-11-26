@@ -1,5 +1,6 @@
 //! Leased Release inspection and durable manifest handoff.
 
+use futures_util::StreamExt;
 use std::time::Instant;
 
 use ::time::OffsetDateTime;
@@ -58,17 +59,24 @@ pub async fn inspect_ready_once(
         ..InspectionStats::default()
     };
 
-    for item in items {
-        // every event inside the item boundary inherits both the
-        // work-item id and the durable correlation id from this span.
+    // PERF-009 / RM-12: `inspection_concurrency` governs actual execution,
+    // not only the claim batch size. Each item is an independent Release with
+    // its own lease heartbeat; running them concurrently (bounded) lets a
+    // multi-slot deployment use its slots. The stream is finite and bounded by
+    // the claimed batch, so no unbounded queue is created.
+    let concurrency = usize::try_from(ingestion.inspection_concurrency)
+        .unwrap_or(1)
+        .max(1);
+    let outcomes = futures_util::stream::iter(items.into_iter().map(|item| {
+        let worker = worker.clone();
+        async move {
+        // every event inside the item boundary inherits both the work-item id
+        // and the durable correlation id from this span.
         let span = tracing::info_span!(
             "inspect_work_item",
             work_item_id = %item.id,
             correlation_id = %item.correlation_id,
         );
-        // Hashing and media inspection can outlive one lease. Run renewal
-        // independently of synchronous filesystem reads. Dropping the pass
-        // (including shutdown) aborts its renewal task.
         let id = item.id;
         let mut heartbeat = tokio::task::JoinSet::new();
         let renewal_pool = pool.clone();
@@ -102,14 +110,20 @@ pub async fn inspect_ready_once(
             gate,
         )
         .instrument(span);
-        let outcome = tokio::select! {
+        tokio::select! {
             biased;
             result = inspection => result,
             lost = heartbeat.join_next() => match lost {
                 Some(Ok(error)) => Err(error.into()),
                 _ => Err(IngestionError::InspectionTask("inspection lease renewal stopped".into())),
             },
-        };
+        }
+        }
+    }))
+    .buffer_unordered(concurrency)
+    .collect::<Vec<_>>()
+    .await;
+    for outcome in outcomes {
         match outcome {
             Ok(InspectionOutcome::Published) => stats.completed += 1,
             Ok(InspectionOutcome::SourceChanged) => stats.source_changed += 1,

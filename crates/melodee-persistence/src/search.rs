@@ -1122,7 +1122,12 @@ impl SearchProjectionStore {
             })?;
         let batch_size = i64::try_from(batch_size)
             .map_err(|_| SearchStoreError::InvalidRequest("batch size is too large".to_string()))?;
+        let acquire_started = std::time::Instant::now();
         let mut tx = pool.begin().await?;
+        crate::metrics::observe(
+            crate::metrics::Metric::PoolAcquire,
+            acquire_started.elapsed(),
+        );
         sqlx::query(
             "INSERT INTO search_projection_checkpoint (
                 projection_name, last_processed_outbox_id, updated_at

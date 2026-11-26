@@ -437,7 +437,15 @@ impl CatalogStore {
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, CatalogStoreError> {
         let lease_expiry = now + config.lease_duration;
+        // PERF-008 / RM-10: record actual connection checkout/begin latency for
+        // a background workload class. Combined with the request-path metric it
+        // shows acquisition contention separately from query time.
+        let acquire_started = std::time::Instant::now();
         let mut tx = pool.begin().await?;
+        crate::metrics::observe(
+            crate::metrics::Metric::PoolAcquire,
+            acquire_started.elapsed(),
+        );
         let candidates =
             crate::processing::claim_candidates(&mut tx, "catalog", config, now).await?;
         let mut claimed = Vec::with_capacity(candidates.len());
@@ -638,16 +646,50 @@ impl CatalogStore {
         .map_err(CatalogStoreError::from)
     }
 
-    /// Deletes drained seed rows at or below the captured watermark. Idempotent
-    /// and bounded so a concurrent producer cannot lose its work.
-    pub async fn delete_identity_reconciliation_seeds_through(
+    /// Captures a bounded batch of current seed ids.
+    ///
+    /// The drain deletes exactly these ids, never an id range: identity values
+    /// are allocated before commit, so a lower id can become visible after this
+    /// read. Deleting `id <= watermark` would discard that late-committing seed
+    /// without ever reconciling it.
+    pub async fn claim_identity_reconciliation_seed_ids(
         &self,
         pool: &PgPool,
-        through: i64,
+        limit: i64,
+    ) -> Result<Vec<i64>, CatalogStoreError> {
+        if !(1..=100_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        let available: bool = sqlx::query_scalar(
+            "SELECT to_regclass('public.catalog_identity_reconciliation_seed') IS NOT NULL",
+        )
+        .fetch_one(pool)
+        .await?;
+        if !available {
+            return Ok(Vec::new());
+        }
+        sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM catalog_identity_reconciliation_seed ORDER BY id LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(CatalogStoreError::from)
+    }
+
+    /// Deletes exactly the seed ids a drain captured and examined. It cannot
+    /// remove a row that committed after the capture, and it is idempotent.
+    pub async fn delete_identity_reconciliation_seeds(
+        &self,
+        pool: &PgPool,
+        ids: &[i64],
     ) -> Result<u64, CatalogStoreError> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
         let deleted =
-            sqlx::query("DELETE FROM catalog_identity_reconciliation_seed WHERE id <= $1")
-                .bind(through)
+            sqlx::query("DELETE FROM catalog_identity_reconciliation_seed WHERE id = ANY($1)")
+                .bind(ids)
                 .execute(pool)
                 .await
                 .map_err(CatalogStoreError::from)?

@@ -2254,7 +2254,12 @@ impl WorkItemStore {
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
+        let acquire_started = std::time::Instant::now();
         let mut tx = pool.begin().await?;
+        crate::metrics::observe(
+            crate::metrics::Metric::PoolAcquire,
+            acquire_started.elapsed(),
+        );
         // Select candidates with row locks (skipped when locked by rivals),
         // then update each within the same transaction. Two steps so the
         // pre-update state is known for the failed->ready requeue event.
