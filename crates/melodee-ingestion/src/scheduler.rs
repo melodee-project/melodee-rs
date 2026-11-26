@@ -41,6 +41,23 @@ pub struct SchedulerHandle {
     stop: StopToken,
 }
 
+/// Upper bound on process-lifetime retained scheduler results.
+///
+/// Production reads these only at shutdown and the durable lease/job history
+/// is the diagnostic record, so retaining one result per pass for the whole
+/// process lifetime is pure growth (measured ~1.2-1.4 MB/day per enabled
+/// stage). A small ring keeps a shutdown snapshot useful without unbounded
+/// growth. It does not replace persistent lease-event history.
+pub const MAX_RETAINED_SCHEDULER_RESULTS: usize = 64;
+
+/// Appends a result to the bounded retention ring.
+pub(crate) fn retain_result(results: &mut Vec<ReconcileResult>, result: ReconcileResult) {
+    if results.len() >= MAX_RETAINED_SCHEDULER_RESULTS {
+        results.remove(0);
+    }
+    results.push(result);
+}
+
 impl SchedulerHandle {
     pub(crate) const fn from_parts(
         join: tokio::task::JoinHandle<Vec<ReconcileResult>>,
@@ -112,4 +129,32 @@ pub fn start_reconciliation_loop(
     });
 
     SchedulerHandle { join: handle, stop }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_RETAINED_SCHEDULER_RESULTS, retain_result};
+    use crate::{ReconcileResult, ReconcileStats};
+
+    fn result(source: &str) -> ReconcileResult {
+        ReconcileResult {
+            source: source.to_owned(),
+            stats: ReconcileStats::default(),
+        }
+    }
+
+    #[test]
+    fn retained_result_capacity_is_bounded_across_many_ticks() {
+        let mut results = Vec::new();
+        for tick in 0..10_000 {
+            retain_result(&mut results, result(&format!("tick-{tick}")));
+            assert!(results.len() <= MAX_RETAINED_SCHEDULER_RESULTS);
+        }
+        assert_eq!(results.len(), MAX_RETAINED_SCHEDULER_RESULTS);
+        assert_eq!(
+            results.last().map(|entry| entry.source.as_str()),
+            Some("tick-9999"),
+            "the newest result is retained"
+        );
+    }
 }

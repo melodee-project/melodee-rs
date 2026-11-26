@@ -516,7 +516,7 @@ pub fn start_inspection_loop(
                         match result {
                             Ok(stats) => {
                                 let full_batch = stats.errors == 0 && stats.claimed >= claim_batch_size;
-                                results.push(crate::ReconcileResult {
+                                crate::scheduler::retain_result(&mut results, crate::ReconcileResult {
                                     source: "inspection".to_owned(),
                                     stats: crate::ReconcileStats {
                                         duration_ms: stats.duration_ms,

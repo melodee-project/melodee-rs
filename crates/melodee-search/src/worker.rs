@@ -29,6 +29,11 @@ use crate::store::SearchStore;
 /// window; see ADR-0214. Maintenance runs hourly in bounded passes.
 const OUTBOX_MAINTENANCE_INTERVAL: time::Duration = time::Duration::hours(1);
 
+/// Maximum consecutive full outbox batches drained before one idle-backoff
+/// turn. Bounds runtime/database monopolization while still removing the
+/// fixed post-batch delay for ordinary sustained drains.
+const MAX_CONSECUTIVE_FULL_PASSES: u32 = 64;
+
 /// Upper bound on lifecycles completed per projection pass. Completions are set
 /// based and cheap; the bound keeps one pass from monopolising a worker while a
 /// large batch drains.
@@ -244,6 +249,11 @@ pub fn start_search_loop(config: SearchConfig, pool: PgPool) -> SearchSchedulerH
     let cancel = Arc::new(SearchCancellation::default());
     let task_cancel = Arc::clone(&cancel);
     let task = tokio::spawn(async move {
+        // Monotonic gate for the hourly retention check. The durable
+        // `last_prune_at` remains authoritative across restarts and processes;
+        // this only avoids an extra SQL round trip on every busy pass.
+        let mut maintenance_after = std::time::Instant::now();
+        let mut consecutive_full_passes: u32 = 0;
         while !task_cancel.stopped.load(Ordering::Acquire) {
             if let Err(error) = ensure_initial_rebuild(&config, &pool).await {
                 error!(error = ?error, "unable to provision initial search rebuild");
@@ -256,25 +266,49 @@ pub fn start_search_loop(config: SearchConfig, pool: PgPool) -> SearchSchedulerH
             if task_cancel.stopped.load(Ordering::Acquire) {
                 break;
             }
-            if task_cancel.stopped.load(Ordering::Acquire) {
-                break;
+            if std::time::Instant::now() >= maintenance_after {
+                run_outbox_maintenance_if_due(&config, &pool).await;
+                maintenance_after = std::time::Instant::now()
+                    + std::time::Duration::from_secs(
+                        u64::try_from(OUTBOX_MAINTENANCE_INTERVAL.whole_seconds()).unwrap_or(3_600),
+                    );
             }
-            run_outbox_maintenance_if_due(&config, &pool).await;
-            match apply_outbox_once_with_cancel(&config, &pool, Arc::clone(&task_cancel)).await {
-                Ok(stats) if stats.claimed > 0 => info!(
-                    claimed = stats.claimed,
-                    applied = stats.applied,
-                    acknowledged = stats.acknowledged,
-                    errors = stats.errors,
-                    "search projection pass completed"
-                ),
-                Ok(_) => {}
-                Err(error) => error!(error = ?error, "search projection pass failed"),
-            }
+            let pass =
+                apply_outbox_once_with_cancel(&config, &pool, Arc::clone(&task_cancel)).await;
+            let full_pass = match &pass {
+                Ok(stats) if stats.claimed > 0 => {
+                    info!(
+                        claimed = stats.claimed,
+                        applied = stats.applied,
+                        acknowledged = stats.acknowledged,
+                        errors = stats.errors,
+                        "search projection pass completed"
+                    );
+                    // A full, clean batch means work remains: drain it without
+                    // paying the idle poll interval. A bounded turn budget
+                    // yields to rebuild/maintenance and other tasks so a
+                    // continuously full queue cannot monopolise the runtime.
+                    stats.errors == 0 && stats.claimed >= config.claim_batch_size
+                }
+                Ok(_) => false,
+                Err(error) => {
+                    error!(error = ?error, "search projection pass failed");
+                    false
+                }
+            };
             #[cfg(feature = "test-support")]
             if let Some(probe) = &config.scheduler_test_probe {
                 probe.mark_idle();
             }
+            if full_pass && consecutive_full_passes < MAX_CONSECUTIVE_FULL_PASSES {
+                consecutive_full_passes = consecutive_full_passes.saturating_add(1);
+                tokio::task::yield_now().await;
+                continue;
+            }
+            // Idle, errored, or turn-budget exhausted: back off for the
+            // configured poll interval. Empty queues therefore do not
+            // hot-poll the database.
+            consecutive_full_passes = 0;
             tokio::select! {
                 () = tokio::time::sleep(Duration::from_millis(config.poll_interval_ms)) => {}
                 () = task_cancel.cancelled() => break,

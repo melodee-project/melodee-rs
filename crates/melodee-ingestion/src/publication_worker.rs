@@ -941,14 +941,17 @@ fn start_stage_loop(
                 };
                 let next = match result {
                     Ok((duration_ms, errors, next)) => {
-                        results.push(ReconcileResult {
-                            source: stage.to_owned(),
-                            stats: ReconcileStats {
-                                duration_ms,
-                                errors,
-                                ..ReconcileStats::default()
+                        crate::scheduler::retain_result(
+                            &mut results,
+                            ReconcileResult {
+                                source: stage.to_owned(),
+                                stats: ReconcileStats {
+                                    duration_ms,
+                                    errors,
+                                    ..ReconcileStats::default()
+                                },
                             },
-                        });
+                        );
                         next
                     }
                     Err(error) => {

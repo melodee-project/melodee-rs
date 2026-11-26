@@ -147,7 +147,9 @@ async fn execute_claimed_rebuild(
             generation.source_high_water_mark,
         )?;
         let mut store = SearchStore::create(&generation_path)?;
-        let mut snapshot = SearchSnapshotReader::begin(pool).await?;
+        // Record this snapshot's visible outbox rows inside the snapshot so
+        // late-committing low ids stay a delivery obligation (PERF-V001).
+        let mut snapshot = SearchSnapshotReader::begin(pool, generation_id).await?;
         let mut counts = SearchDocumentCounts {
             artists: 0,
             releases: 0,
@@ -165,7 +167,7 @@ async fn execute_claimed_rebuild(
             }
             after = page.last().map(|record| record.internal_id);
             for record in page {
-                store.upsert_artist(&ArtistDoc::from(record))?;
+                store.insert_artist_fresh(&ArtistDoc::from(record))?;
                 counts.artists = counts.artists.checked_add(1).ok_or_else(|| {
                     SearchError::InvalidQuery("Artist count overflow".to_string())
                 })?;
@@ -184,7 +186,7 @@ async fn execute_claimed_rebuild(
             }
             after = page.last().map(|record| record.internal_id);
             for record in page {
-                store.upsert_release(&ReleaseDoc::from(record))?;
+                store.insert_release_fresh(&ReleaseDoc::from(record))?;
                 counts.releases = counts.releases.checked_add(1).ok_or_else(|| {
                     SearchError::InvalidQuery("Release count overflow".to_string())
                 })?;
@@ -203,7 +205,7 @@ async fn execute_claimed_rebuild(
             }
             after = page.last().map(|record| record.internal_id);
             for record in page {
-                store.upsert_track(&TrackDoc::from(record))?;
+                store.insert_track_fresh(&TrackDoc::from(record))?;
                 counts.tracks = counts
                     .tracks
                     .checked_add(1)
@@ -268,19 +270,30 @@ async fn catch_up_and_activate(
     loop {
         check_cancel(cancel)?;
         renew(config, pool, job_id, worker).await?;
-        let latest = SearchProjectionStore::max_outbox_id(pool).await?;
-        let mut cursor = generation.caught_up_outbox_id;
-        while cursor < latest {
-            let rows = SearchProjectionStore::load_outbox_after(
+        // PERF-V001 / RM-05: replay every outstanding delivery obligation of
+        // this generation in ascending id order. The obligation set is defined
+        // by the rebuild snapshot (`search_rebuild_snapshot_outbox`), not by an
+        // id-ordered cursor, so a low id that committed after the snapshot is
+        // replayed even when the ordinary worker already acknowledged it
+        // against the previous generation.
+        let mut after = 0_i64;
+        loop {
+            check_cancel(cancel)?;
+            renew(config, pool, job_id, worker).await?;
+            let pending = SearchProjectionStore::pending_outbox_replay_ids(
                 pool,
-                cursor,
-                latest,
+                generation.generation_id,
+                after,
                 config.claim_batch_size,
             )
             .await?;
+            let Some(&last) = pending.last() else {
+                break;
+            };
+            let rows = SearchProjectionStore::load_outbox_by_ids(pool, &pending).await?;
             if rows.is_empty() {
                 return Err(SearchError::Retryable(
-                    "outbox catch-up stalled before its high-water mark".to_string(),
+                    "outbox replay rows disappeared before they were applied".to_string(),
                 ));
             }
             let mut store = SearchStore::open(&path)?;
@@ -297,6 +310,9 @@ async fn catch_up_and_activate(
                 };
                 apply_record(&mut store, item, record)?;
             }
+            // Apply, then commit, then record the durable replay progress.
+            // A crash between commit and record replays an idempotent batch;
+            // a crash before commit replays from the last recorded point.
             store.commit()?;
             let stats = store.stats()?;
             let current_counts = melodee_persistence::SearchDocumentCounts {
@@ -307,22 +323,27 @@ async fn catch_up_and_activate(
                 tracks: u64::try_from(stats.tracks)
                     .map_err(|_| SearchError::Retryable("Track count overflow".to_string()))?,
             };
-            cursor = rows.last().map(|item| item.id).ok_or_else(|| {
-                SearchError::Retryable("outbox catch-up returned no rows".to_string())
-            })?;
+            SearchProjectionStore::record_outbox_replay(
+                pool,
+                generation.generation_id,
+                &pending,
+                OffsetDateTime::now_utc(),
+            )
+            .await?;
             SearchProjectionStore::update_generation_catchup(
                 pool,
                 job_id,
                 worker,
-                cursor,
+                last,
                 &current_counts,
                 OffsetDateTime::now_utc(),
             )
             .await?;
+            after = last;
         }
-        // Persistence holds the outbox SHARE lock only inside this bounded
-        // metadata transaction. Keep all index/catalog/filesystem work above
-        // this call so activation cannot extend catalog-writer blocking.
+        // Persistence holds the outbox ACCESS EXCLUSIVE fence only inside this
+        // bounded metadata transaction. Keep all index/catalog/filesystem work
+        // above this call so activation cannot extend catalog-writer blocking.
         match SearchProjectionStore::activate_generation(
             pool,
             job_id,
@@ -335,11 +356,14 @@ async fn catch_up_and_activate(
                 retire_old_generations(pool, root).await;
                 return Ok(());
             }
-            Err(melodee_persistence::SearchStoreError::NeedsCatchup(_)) => {
-                // `activate_generation` rechecks max(outbox.id) while holding
-                // the activation SHARE lock. A row committed after our
-                // unlocked read reaches this branch; reloading the fenced
-                // cursor and looping is the mechanism that closes that race.
+            Err(
+                melodee_persistence::SearchStoreError::NeedsCatchup(_)
+                | melodee_persistence::SearchStoreError::ActivationContended,
+            ) => {
+                // A transaction that inserted an outbox row committed between
+                // the last replay query and the fence, or the fence timed out.
+                // Reload the generation and replay the remaining obligations;
+                // never activate a stale generation.
                 generation =
                     SearchProjectionStore::get_generation(pool, generation.generation_id).await?;
             }

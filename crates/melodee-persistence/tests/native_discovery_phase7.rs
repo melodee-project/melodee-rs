@@ -216,3 +216,176 @@ async fn discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identi
     assert_eq!(second.candidates_corrected, 0);
     db.drop().await;
 }
+
+/// PERF-012 / RM-06 permanent regression.
+///
+/// Reproduces the starvation shape: far more Track candidates than one pass can
+/// visit, plus Release, Artist, and chart work. The old implementation reset
+/// every popularity cursor to `Uuid::nil()` and shared one batch budget, so the
+/// Track prefix consumed the whole pass and the other classes and charts were
+/// never reached. This test proves (a) bounded per-invocation work, (b) no
+/// class starvation, (c) eventual coverage of every stable candidate across
+/// sweeps, and (d) wraparound reaching a row inserted behind the cursor.
+#[tokio::test]
+async fn discovery_progress_is_durable_fair_and_eventually_complete() {
+    let db = TestDb::create("native_discovery_fairness").await;
+    let fixture = seed_published_release(
+        &db,
+        771,
+        CatalogFixturePresentation {
+            release_title: "Fairness Chart Release",
+            release_artist: "Fairness Chart Artist",
+            track_title: "Fairness Chart Track",
+            track_artist: "Fairness Chart Artist",
+            release_date: "2023-05-06",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = OffsetDateTime::now_utc();
+    assert_eq!(
+        CatalogStore
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim fairness fixture")
+            .len(),
+        1
+    );
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase7.discovery-fairness.v1", "fairness"),
+            now,
+        )
+        .await
+        .expect("import fairness fixture");
+
+    // 100,000 Track candidates with a deliberately wrong popularity so every
+    // visited row is observable, plus independent Release and Artist classes.
+    sqlx::query(
+        "INSERT INTO native_recommendation_candidates (entity_type, entity_id, popularity, updated_at)
+         SELECT 'track', gen_random_uuid(), 1, now() FROM generate_series(1, 100000)",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("seed 100K Track candidates");
+    sqlx::query(
+        "INSERT INTO native_recommendation_candidates (entity_type, entity_id, popularity, updated_at)
+         SELECT 'release', gen_random_uuid(), 1, now() FROM generate_series(1, 25)
+         UNION ALL
+         SELECT 'artist', gen_random_uuid(), 1, now() FROM generate_series(1, 25)",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("seed Release/Artist candidates");
+
+    // An unlinked chart item that this catalog can resolve, so chart progress is
+    // observable even while 100K Track candidates remain.
+    let chart = NativeDiscoveryStore
+        .import_chart_csv(
+            &db.pool,
+            &NativeChartImport {
+                slug: "fairness-chart".to_owned(),
+                title: "Fairness Chart".to_owned(),
+                source_name: None,
+                source_url: None,
+                chart_year: Some(2023),
+                is_visible: true,
+                is_generated_playlist_enabled: true,
+            },
+            b"Rank,ArtistName,ReleaseTitle,ReleaseYear\n1,Fairness Chart Artist,Fairness Chart Release,2023\n",
+        )
+        .await
+        .expect("import fairness chart");
+    assert_eq!(chart.linked_count, 1, "the fixture release links at import");
+
+    // Release and Artist classes are corrected in the very first pass even
+    // though tens of thousands of Track candidates are outstanding.
+    let first = NativeDiscoveryStore
+        .refresh_discovery_aggregates(&db.pool, 500, 100)
+        .await
+        .expect("first bounded discovery pass");
+    assert!(
+        first.batches <= 100,
+        "one pass must stay within its budget, got {}",
+        first.batches
+    );
+    let corrected_release_artist: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM native_recommendation_candidates
+          WHERE entity_type IN ('release','artist') AND popularity <> 0",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count uncorrected Release/Artist candidates");
+    assert_eq!(
+        corrected_release_artist, 0,
+        "Release and Artist classes must not be starved by the Track backlog"
+    );
+
+    // Drive the Track class to completion. 100,000 / (20 batches * 500) = 10
+    // sweeps; allow a generous bound and then assert every candidate was
+    // visited (popularity corrected to the authoritative zero).
+    let mut passes = 1;
+    loop {
+        let remaining: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM native_recommendation_candidates
+              WHERE entity_type = 'track' AND popularity <> 0",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count uncorrected Track candidates");
+        if remaining == 0 {
+            break;
+        }
+        assert!(
+            passes < 40,
+            "discovery never reached the end of its Track sweep"
+        );
+        NativeDiscoveryStore
+            .refresh_discovery_aggregates(&db.pool, 500, 100)
+            .await
+            .expect("subsequent bounded discovery pass");
+        passes += 1;
+    }
+    assert!(
+        passes >= 10,
+        "the budget must bound per-pass work (covered in {passes} passes)"
+    );
+
+    // The cursor has wrapped; a row inserted behind the previous cursor is
+    // reached on the next sweep rather than being skipped forever.
+    let behind = uuid::Uuid::parse_str("00000000-0000-4000-8000-000000000001")
+        .expect("valid behind-cursor UUID");
+    sqlx::query(
+        "INSERT INTO native_recommendation_candidates (entity_type, entity_id, popularity, updated_at)
+         VALUES ('track', $1, 1, now())",
+    )
+    .bind(behind)
+    .execute(&db.pool)
+    .await
+    .expect("insert candidate behind the cursor");
+    let after_wrap = NativeDiscoveryStore
+        .refresh_discovery_aggregates(&db.pool, 500, 100)
+        .await
+        .expect("pass after wraparound");
+    assert!(
+        after_wrap.passes_completed >= 1,
+        "the Track class reports a completed sweep"
+    );
+    let behind_popularity: i64 = sqlx::query_scalar(
+        "SELECT popularity FROM native_recommendation_candidates
+          WHERE entity_type = 'track' AND entity_id = $1",
+    )
+    .bind(behind)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read behind-cursor candidate");
+    assert_eq!(
+        behind_popularity, 0,
+        "rows inserted behind the cursor are visited after wraparound"
+    );
+
+    db.drop().await;
+}

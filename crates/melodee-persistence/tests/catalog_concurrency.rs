@@ -1025,3 +1025,207 @@ async fn concurrent_imports_of_one_artist_name_reuse_one_artist() {
     );
     db.drop().await;
 }
+
+async fn wait_for_one_database_lock_waiter(db: &TestDb) {
+    tokio::time::timeout(StdDuration::from_secs(10), async {
+        loop {
+            let waiters: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity
+                 WHERE datname=current_database() AND pid<>pg_backend_pid()
+                   AND wait_event_type='Lock'",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .expect("query genre lock waiter");
+            if waiters >= 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("concurrent genre writer reached the aggregate lock boundary");
+}
+
+/// PERF-003 / RM-04 permanent regression.
+///
+/// Two concurrent transactions contribute the same new genre display value on
+/// two different Releases. The old statement-trigger protocol counted each
+/// transaction's own snapshot and the second overwrote the first, storing
+/// `(1,1)` while authoritative terms held `(2,2)`. With the deterministic
+/// advisory keys plus a fresh recount statement, the later transaction
+/// observes the earlier commit and stores the exact counts.
+#[tokio::test]
+async fn concurrent_new_genre_contributions_are_not_lost_and_repair_converges() {
+    let db = TestDb::create("catalog_genre_concurrency").await;
+    let first = import_fixture(
+        &db,
+        211,
+        CatalogFixturePresentation {
+            release_title: "Genre Lock Release A",
+            release_artist: "Genre Lock Artist A",
+            track_title: "Genre Lock Track A",
+            track_artist: "Genre Lock Artist A",
+            release_date: "2012-01-01",
+        },
+    )
+    .await;
+    let second = import_fixture(
+        &db,
+        212,
+        CatalogFixturePresentation {
+            release_title: "Genre Lock Release B",
+            release_artist: "Genre Lock Artist B",
+            track_title: "Genre Lock Track B",
+            track_artist: "Genre Lock Artist B",
+            release_date: "2012-01-01",
+        },
+    )
+    .await;
+
+    let genre = format!("Concurrent Genre {}", Uuid::now_v7());
+    let insert_sql = "INSERT INTO catalog_genre_terms (\
+            track_id, release_id, surface, display_value, source_order\
+         ) SELECT track.id, track.release_id, 'native', $1, 0 \
+             FROM tracks track WHERE track.release_id = $2 \
+             ORDER BY track.id LIMIT 1 ON CONFLICT DO NOTHING";
+
+    let mut tx_a = db.pool.begin().await.expect("begin genre transaction A");
+    sqlx::query(insert_sql)
+        .bind(&genre)
+        .bind(first.release_id.into_uuid())
+        .execute(&mut *tx_a)
+        .await
+        .expect("insert genre contribution A");
+
+    let pool_b = db.pool.clone();
+    let genre_b = genre.clone();
+    let release_b = second.release_id.into_uuid();
+    let concurrent = tokio::spawn(async move {
+        let mut tx = pool_b.begin().await.expect("begin genre transaction B");
+        sqlx::query(insert_sql)
+            .bind(&genre_b)
+            .bind(release_b)
+            .execute(&mut *tx)
+            .await
+            .expect("insert genre contribution B");
+        tx.commit().await.expect("commit genre transaction B");
+    });
+
+    wait_for_one_database_lock_waiter(&db).await;
+    tx_a.commit().await.expect("commit genre transaction A");
+    concurrent.await.expect("concurrent genre writer");
+
+    let stored: (i64, i64) = sqlx::query_as(
+        "SELECT song_count, release_count FROM catalog_genre_aggregates
+          WHERE surface = 'native' AND display_value = $1",
+    )
+    .bind(&genre)
+    .fetch_one(&db.pool)
+    .await
+    .expect("stored aggregate row");
+    assert_eq!(
+        stored,
+        (2, 2),
+        "both concurrent contributions must be counted exactly once"
+    );
+
+    let authoritative: (i64, i64) = sqlx::query_as(
+        "SELECT count(*), count(DISTINCT release_id) FROM catalog_genre_terms
+          WHERE surface = 'native' AND display_value = $1",
+    )
+    .bind(&genre)
+    .fetch_one(&db.pool)
+    .await
+    .expect("authoritative term counts");
+    assert_eq!(stored, authoritative);
+
+    let clean: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM catalog_genre_aggregate_discrepancies(100)")
+            .fetch_one(&db.pool)
+            .await
+            .expect("read-only repair check");
+    assert_eq!(clean, 0, "a correct projection reports no discrepancies");
+
+    // Deliberately corrupt the stored counts, then prove the repair operation
+    // converges and is idempotent. Apply mode is exercised only on disposable
+    // test data, never against a real library.
+    sqlx::query(
+        "UPDATE catalog_genre_aggregates SET song_count = 1, release_count = 1
+          WHERE surface = 'native' AND display_value = $1",
+    )
+    .bind(&genre)
+    .execute(&db.pool)
+    .await
+    .expect("corrupt stored aggregate");
+    let (checked, repaired): (i32, i32) =
+        sqlx::query_as("SELECT * FROM repair_catalog_genre_aggregates(true, 100)")
+            .fetch_one(&db.pool)
+            .await
+            .expect("apply genre repair");
+    assert!(checked >= 1);
+    assert_eq!(checked, repaired);
+    let repaired_row: (i64, i64) = sqlx::query_as(
+        "SELECT song_count, release_count FROM catalog_genre_aggregates
+          WHERE surface = 'native' AND display_value = $1",
+    )
+    .bind(&genre)
+    .fetch_one(&db.pool)
+    .await
+    .expect("repaired aggregate row");
+    assert_eq!(repaired_row, (2, 2));
+
+    let after: (i32, i32) =
+        sqlx::query_as("SELECT * FROM repair_catalog_genre_aggregates(true, 100)")
+            .fetch_one(&db.pool)
+            .await
+            .expect("idempotent repair rerun");
+    assert_eq!(after, (0, 0), "repair is idempotent on repaired data");
+
+    // A real status transition to zero active contributors must remove the
+    // stale aggregate row rather than leaving a zero-contributor key.
+    sqlx::query(
+        "UPDATE releases SET status = 'deprecated', revision = revision + 1, updated_at = now()
+          WHERE id = ANY($1)",
+    )
+    .bind(vec![
+        first.release_id.into_uuid(),
+        second.release_id.into_uuid(),
+    ])
+    .execute(&db.pool)
+    .await
+    .expect("deprecate both genre contributors");
+    let stale: Option<(i64, i64)> = sqlx::query_as(
+        "SELECT song_count, release_count FROM catalog_genre_aggregates
+          WHERE surface = 'native' AND display_value = $1",
+    )
+    .bind(&genre)
+    .fetch_optional(&db.pool)
+    .await
+    .expect("read stale aggregate row");
+    assert!(
+        stale.is_none(),
+        "a key with no active contributors must be removed, got {stale:?}"
+    );
+
+    // Overlay-only updates (no status change) must not corrupt counts.
+    sqlx::query(
+        "UPDATE releases SET title = title || ' (overlay)', revision = revision + 1, updated_at = now()
+          WHERE id = $1",
+    )
+    .bind(second.release_id.into_uuid())
+    .execute(&db.pool)
+    .await
+    .expect("overlay-only release update");
+    let still_clean: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM catalog_genre_aggregate_discrepancies(100)")
+            .fetch_one(&db.pool)
+            .await
+            .expect("post-overlay repair check");
+    assert_eq!(
+        still_clean, 0,
+        "overlay-only updates must not change aggregates"
+    );
+
+    db.drop().await;
+}

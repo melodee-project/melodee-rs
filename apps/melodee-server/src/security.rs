@@ -151,6 +151,11 @@ pub struct BlacklistCache {
     pool: sqlx::PgPool,
     ttl: Duration,
     state: RwLock<CachedPolicy>,
+    /// PERF-013: single-flight gate. Without it every request that arrives
+    /// after the TTL expires runs the settings queries concurrently, so a
+    /// traffic burst produces a database stampede for identical data. Only one
+    /// task refreshes; the others wait and then observe the fresh policy.
+    refresh_gate: tokio::sync::Mutex<()>,
 }
 
 /// Diagnostics view of the cache. Counts and freshness only: the entries
@@ -170,6 +175,7 @@ impl BlacklistCache {
             pool,
             ttl: CACHE_TTL,
             state: RwLock::new(CachedPolicy::default()),
+            refresh_gate: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -180,6 +186,7 @@ impl BlacklistCache {
             pool,
             ttl,
             state: RwLock::new(CachedPolicy::default()),
+            refresh_gate: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -195,6 +202,25 @@ impl BlacklistCache {
                 .is_none_or(|loaded_at| loaded_at.elapsed() >= self.ttl)
         };
         if needs_refresh {
+            let _single_flight = self.refresh_gate.lock().await;
+            // Another task may have refreshed while this one waited.
+            let still_stale = {
+                let guard = self
+                    .state
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                guard
+                    .loaded_at
+                    .is_none_or(|loaded_at| loaded_at.elapsed() >= self.ttl)
+            };
+            if !still_stale {
+                return self
+                    .state
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .policy
+                    .clone();
+            }
             let resolver = SettingsResolver::new(&self.pool);
             let loaded = async {
                 let emails = resolver.resolve(SETTING_BLACKLISTED_EMAILS).await?;

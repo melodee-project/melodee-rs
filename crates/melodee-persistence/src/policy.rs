@@ -2264,17 +2264,37 @@ impl PolicyStore {
         .bind(release_id)
         .fetch_all(pool)
         .await?;
-        let acoustic_rows: Vec<(String,)> = sqlx::query_as(
-            r#"SELECT DISTINCT evidence.payload->>'fingerprint_digest'
-                 FROM audio_identity_evidence evidence
-                 JOIN tracks owner ON owner.id = evidence.track_id
-                WHERE evidence.evidence_kind = 'acoustic_fingerprint'
-                  AND evidence.payload ? 'fingerprint_digest'
-                  AND owner.release_id <> $1"#,
-        )
-        .bind(release_id)
-        .fetch_all(pool)
-        .await?;
+        // PERF-002: novelty only asks "is one of *this Release's* digests
+        // present elsewhere?". Building the catalog-wide digest set here made
+        // every evaluation transfer and allocate every other Release's
+        // fingerprints. Scope the exact digest expression to the digests the
+        // authoritative track facts already produced; an empty set means no
+        // possible match, so no query is issued at all.
+        let mut acoustic_digests: Vec<String> = tracks
+            .iter()
+            .filter_map(|track| track.audio_fingerprint_digest.as_deref())
+            .map(|digest| digest.trim().to_owned())
+            .filter(|digest| !digest.is_empty())
+            .collect();
+        acoustic_digests.sort_unstable();
+        acoustic_digests.dedup();
+        let acoustic_rows: Vec<(String,)> = if acoustic_digests.is_empty() {
+            Vec::new()
+        } else {
+            sqlx::query_as(
+                r#"SELECT DISTINCT evidence.payload->>'fingerprint_digest'
+                     FROM audio_identity_evidence evidence
+                     JOIN tracks owner ON owner.id = evidence.track_id
+                    WHERE evidence.evidence_kind = 'acoustic_fingerprint'
+                      AND evidence.payload ? 'fingerprint_digest'
+                      AND owner.release_id <> $1
+                      AND evidence.payload->>'fingerprint_digest' = ANY($2)"#,
+            )
+            .bind(release_id)
+            .bind(&acoustic_digests)
+            .fetch_all(pool)
+            .await?
+        };
         let catalog_trait_rows: Vec<(String,)> = sqlx::query_as(
             r#"SELECT trait FROM release_catalog_trait_assertions
                 WHERE release_id = $1 ORDER BY trait LIMIT $2"#,
@@ -2577,6 +2597,9 @@ impl PolicyStore {
                            WHERE evidence.evidence_kind = 'acoustic_fingerprint'
                              AND evidence.payload ? 'fingerprint_digest'
                              AND owner.release_id <> ci.release_id
+                             AND array_length(own_acoustic.digests, 1) IS NOT NULL
+                             AND evidence.payload->>'fingerprint_digest'
+                                 = ANY(own_acoustic.digests)
                       ), ARRAY[]::text[]) AS acoustic_fingerprints
                  FROM catalog_imports ci
                  JOIN release_work_items w ON w.id = ci.work_item_id
@@ -2584,6 +2607,19 @@ impl PolicyStore {
                  JOIN release_work_item_manifests wm ON wm.id = ci.manifest_row_id
                  LEFT JOIN release_work_item_manifest_facts facts
                    ON facts.manifest_row_id = wm.id
+                 -- PERF-002: scope the acoustic comparison to this Release's
+                 -- own digest facts once per selected Release instead of
+                 -- materializing every catalog fingerprint array $1 times.
+                 LEFT JOIN LATERAL (
+                     SELECT array_agg(DISTINCT track_fact.fingerprint_digest) AS digests
+                       FROM tracks own_track
+                       JOIN release_work_item_manifest_track_facts track_fact
+                         ON track_fact.manifest_row_id = wm.id
+                        AND track_fact.relative_path = own_track.source_path
+                      WHERE own_track.release_id = ci.release_id
+                        AND track_fact.fingerprint_digest IS NOT NULL
+                        AND btrim(track_fact.fingerprint_digest) <> ''
+                 ) own_acoustic ON true
                  LEFT JOIN policy_decisions decision ON decision.release_id = ci.release_id
                 ORDER BY ci.imported_at, ci.release_id
                 LIMIT $1"#,

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -160,7 +160,6 @@ impl NativeDiscoveryStore {
         })
     }
 }
-
 /// Observable result of one bounded chart/recommendation maintenance pass.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct NativeDiscoveryMaintenanceStats {
@@ -168,12 +167,37 @@ pub struct NativeDiscoveryMaintenanceStats {
     pub candidates_corrected: u64,
     pub chart_items_relinked: u64,
     pub batches: u32,
-    /// `true` when the pass batch cap was reached while rows remained; the
-    /// next pass resumes the same work, so convergence is eventual.
+    /// `true` when a work-class batch cap was reached while rows remained; the
+    /// durable cursor resumes that class on the next pass.
     pub truncated: bool,
+    /// Work classes that advanced their durable cursor during this pass.
+    pub classes_advanced: u32,
+    /// Work classes that reached the end of the current sweep and wrapped.
+    pub passes_completed: u32,
 }
 
 const RECOMMENDATION_ENTITY_TYPES: [&str; 3] = ["track", "release", "artist"];
+
+/// Transaction-scoped fence serializing every discovery work class across
+/// processes. A concurrent pass either waits for the current batch or, after
+/// the current transaction commits, resumes from the cursor that batch stored.
+/// Cursors therefore cannot regress or overwrite each other.
+const DISCOVERY_PASS_LOCK_KEY: i64 = (19_761_125_i64 << 32) | 311;
+
+/// Five independent work classes share the configured per-pass batch cap:
+/// missing-candidate backfill, three popularity classes, and chart relinking.
+/// A large Track population can no longer consume the whole budget and starve
+/// Releases, Artists, or charts.
+fn per_class_budget(max_batches: u32) -> u32 {
+    (max_batches / 5).max(1)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct DiscoveryProgress {
+    cursor_uuid: Option<Uuid>,
+    cursor_chart_id: Option<Uuid>,
+    cursor_rank: Option<i32>,
+}
 
 impl NativeDiscoveryStore {
     /// Reconciles the materialized discovery projections against durable
@@ -187,24 +211,91 @@ impl NativeDiscoveryStore {
     /// chart items are retried against the catalog under the same
     /// unique-exact-match rule as import; existing links are never rewritten
     /// or cleared because names are never semantic identity.
+    ///
+    /// PERF-012: each work class keeps its own durable keyset cursor and its
+    /// own bounded budget. Progress is stored in the same transaction as the
+    /// batch effect, so a crash replays an idempotent batch instead of
+    /// skipping it, and a completed sweep wraps to `nil` so rows inserted
+    /// behind the cursor are reached on the next sweep.
     pub async fn refresh_discovery_aggregates(
         &self,
         pool: &PgPool,
         batch_size: u32,
         max_batches: u32,
     ) -> Result<NativeDiscoveryMaintenanceStats, NativeDiscoveryStoreError> {
+        if batch_size == 0 || max_batches == 0 {
+            return Err(NativeDiscoveryStoreError::InvalidMetadata(
+                "discovery batch bounds must be positive",
+            ));
+        }
+        let per_class = per_class_budget(max_batches);
         let mut stats = NativeDiscoveryMaintenanceStats::default();
+
+        // The missing-candidate backstop stays a periodic bounded anti-join.
+        // Ordinary insert triggers cover normal creation, but a backup restore
+        // or binary downgrade can leave rows missing, so this pass is retained
+        // rather than replaced by triggers alone.
+        let missing_per_type = per_class.div_ceil(RECOMMENDATION_ENTITY_TYPES.len() as u32);
         for entity_type in RECOMMENDATION_ENTITY_TYPES {
-            insert_missing_candidates(pool, entity_type, batch_size, max_batches, &mut stats)
+            insert_missing_candidates(pool, entity_type, batch_size, missing_per_type, &mut stats)
                 .await?;
         }
         for entity_type in RECOMMENDATION_ENTITY_TYPES {
-            correct_candidate_popularity(pool, entity_type, batch_size, max_batches, &mut stats)
+            correct_candidate_popularity(pool, entity_type, batch_size, per_class, &mut stats)
                 .await?;
         }
-        relink_chart_items(pool, batch_size, max_batches, &mut stats).await?;
+        relink_chart_items(pool, batch_size, per_class, &mut stats).await?;
         Ok(stats)
     }
+}
+
+async fn load_progress(
+    tx: &mut Transaction<'_, Postgres>,
+    work_class: &str,
+) -> Result<DiscoveryProgress, NativeDiscoveryStoreError> {
+    let row = sqlx::query_as::<_, (Option<Uuid>, Option<Uuid>, Option<i32>)>(
+        "SELECT cursor_uuid, cursor_chart_id, cursor_rank
+           FROM native_discovery_progress WHERE work_class = $1",
+    )
+    .bind(work_class)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(map_sql)?;
+    let (cursor_uuid, cursor_chart_id, cursor_rank) = row.unwrap_or((None, None, None));
+    Ok(DiscoveryProgress {
+        cursor_uuid,
+        cursor_chart_id,
+        cursor_rank,
+    })
+}
+
+async fn store_progress(
+    tx: &mut Transaction<'_, Postgres>,
+    work_class: &str,
+    progress: DiscoveryProgress,
+    pass_completed: bool,
+) -> Result<(), NativeDiscoveryStoreError> {
+    sqlx::query(
+        "INSERT INTO native_discovery_progress (
+             work_class, cursor_uuid, cursor_chart_id, cursor_rank,
+             pass_completed, updated_at
+         ) VALUES ($1,$2,$3,$4,$5,now())
+         ON CONFLICT (work_class) DO UPDATE SET
+             cursor_uuid = EXCLUDED.cursor_uuid,
+             cursor_chart_id = EXCLUDED.cursor_chart_id,
+             cursor_rank = EXCLUDED.cursor_rank,
+             pass_completed = EXCLUDED.pass_completed,
+             updated_at = EXCLUDED.updated_at",
+    )
+    .bind(work_class)
+    .bind(progress.cursor_uuid)
+    .bind(progress.cursor_chart_id)
+    .bind(progress.cursor_rank)
+    .bind(pass_completed)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sql)?;
+    Ok(())
 }
 
 fn missing_candidate_insert_sql(entity_type: &str) -> &'static str {
@@ -243,12 +334,13 @@ async fn insert_missing_candidates(
     pool: &PgPool,
     entity_type: &str,
     batch_size: u32,
-    max_batches: u32,
+    budget: u32,
     stats: &mut NativeDiscoveryMaintenanceStats,
 ) -> Result<(), NativeDiscoveryStoreError> {
     let sql = missing_candidate_insert_sql(entity_type);
+    let mut used = 0u32;
     loop {
-        if stats_batch_exhausted(stats, max_batches) {
+        if used >= budget {
             stats.truncated = true;
             return Ok(());
         }
@@ -258,6 +350,7 @@ async fn insert_missing_candidates(
             .await
             .map_err(map_sql)?
             .rows_affected();
+        used = used.saturating_add(1);
         stats.batches = stats.batches.saturating_add(1);
         stats.candidates_inserted = stats.candidates_inserted.saturating_add(inserted);
         if inserted == 0 {
@@ -317,41 +410,66 @@ async fn correct_candidate_popularity(
     pool: &PgPool,
     entity_type: &str,
     batch_size: u32,
-    max_batches: u32,
+    budget: u32,
     stats: &mut NativeDiscoveryMaintenanceStats,
 ) -> Result<(), NativeDiscoveryStoreError> {
+    let work_class = format!("{entity_type}_popularity");
     let correction_sql = candidate_popularity_correction_sql(entity_type);
-    let mut cursor = Uuid::nil();
+    let limit = i64::from(batch_size);
+    let mut used = 0u32;
     loop {
-        if stats_batch_exhausted(stats, max_batches) {
+        if used >= budget {
             stats.truncated = true;
             return Ok(());
         }
-        // Keyset pagination walks every candidate exactly once per pass even
-        // when a batch needs no correction, so the pass always terminates.
+        let mut tx = pool.begin().await.map_err(map_sql)?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(DISCOVERY_PASS_LOCK_KEY)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sql)?;
+        let progress = load_progress(&mut tx, &work_class).await?;
         let batch = sqlx::query_scalar::<_, Uuid>(
             "SELECT entity_id FROM native_recommendation_candidates \
              WHERE entity_type=$1 AND entity_id>$2 ORDER BY entity_id LIMIT $3",
         )
         .bind(entity_type)
-        .bind(cursor)
-        .bind(i64::from(batch_size))
-        .fetch_all(pool)
+        .bind(progress.cursor_uuid.unwrap_or_else(Uuid::nil))
+        .bind(limit)
+        .fetch_all(&mut *tx)
         .await
         .map_err(map_sql)?;
+        used = used.saturating_add(1);
         stats.batches = stats.batches.saturating_add(1);
         let Some(last) = batch.last().copied() else {
+            // Sweep complete: wrap so rows inserted behind the cursor are
+            // visited on the next sweep. Durable with this transaction.
+            store_progress(&mut tx, &work_class, DiscoveryProgress::default(), true).await?;
+            tx.commit().await.map_err(map_sql)?;
+            stats.passes_completed = stats.passes_completed.saturating_add(1);
             return Ok(());
         };
-        cursor = last;
         let corrected = sqlx::query(correction_sql)
             .bind(&batch)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sql)?
             .rows_affected();
         stats.candidates_corrected = stats.candidates_corrected.saturating_add(corrected);
-        if batch.len() < usize::try_from(batch_size).unwrap_or(usize::MAX) {
+        let complete = batch.len() < usize::try_from(batch_size).unwrap_or(usize::MAX);
+        let next = if complete {
+            DiscoveryProgress::default()
+        } else {
+            DiscoveryProgress {
+                cursor_uuid: Some(last),
+                ..DiscoveryProgress::default()
+            }
+        };
+        store_progress(&mut tx, &work_class, next, complete).await?;
+        tx.commit().await.map_err(map_sql)?;
+        stats.classes_advanced = stats.classes_advanced.saturating_add(1);
+        if complete {
+            stats.passes_completed = stats.passes_completed.saturating_add(1);
             return Ok(());
         }
     }
@@ -360,23 +478,57 @@ async fn correct_candidate_popularity(
 async fn relink_chart_items(
     pool: &PgPool,
     batch_size: u32,
-    max_batches: u32,
+    budget: u32,
     stats: &mut NativeDiscoveryMaintenanceStats,
 ) -> Result<(), NativeDiscoveryStoreError> {
+    const WORK_CLASS: &str = "chart_relink";
+    let limit = i64::from(batch_size);
+    let mut used = 0u32;
     loop {
-        if stats_batch_exhausted(stats, max_batches) {
+        if used >= budget {
             stats.truncated = true;
             return Ok(());
         }
-        // Only unique exact matches link, exactly as at import time. Rows
-        // that stay unlinked terminate the loop; later passes retry them as
-        // the catalog changes.
+        let mut tx = pool.begin().await.map_err(map_sql)?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(DISCOVERY_PASS_LOCK_KEY)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sql)?;
+        let progress = load_progress(&mut tx, WORK_CLASS).await?;
+        let after_chart = progress.cursor_chart_id.unwrap_or_else(Uuid::nil);
+        let after_rank = progress.cursor_rank.unwrap_or(-1);
+        let batch = sqlx::query_as::<_, (Uuid, i32)>(
+            "SELECT chart_id, rank FROM native_chart_items
+             WHERE (linked_artist_id IS NULL OR linked_release_id IS NULL)
+               AND (chart_id, rank) > ($1, $2)
+             ORDER BY chart_id, rank LIMIT $3",
+        )
+        .bind(after_chart)
+        .bind(after_rank)
+        .bind(limit)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sql)?;
+        used = used.saturating_add(1);
+        stats.batches = stats.batches.saturating_add(1);
+        let Some(&(last_chart, last_rank)) = batch.last() else {
+            store_progress(&mut tx, WORK_CLASS, DiscoveryProgress::default(), true).await?;
+            tx.commit().await.map_err(map_sql)?;
+            stats.passes_completed = stats.passes_completed.saturating_add(1);
+            return Ok(());
+        };
+        // Only unique exact matches link, exactly as at import time. Rows that
+        // stay ambiguous remain unlinked; later sweeps retry them as the
+        // catalog changes. The cursor still advances past them so a run of
+        // permanently ambiguous rows cannot starve the rest of the chart.
         let relinked = sqlx::query(
             r#"WITH batch AS (
                  SELECT item.chart_id,item.rank
                  FROM native_chart_items item
-                 WHERE item.linked_artist_id IS NULL OR item.linked_release_id IS NULL
-                 ORDER BY item.chart_id,item.rank LIMIT $1)
+                 WHERE (item.linked_artist_id IS NULL OR item.linked_release_id IS NULL)
+                   AND (item.chart_id, item.rank) > ($1, $2)
+                 ORDER BY item.chart_id,item.rank LIMIT $3)
                UPDATE native_chart_items item SET
                  (linked_artist_id,linked_release_id)=(
                    SELECT artist.id,release.id
@@ -402,21 +554,32 @@ async fn relink_chart_items(
                    AND (item.release_year IS NULL OR
                      EXTRACT(YEAR FROM release.release_date)::integer=item.release_year))"#,
         )
-        .bind(i64::from(batch_size))
-        .execute(pool)
+        .bind(after_chart)
+        .bind(after_rank)
+        .bind(limit)
+        .execute(&mut *tx)
         .await
         .map_err(map_sql)?
         .rows_affected();
-        stats.batches = stats.batches.saturating_add(1);
         stats.chart_items_relinked = stats.chart_items_relinked.saturating_add(relinked);
-        if relinked == 0 {
+        let complete = batch.len() < usize::try_from(batch_size).unwrap_or(usize::MAX);
+        let next = if complete {
+            DiscoveryProgress::default()
+        } else {
+            DiscoveryProgress {
+                cursor_chart_id: Some(last_chart),
+                cursor_rank: Some(last_rank),
+                ..DiscoveryProgress::default()
+            }
+        };
+        store_progress(&mut tx, WORK_CLASS, next, complete).await?;
+        tx.commit().await.map_err(map_sql)?;
+        stats.classes_advanced = stats.classes_advanced.saturating_add(1);
+        if complete {
+            stats.passes_completed = stats.passes_completed.saturating_add(1);
             return Ok(());
         }
     }
-}
-
-const fn stats_batch_exhausted(stats: &NativeDiscoveryMaintenanceStats, max_batches: u32) -> bool {
-    stats.batches >= max_batches
 }
 
 fn validate_chart_metadata(request: &NativeChartImport) -> Result<(), NativeDiscoveryStoreError> {

@@ -2034,28 +2034,53 @@ impl CatalogStore {
             return Err(CatalogStoreError::MutationConflict);
         }
         let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
-        for track in &moved {
-            for observation in &track.observations {
-                sqlx::query(
-                    "UPDATE observed_artists SET release_id=$2, source_ordinal=$3
-                     WHERE id=$1 AND release_id=$4",
-                )
-                .bind(observation.observation_id)
-                .bind(source_release_id)
-                .bind(observation.original_ordinal)
-                .bind(target_release_id)
-                .execute(&mut *tx)
-                .await?;
-            }
+        // PERF-V002: restore observations and Tracks with two set-based
+        // statements instead of one round trip per observation and per Track.
+        // The per-row guards (`release_id` still equals the merged-away
+        // Release) are preserved exactly, and `unnest` zips the id and ordinal
+        // arrays so the mapping is the same one the per-row loop produced.
+        let observation_ids = moved
+            .iter()
+            .flat_map(|track| track.observations.iter().map(|o| o.observation_id))
+            .collect::<Vec<_>>();
+        let observation_ordinals = moved
+            .iter()
+            .flat_map(|track| track.observations.iter().map(|o| o.original_ordinal))
+            .collect::<Vec<_>>();
+        let track_ordinals = moved
+            .iter()
+            .map(|track| track.original_ordinal)
+            .collect::<Vec<_>>();
+        if !observation_ids.is_empty() {
             sqlx::query(
-                "UPDATE tracks SET release_id=$2, ordinal=$3,
-                    revision=revision+1, updated_at=$4
-                 WHERE id=$1 AND release_id=$5",
+                "UPDATE observed_artists observed
+                    SET release_id=$2, source_ordinal=restore.ordinal
+                   FROM (SELECT unnest($1::uuid[]) AS observation_id,
+                                unnest($3::int[]) AS ordinal) restore
+                  WHERE observed.id=restore.observation_id
+                    AND observed.release_id=$4",
             )
-            .bind(track.track_id)
+            .bind(&observation_ids)
             .bind(source_release_id)
-            .bind(track.original_ordinal)
+            .bind(&observation_ordinals)
+            .bind(target_release_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if !track_ids.is_empty() {
+            sqlx::query(
+                "UPDATE tracks track
+                    SET release_id=$2, ordinal=restore.ordinal,
+                        revision=revision+1, updated_at=$3
+                   FROM (SELECT unnest($1::uuid[]) AS track_id,
+                                unnest($4::int[]) AS ordinal) restore
+                  WHERE track.id=restore.track_id
+                    AND track.release_id=$5",
+            )
+            .bind(&track_ids)
+            .bind(source_release_id)
             .bind(now)
+            .bind(&track_ordinals)
             .bind(target_release_id)
             .execute(&mut *tx)
             .await?;
@@ -2384,21 +2409,18 @@ async fn merge_release_in_transaction(
     .unwrap_or(0);
     let mut moved = Vec::with_capacity(source_tracks.len());
     let mut next_observation_ordinal = target_observation_max;
+    // PERF-V002: compute the exact per-Track and per-observation ordinals in
+    // the same deterministic order as before, then apply them set-wise.
+    let mut moved_track_ids = Vec::with_capacity(source_tracks.len());
+    let mut moved_track_ordinals = Vec::with_capacity(source_tracks.len());
+    let mut moved_observation_ids = Vec::new();
+    let mut moved_observation_ordinals = Vec::new();
     for (index, (track_id, original_ordinal)) in source_tracks.iter().enumerate() {
         let merged_ordinal = target_max
             .checked_add(i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?)
             .ok_or(CatalogStoreError::NumericOverflow)?;
-        sqlx::query(
-            "UPDATE tracks SET release_id=$2, ordinal=$3,
-                    revision=revision+1, updated_at=$4 WHERE id=$1 AND release_id=$5",
-        )
-        .bind(track_id)
-        .bind(target_release_id)
-        .bind(merged_ordinal)
-        .bind(now)
-        .bind(source_release_id)
-        .execute(&mut **tx)
-        .await?;
+        moved_track_ids.push(*track_id);
+        moved_track_ordinals.push(merged_ordinal);
         let mut observations = Vec::new();
         for (observation_id, _observation_track_id, original_observation_ordinal) in
             source_observations
@@ -2408,16 +2430,8 @@ async fn merge_release_in_transaction(
             next_observation_ordinal = next_observation_ordinal
                 .checked_add(1)
                 .ok_or(CatalogStoreError::NumericOverflow)?;
-            sqlx::query(
-                "UPDATE observed_artists SET release_id=$2, source_ordinal=$3
-                     WHERE id=$1 AND release_id=$4",
-            )
-            .bind(observation_id)
-            .bind(target_release_id)
-            .bind(next_observation_ordinal)
-            .bind(source_release_id)
-            .execute(&mut **tx)
-            .await?;
+            moved_observation_ids.push(*observation_id);
+            moved_observation_ordinals.push(next_observation_ordinal);
             observations.push(ReleaseMovedObservation {
                 observation_id: *observation_id,
                 original_ordinal: *original_observation_ordinal,
@@ -2430,6 +2444,40 @@ async fn merge_release_in_transaction(
             merged_ordinal,
             observations,
         });
+    }
+    if !moved_track_ids.is_empty() {
+        sqlx::query(
+            "UPDATE tracks track
+                SET release_id=$2, ordinal=shift.ordinal,
+                    revision=revision+1, updated_at=$3
+               FROM (SELECT unnest($1::uuid[]) AS track_id,
+                            unnest($4::int[]) AS ordinal) shift
+              WHERE track.id=shift.track_id
+                AND track.release_id=$5",
+        )
+        .bind(&moved_track_ids)
+        .bind(target_release_id)
+        .bind(now)
+        .bind(&moved_track_ordinals)
+        .bind(source_release_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    if !moved_observation_ids.is_empty() {
+        sqlx::query(
+            "UPDATE observed_artists observed
+                SET release_id=$2, source_ordinal=shift.ordinal
+               FROM (SELECT unnest($1::uuid[]) AS observation_id,
+                            unnest($3::int[]) AS ordinal) shift
+              WHERE observed.id=shift.observation_id
+                AND observed.release_id=$4",
+        )
+        .bind(&moved_observation_ids)
+        .bind(target_release_id)
+        .bind(&moved_observation_ordinals)
+        .bind(source_release_id)
+        .execute(&mut **tx)
+        .await?;
     }
     let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
     if !track_ids.is_empty() {
@@ -4347,33 +4395,63 @@ async fn persist_acoustic_audio_identity_evidence(
     prepared: &PreparedImport,
     now: OffsetDateTime,
 ) -> Result<(), CatalogStoreError> {
+    // PERF-014: one set-based insert per import instead of one round trip per
+    // Track. The payload JSON is built server-side from typed arrays so no
+    // per-row JSON value crosses the wire and no array length can disagree.
+    let mut evidence_ids = Vec::new();
+    let mut audio_identity_ids = Vec::new();
+    let mut track_ids = Vec::new();
+    let mut digests = Vec::new();
+    let mut lengths = Vec::new();
+    let mut media_asset_ids = Vec::new();
     for track in &prepared.tracks {
         let Some(fingerprint) = track.acoustic_fingerprint.as_deref() else {
             continue;
         };
-        if fingerprint.trim().is_empty() {
+        let trimmed = fingerprint.trim();
+        if trimmed.is_empty() {
             continue;
         }
-        sqlx::query(
-            "INSERT INTO audio_identity_evidence (
-                id, source_audio_identity_id, candidate_audio_identity_id,
-                track_id, evidence_kind, polarity, confidence, source,
-                payload, created_at
-             ) VALUES ($1,$2,NULL,$3,'acoustic_fingerprint','supports',9000,
-                       'manifest-v3:chromaprint',$4,$5)",
-        )
-        .bind(Uuid::now_v7())
-        .bind(track.audio_identity_id)
-        .bind(track.id)
-        .bind(serde_json::json!({
-            "fingerprint_digest": acoustic_fingerprint_digest(fingerprint),
-            "fingerprint_length": fingerprint.trim().len(),
-            "media_asset_id": track.media_asset_id,
-        }))
-        .bind(now)
-        .execute(&mut **tx)
-        .await?;
+        evidence_ids.push(Uuid::now_v7());
+        audio_identity_ids.push(track.audio_identity_id);
+        track_ids.push(track.id);
+        digests.push(acoustic_fingerprint_digest(trimmed));
+        lengths.push(i32::try_from(trimmed.len()).unwrap_or(i32::MAX));
+        media_asset_ids.push(track.media_asset_id);
     }
+    if evidence_ids.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO audio_identity_evidence (
+            id, source_audio_identity_id, candidate_audio_identity_id,
+            track_id, evidence_kind, polarity, confidence, source,
+            payload, created_at
+         )
+         SELECT evidence.id, evidence.audio_identity_id, NULL, evidence.track_id,
+                'acoustic_fingerprint','supports',9000,'manifest-v3:chromaprint',
+                jsonb_build_object(
+                    'fingerprint_digest', evidence.digest,
+                    'fingerprint_length', evidence.fingerprint_length,
+                    'media_asset_id', evidence.media_asset_id
+                ),
+                $5
+           FROM (SELECT unnest($1::uuid[]) AS id,
+                        unnest($2::uuid[]) AS audio_identity_id,
+                        unnest($3::uuid[]) AS track_id,
+                        unnest($4::text[]) AS digest,
+                        unnest($6::int[]) AS fingerprint_length,
+                        unnest($7::uuid[]) AS media_asset_id) evidence",
+    )
+    .bind(&evidence_ids)
+    .bind(&audio_identity_ids)
+    .bind(&track_ids)
+    .bind(&digests)
+    .bind(now)
+    .bind(&lengths)
+    .bind(&media_asset_ids)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -4382,35 +4460,75 @@ async fn persist_embedded_audio_identity_evidence(
     prepared: &PreparedImport,
     now: OffsetDateTime,
 ) -> Result<(), CatalogStoreError> {
+    // PERF-014: batch every embedded identifier evidence row for the import in
+    // one statement. Source, confidence, and payload are identical to the
+    // former per-row insert; JSONB normalizes key order, so the stored payload
+    // is byte-equivalent.
+    let mut evidence_ids = Vec::new();
+    let mut audio_identity_ids = Vec::new();
+    let mut track_ids = Vec::new();
+    let mut confidences = Vec::new();
+    let mut sources = Vec::new();
+    let mut families = Vec::new();
+    let mut external_ids = Vec::new();
+    let mut media_asset_ids = Vec::new();
+    let mut trusted_shapes = Vec::new();
     for track in &prepared.tracks {
         for (family, external_id) in &track.musicbrainz_ids {
             let trusted_shape = Uuid::parse_str(external_id).is_ok();
-            sqlx::query(
-                "INSERT INTO audio_identity_evidence (
-                    id, source_audio_identity_id, candidate_audio_identity_id,
-                    track_id, evidence_kind, polarity, confidence, source,
-                    payload, created_at
-                 ) VALUES ($1,$2,NULL,$3,'external_identifier','supports',$4,$5,$6,$7)",
-            )
-            .bind(Uuid::now_v7())
-            .bind(track.audio_identity_id)
-            .bind(track.id)
-            .bind(if trusted_shape { 9500_i32 } else { 1000_i32 })
-            .bind(if trusted_shape {
+            evidence_ids.push(Uuid::now_v7());
+            audio_identity_ids.push(track.audio_identity_id);
+            track_ids.push(track.id);
+            confidences.push(if trusted_shape { 9500_i32 } else { 1000_i32 });
+            sources.push(if trusted_shape {
                 "manifest-v3:embedded-musicbrainz"
             } else {
                 "manifest-v3:malformed-musicbrainz-observation"
-            })
-            .bind(serde_json::json!({
-                "family": family,
-                "external_id": external_id,
-                "media_asset_id": track.media_asset_id,
-                "trusted_identifier_shape": trusted_shape,
-            }))
-            .bind(now)
-            .execute(&mut **tx)
-            .await?;
+            });
+            families.push(family.as_str());
+            external_ids.push(external_id.as_str());
+            media_asset_ids.push(track.media_asset_id);
+            trusted_shapes.push(trusted_shape);
         }
+    }
+    if !evidence_ids.is_empty() {
+        sqlx::query(
+            "INSERT INTO audio_identity_evidence (
+                id, source_audio_identity_id, candidate_audio_identity_id,
+                track_id, evidence_kind, polarity, confidence, source,
+                payload, created_at
+             )
+             SELECT evidence.id, evidence.audio_identity_id, NULL, evidence.track_id,
+                    'external_identifier','supports',evidence.confidence,evidence.source,
+                    jsonb_build_object(
+                        'family', evidence.family,
+                        'external_id', evidence.external_id,
+                        'media_asset_id', evidence.media_asset_id,
+                        'trusted_identifier_shape', evidence.trusted_shape
+                    ),
+                    $9
+               FROM (SELECT unnest($1::uuid[]) AS id,
+                            unnest($2::uuid[]) AS audio_identity_id,
+                            unnest($3::uuid[]) AS track_id,
+                            unnest($4::int[]) AS confidence,
+                            unnest($5::text[]) AS source,
+                            unnest($6::text[]) AS family,
+                            unnest($7::text[]) AS external_id,
+                            unnest($8::uuid[]) AS media_asset_id,
+                            unnest($10::bool[]) AS trusted_shape) evidence",
+        )
+        .bind(&evidence_ids)
+        .bind(&audio_identity_ids)
+        .bind(&track_ids)
+        .bind(&confidences)
+        .bind(&sources)
+        .bind(&families)
+        .bind(&external_ids)
+        .bind(&media_asset_ids)
+        .bind(now)
+        .bind(&trusted_shapes)
+        .execute(&mut **tx)
+        .await?;
     }
 
     let mut recording_groups = BTreeMap::<String, Vec<(&PreparedTrack, String)>>::new();

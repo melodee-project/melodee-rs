@@ -19,6 +19,20 @@ pub(crate) enum CatalogCommands {
         /// Work item id or API key.
         id: Uuid,
     },
+    /// Report or repair the genre serving aggregates from authoritative terms.
+    ///
+    /// Check mode (default) is read-only and reports the number of discrepant
+    /// aggregate keys in a bounded page. Apply mode is idempotent and resumable
+    /// and converges the stored song/distinct-release counts, including removing
+    /// keys with no active contributors. Run it after applying the forward
+    /// migrations and under the ADR-0166 maintenance fence, or with the same
+    /// serialization fence live writers use (the repair takes the same advisory
+    /// keys).
+    RepairGenres {
+        /// Apply corrections instead of only reporting them.
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+    },
 }
 
 pub(crate) async fn run(command: CatalogCommands) {
@@ -57,6 +71,56 @@ pub(crate) async fn run(command: CatalogCommands) {
                 Err(error) => {
                     eprintln!("error: {error}");
                     std::process::exit(1);
+                }
+            }
+        }
+        CatalogCommands::RepairGenres { apply } => {
+            let page: i32 = 1_000;
+            if apply {
+                let mut total_repaired: i64 = 0;
+                loop {
+                    let result: Result<(i32, i32), sqlx::Error> =
+                        sqlx::query_as("SELECT * FROM repair_catalog_genre_aggregates(true, $1)")
+                            .bind(page)
+                            .fetch_one(&pool)
+                            .await;
+                    match result {
+                        Ok((checked, repaired)) => {
+                            total_repaired += i64::from(repaired);
+                            if checked == 0 {
+                                break;
+                            }
+                            println!(
+                                "genre aggregate repair: checked={checked} repaired={repaired} total_repaired={total_repaired}"
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("error: genre aggregate repair failed: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                println!("genre aggregate repair complete: total_repaired={total_repaired}");
+            } else {
+                match sqlx::query_as::<_, (i32, i32)>(
+                    "SELECT * FROM repair_catalog_genre_aggregates(false, $1)",
+                )
+                .bind(page)
+                .fetch_one(&pool)
+                .await
+                {
+                    Ok((checked, _)) => {
+                        println!(
+                            "genre aggregate check: discrepancies_in_page={checked} (page={page}); run with --apply to converge"
+                        );
+                        if checked == 0 {
+                            println!("genre aggregates are consistent");
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("error: genre aggregate check failed: {error}");
+                        std::process::exit(1);
+                    }
                 }
             }
         }

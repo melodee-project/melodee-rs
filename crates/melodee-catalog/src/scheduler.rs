@@ -8,7 +8,10 @@ use tracing::{error, info};
 use crate::{
     CatalogConfig, CatalogImportStats,
     cancellation::CatalogCancellation,
-    importer::{import_once_with_cancellation, reconcile_artist_identities_once},
+    importer::{
+        import_once_with_cancellation, reconcile_artist_identities_once,
+        reconcile_strong_release_identities,
+    },
 };
 
 /// Lifecycle handle for the catalog scheduler.
@@ -53,6 +56,10 @@ pub fn start_catalog_loop(
         // Converge safe candidates left by an older binary even when no new
         // Published work remains to trigger the post-import reconciliation.
         reconcile_artist_identities_once(&store, &pool).await;
+        // PERF-004: the startup backstop previously covered Artist identity
+        // only. Strong Release identity needs the same convergence path so a
+        // catalog with no new Published work still repairs a missed merge.
+        reconcile_strong_release_identities(&store, &pool).await;
 
         // The poll interval is the idle cadence, not a throughput ceiling: a pass
         // that claims a full batch means more `published` work is queued, so run

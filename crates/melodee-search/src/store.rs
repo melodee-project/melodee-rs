@@ -168,11 +168,57 @@ impl SearchStore {
             self.remove_doc("artist", &doc.internal_id)?;
         }
         let document = crate::documents::artist_document(&self.schema, doc);
+        self.add_document("artist", &doc.internal_id, doc.revision, document)
+    }
+
+    /// PERF-006 / RM-14: insert path for a provably fresh empty generation.
+    ///
+    /// The rebuild creates or resets the generation before streaming the
+    /// snapshot, so every document is new. Looking up an existing revision for
+    /// each of ~560K-10M documents is pure waste there. Revision fencing is
+    /// retained on `upsert_*`, which is what catch-up/replay uses.
+    pub fn insert_artist_fresh(&mut self, doc: &ArtistDoc) -> Result<(), SearchError> {
+        let document = crate::documents::artist_document(&self.schema, doc);
+        self.insert_fresh("artist", &doc.internal_id, doc.revision, document)
+    }
+
+    pub fn insert_release_fresh(&mut self, doc: &ReleaseDoc) -> Result<(), SearchError> {
+        let document = crate::documents::release_document(&self.schema, doc);
+        self.insert_fresh("release", &doc.internal_id, doc.revision, document)
+    }
+
+    pub fn insert_track_fresh(&mut self, doc: &TrackDoc) -> Result<(), SearchError> {
+        let document = crate::documents::track_document(&self.schema, doc);
+        self.insert_fresh("track", &doc.internal_id, doc.revision, document)
+    }
+
+    fn insert_fresh(
+        &mut self,
+        kind: &str,
+        internal_id: &str,
+        revision: i64,
+        document: tantivy::schema::TantivyDocument,
+    ) -> Result<(), SearchError> {
         self.writer_mut()?
             .add_document(document)
             .map_err(SearchError::Tantivy)?;
         self.pending_revisions
-            .insert(format!("artist:{}", doc.internal_id), doc.revision);
+            .insert(format!("{kind}:{internal_id}"), revision);
+        Ok(())
+    }
+
+    fn add_document(
+        &mut self,
+        kind: &str,
+        internal_id: &str,
+        revision: i64,
+        document: tantivy::schema::TantivyDocument,
+    ) -> Result<bool, SearchError> {
+        self.writer_mut()?
+            .add_document(document)
+            .map_err(SearchError::Tantivy)?;
+        self.pending_revisions
+            .insert(format!("{kind}:{internal_id}"), revision);
         Ok(true)
     }
 
@@ -184,12 +230,7 @@ impl SearchStore {
             self.remove_doc("release", &doc.internal_id)?;
         }
         let document = crate::documents::release_document(&self.schema, doc);
-        self.writer_mut()?
-            .add_document(document)
-            .map_err(SearchError::Tantivy)?;
-        self.pending_revisions
-            .insert(format!("release:{}", doc.internal_id), doc.revision);
-        Ok(true)
+        self.add_document("release", &doc.internal_id, doc.revision, document)
     }
 
     pub fn upsert_track(&mut self, doc: &TrackDoc) -> Result<bool, SearchError> {
@@ -200,12 +241,7 @@ impl SearchStore {
             self.remove_doc("track", &doc.internal_id)?;
         }
         let document = crate::documents::track_document(&self.schema, doc);
-        self.writer_mut()?
-            .add_document(document)
-            .map_err(SearchError::Tantivy)?;
-        self.pending_revisions
-            .insert(format!("track:{}", doc.internal_id), doc.revision);
-        Ok(true)
+        self.add_document("track", &doc.internal_id, doc.revision, document)
     }
 
     /// Tombstone a document (projection-only removal; A5).

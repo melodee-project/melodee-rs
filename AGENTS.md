@@ -229,6 +229,50 @@ lease-based and safe across processes. DB writes and outbox/index events commit 
 the spec requires. Prefer set-based SQL and bounded batches. Never use normalized names as
 unique identity keys. Never delete source media because classification is uncertain.
 
+## Performance correctness and scale
+
+`PERFORMANCE.md` is the normative performance standard. The rules below are the ones an agent is
+most likely to violate while implementing a feature:
+
+- **Proportional work.** Ordinary import cost scales with the affected Release(s) and their
+  identity closure, not total catalog size. Catalog-wide maintenance is explicit, bounded,
+  resumable, and scheduled independently of every album import. A durable backstop — not a
+  per-import global scan — provides eventual convergence; a candidate `LIMIT` does not prove
+  bounded discovery cost.
+- **No redundant global reconciliation.** Idempotent re-imports perform no new global identity
+  work. Startup and periodic backstops must cover both Artist and strong-Release identity.
+- **Bounded everything.** Every retained queue, cache, buffer, histogram, and scheduler result
+  collection has an explicit bound. `spawn_blocking` alone is not a resource design; admit
+  expensive work (filesystem, CPU media, subprocess, Tantivy, database-heavy stages) before
+  spawning it and hold the permit until the work actually ends, including cancellation cleanup.
+- **Small transactions, mandatory revalidation.** Do not hold write transactions across
+  filesystem/subprocess work. If reads move outside a transaction, revalidate work-item state,
+  lease, and every prepared binding before using them.
+- **Predicate-aligned indexes with plans.** High-frequency SQL needs a real production-shaped
+  plan. `idx_scan = 0` never justifies dropping an index; prove complete definition equivalence and
+  representative plans instead.
+- **Fair, durable background progress.** Background work keeps a durable cursor with explicit
+  pass completion and wraparound, allocates independent per-class budgets, advances only with or
+  after durable effects, and is idempotent on replay.
+- **Search activation is commit-safe.** Ids are allocated before commit, so `max(id)` and an
+  advancing cursor do not prove delivery. The activation cut, generation-specific delivery
+  obligations, retention, acknowledgement, and retirement are one protocol; commit-before-ack and
+  revision fencing are preserved. Late lower-id commits and prior-generation acknowledgements must
+  be replayable into the new generation.
+- **Genre aggregates use one lock protocol.** Statement-level transition-table triggers plus a
+  deterministic advisory lock-key order, followed by a recount statement that observes committed
+  concurrent work. Repair is idempotent and has a read-only check mode.
+- **Integrity and security are not performance levers.** No metadata-for-content substitution, no
+  password-success cache, no naive rate-limit upsert, no blanket index or history removal.
+- **Truthful evidence.** Performance claims use release builds, declared scale, recorded
+  environment, sample counts, limits, and an explicit list of bypassed subsystems. Distinguish
+  measured, reproduced, derived, and proposed-target numbers; never present a prior audit's
+  estimate as an achieved result.
+- **Maintenance-fenced migrations and repair.** Forward-only migrations under ADR-0166, fresh and
+  populated upgrade tests, and an idempotent derived-data repair path are part of the change, not
+  a follow-up. SQLx runs ordinary migrations inside a transaction, so concurrent DDL needs a
+  deliberately designed resumable phase.
+
 ## Testing requirements
 
 Every behavioral change needs tests at the lowest useful layer: unit tests for pure domain

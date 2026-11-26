@@ -40,6 +40,8 @@ pub enum SearchStoreError {
     RebuildConflict(String),
     #[error("search generation must catch up through outbox row {0} before activation")]
     NeedsCatchup(i64),
+    #[error("search generation activation could not acquire its outbox fence in time")]
+    ActivationContended,
     #[error("search catalog row has an unsupported entity type: {0}")]
     UnsupportedEntity(String),
     #[error("search catalog row is corrupt: {0}")]
@@ -394,6 +396,18 @@ impl SearchProjectionStore {
         if updated.rows_affected() != 1 {
             return Err(SearchStoreError::GenerationNotFound(generation_id));
         }
+        // RM-05 retained-history bound: a generation removed from disk no
+        // longer needs its snapshot-visibility or applied-replay rows. Removing
+        // them here keeps the replay tables proportional to live generations
+        // instead of growing with every rebuild.
+        sqlx::query("DELETE FROM search_rebuild_snapshot_outbox WHERE generation_id = $1")
+            .bind(generation_id)
+            .execute(pool)
+            .await?;
+        sqlx::query("DELETE FROM search_rebuild_applied_outbox WHERE generation_id = $1")
+            .bind(generation_id)
+            .execute(pool)
+            .await?;
         Ok(())
     }
 
@@ -772,13 +786,35 @@ impl SearchProjectionStore {
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(SearchStoreError::LeaseLost)?;
-        // Locks catalog outbox only after rebuild/generation rows are fenced, so row-lock
-        // contention on unrelated rebuild work does not block INSERT writers.
-        sqlx::query("LOCK TABLE catalog_projection_outbox IN SHARE MODE")
+        // PERF-V001 / RM-05: the activation fence is ACCESS EXCLUSIVE.
+        //
+        // RowExclusive is held by every transaction that inserts an outbox
+        // row until that transaction commits, so this lock waits for every
+        // in-flight catalog mutation and permits no new one while held. The
+        // generation is then activated only when no delivery obligation is
+        // outstanding: every current outbox row is either already represented
+        // in the snapshot (`search_rebuild_snapshot_outbox`) or has been
+        // replayed and recorded (`search_rebuild_applied_outbox`). Checking
+        // `max(id)` cannot prove this because ids are allocated before commit.
+        //
+        // A bounded lock wait keeps a pathological writer from stalling
+        // activation forever; timeout surfaces as retryable contention rather
+        // than a deadlock or a false activation.
+        sqlx::query("SET LOCAL lock_timeout = '10s'")
             .execute(&mut *tx)
             .await?;
+        if let Err(error) =
+            sqlx::query("LOCK TABLE catalog_projection_outbox IN ACCESS EXCLUSIVE MODE")
+                .execute(&mut *tx)
+                .await
+        {
+            if is_lock_not_available(&error) {
+                tx.rollback().await?;
+                return Err(SearchStoreError::ActivationContended);
+            }
+            return Err(error.into());
+        }
         let search_root: String = row.try_get(0)?;
-        let caught_up: i64 = row.try_get(1)?;
         let latest = sqlx::query_scalar::<_, Option<i64>>(
             "SELECT max(id) FROM catalog_projection_outbox WHERE projection_name = $1",
         )
@@ -786,7 +822,28 @@ impl SearchProjectionStore {
         .fetch_one(&mut *tx)
         .await?
         .unwrap_or(0);
-        if caught_up < latest {
+        let outstanding = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_projection_outbox outbox
+              WHERE outbox.projection_name = $1
+                AND NOT EXISTS (
+                    SELECT 1 FROM search_rebuild_snapshot_outbox visible
+                     WHERE visible.generation_id = $2
+                       AND visible.outbox_id = outbox.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM search_rebuild_applied_outbox applied
+                     WHERE applied.generation_id = $2
+                       AND applied.outbox_id = outbox.id
+                )",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(generation_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if outstanding > 0 {
+            // Release the fence (rollback) and let the caller replay the
+            // remaining obligations before retrying; never activate stale.
+            tx.rollback().await?;
             return Err(SearchStoreError::NeedsCatchup(latest));
         }
         sqlx::query(
@@ -835,6 +892,16 @@ impl SearchProjectionStore {
         .bind(now)
         .execute(&mut *tx)
         .await?;
+        // Keep the diagnostic watermark truthful: it records the highest
+        // outbox id present at activation, not a proof of completeness.
+        sqlx::query(
+            "UPDATE search_generations SET caught_up_outbox_id = GREATEST(caught_up_outbox_id, $2)
+             WHERE generation_id = $1",
+        )
+        .bind(generation_id)
+        .bind(latest)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Self::get_generation(pool, generation_id).await
     }
@@ -880,6 +947,17 @@ impl SearchProjectionStore {
         .bind(message)
         .execute(&mut *tx)
         .await?;
+        // RM-05: a failed generation is terminal (`claim_rebuild` never
+        // re-claims it), so its replay bookkeeping is bounded out here instead
+        // of accumulating across failed rebuilds.
+        sqlx::query("DELETE FROM search_rebuild_snapshot_outbox WHERE generation_id = $1")
+            .bind(generation_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM search_rebuild_applied_outbox WHERE generation_id = $1")
+            .bind(generation_id)
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -912,6 +990,121 @@ impl SearchProjectionStore {
         .fetch_all(pool)
         .await?;
         rows.into_iter().map(parse_outbox_row).collect()
+    }
+
+    /// Ids of outbox rows that the rebuilding generation has not yet applied
+    /// and that its snapshot did not already contain.
+    ///
+    /// This is the commit-safe delivery obligation (`PERF-V001`): membership in
+    /// `search_rebuild_snapshot_outbox` is decided inside the rebuild snapshot,
+    /// so a low id that commits late is still returned here even after an
+    /// id-ordered cursor has advanced past it and even when the ordinary worker
+    /// already acknowledged it against the previous generation.
+    pub async fn pending_outbox_replay_ids(
+        pool: &PgPool,
+        generation_id: Uuid,
+        after_id: i64,
+        limit: usize,
+    ) -> Result<Vec<i64>, SearchStoreError> {
+        if after_id < 0 || !(1..=MAX_SEARCH_OUTBOX_BATCH).contains(&limit) {
+            return Err(SearchStoreError::InvalidRequest(
+                "outbox replay bounds are invalid".to_string(),
+            ));
+        }
+        sqlx::query_scalar::<_, i64>(
+            "SELECT outbox.id FROM catalog_projection_outbox outbox
+              WHERE outbox.projection_name = $1 AND outbox.id > $2
+                AND NOT EXISTS (
+                    SELECT 1 FROM search_rebuild_snapshot_outbox visible
+                     WHERE visible.generation_id = $3
+                       AND visible.outbox_id = outbox.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM search_rebuild_applied_outbox applied
+                     WHERE applied.generation_id = $3
+                       AND applied.outbox_id = outbox.id
+                )
+              ORDER BY outbox.id LIMIT $4",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(after_id)
+        .bind(generation_id)
+        .bind(i64::try_from(limit).map_err(|_| {
+            SearchStoreError::InvalidRequest("outbox replay limit is too large".to_string())
+        })?)
+        .fetch_all(pool)
+        .await
+        .map_err(SearchStoreError::from)
+    }
+
+    /// Count of outstanding replay obligations for a generation. `after_id`
+    /// bounds the scan so activation stays O(pending) in the common case.
+    pub async fn pending_outbox_replay_count(
+        pool: &PgPool,
+        generation_id: Uuid,
+    ) -> Result<i64, SearchStoreError> {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_projection_outbox outbox
+              WHERE outbox.projection_name = $1
+                AND NOT EXISTS (
+                    SELECT 1 FROM search_rebuild_snapshot_outbox visible
+                     WHERE visible.generation_id = $2
+                       AND visible.outbox_id = outbox.id
+                )",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(generation_id)
+        .fetch_one(pool)
+        .await
+        .map_err(SearchStoreError::from)
+    }
+
+    /// Loads full outbox rows in ascending id order for an explicit id set.
+    pub async fn load_outbox_by_ids(
+        pool: &PgPool,
+        ids: &[i64],
+    ) -> Result<Vec<SearchOutboxItem>, SearchStoreError> {
+        if ids.is_empty() || ids.len() > MAX_SEARCH_OUTBOX_BATCH {
+            return Err(SearchStoreError::InvalidRequest(
+                "outbox id set size is invalid".to_string(),
+            ));
+        }
+        let rows = sqlx::query(
+            "SELECT id, entity_type, entity_id, operation, entity_revision,
+                    attempt_count, COALESCE(lease_expires_at, available_at)
+             FROM catalog_projection_outbox
+             WHERE projection_name = $1 AND id = ANY($2)
+             ORDER BY id",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(ids)
+        .fetch_all(pool)
+        .await?;
+        rows.into_iter().map(parse_outbox_row).collect()
+    }
+
+    /// Records that the rebuilding generation durably applied these outbox rows.
+    /// Called after the Tantivy commit, never before (commit-before-ack).
+    pub async fn record_outbox_replay(
+        pool: &PgPool,
+        generation_id: Uuid,
+        ids: &[i64],
+        now: OffsetDateTime,
+    ) -> Result<(), SearchStoreError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            "INSERT INTO search_rebuild_applied_outbox (generation_id, outbox_id, applied_at)
+             SELECT $1, unnest($2::bigint[]), $3
+             ON CONFLICT (generation_id, outbox_id) DO NOTHING",
+        )
+        .bind(generation_id)
+        .bind(ids)
+        .bind(now)
+        .execute(pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn claim_outbox(
@@ -1591,6 +1784,16 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
         .is_some_and(|code| code == "23505")
 }
 
+/// Raised when `SET LOCAL lock_timeout` fires while waiting for the activation
+/// fence. Treated as retryable contention, never as success or as a permanent
+/// failure.
+fn is_lock_not_available(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .and_then(|database| database.code())
+        .is_some_and(|code| code == "55P03")
+}
+
 fn parse_rebuild_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<StoredSearchRebuildJob, SearchStoreError> {
@@ -1995,16 +2198,28 @@ fn parse_track_row(row: sqlx::postgres::PgRow) -> Result<SearchTrackRecord, Sear
 }
 
 /// Repeatable-read snapshot held while a generation streams bounded pages.
+///
+/// `search_rebuild_snapshot_outbox` records exactly which outbox rows this
+/// snapshot could see. PERF-V001: outbox ids are allocated before commit, so
+/// the highest visible id is not a commit-order watermark. A row that commits
+/// after the snapshot with a *lower* id is not in this set and therefore stays
+/// a delivery obligation of the new generation until it is replayed, no matter
+/// how far an id-ordered catch-up cursor has advanced.
 pub struct SearchSnapshotReader {
     connection: PoolConnection<Postgres>,
+    generation_id: Uuid,
     source_high_water_mark: i64,
     finished: bool,
 }
 
 impl SearchSnapshotReader {
-    pub async fn begin(pool: &PgPool) -> Result<Self, SearchStoreError> {
+    pub async fn begin(pool: &PgPool, generation_id: Uuid) -> Result<Self, SearchStoreError> {
         let mut connection = pool.acquire().await?;
-        sqlx::query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        // REPEATABLE READ (not READ ONLY) so the visibility record below is
+        // written from the same snapshot it describes. It is committed with
+        // the snapshot, before the generation is validated, so a resumed
+        // catch-up still knows which rows the snapshot already contains.
+        sqlx::query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *connection)
             .await?;
         let source_high_water_mark = sqlx::query_scalar::<_, Option<i64>>(
@@ -2014,11 +2229,28 @@ impl SearchSnapshotReader {
         .fetch_one(&mut *connection)
         .await?
         .unwrap_or(0);
+        sqlx::query(
+            "INSERT INTO search_rebuild_snapshot_outbox (generation_id, outbox_id)
+             SELECT $1, id FROM catalog_projection_outbox
+              WHERE projection_name = $2 AND id <= $3
+             ON CONFLICT (generation_id, outbox_id) DO NOTHING",
+        )
+        .bind(generation_id)
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(source_high_water_mark)
+        .execute(&mut *connection)
+        .await?;
         Ok(Self {
             connection,
+            generation_id,
             source_high_water_mark,
             finished: false,
         })
+    }
+
+    #[must_use]
+    pub const fn generation_id(&self) -> Uuid {
+        self.generation_id
     }
 
     #[must_use]

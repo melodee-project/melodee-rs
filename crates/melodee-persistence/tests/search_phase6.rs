@@ -43,28 +43,30 @@ async fn wait_for_outbox_insert_waiter(db: &TestDb) {
     .expect("outbox insert observed waiting on activation lock");
 }
 
-async fn wait_for_outbox_share_lock_granted(db: &TestDb) {
+async fn wait_for_outbox_fence_lock_granted(db: &TestDb) {
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            let share_locks: i64 = sqlx::query_scalar(
+            // PERF-V001: activation takes ACCESS EXCLUSIVE (not SHARE) so it
+            // waits for every in-flight outbox-inserting transaction.
+            let fence_locks: i64 = sqlx::query_scalar(
                 "SELECT count(*) FROM pg_locks l
                  JOIN pg_class c ON c.oid = l.relation
                  WHERE c.relname = 'catalog_projection_outbox'
                    AND l.locktype = 'relation'
-                   AND l.mode = 'ShareLock'
+                   AND l.mode = 'AccessExclusiveLock'
                    AND l.granted",
             )
             .fetch_one(&db.pool)
             .await
             .expect("query lock waiter");
-            if share_locks > 0 {
+            if fence_locks > 0 {
                 break;
             }
             tokio::task::yield_now().await;
         }
     })
     .await
-    .expect("activation share lock observed");
+    .expect("activation fence lock observed");
 }
 
 #[tokio::test]
@@ -529,7 +531,18 @@ async fn rebuild_reclaims_expired_owner_and_atomically_retires_prior_generation(
 #[tokio::test]
 async fn repeatable_read_snapshot_excludes_concurrent_write_that_catchup_observes() {
     let db = TestDb::create("phase6_snapshot_catchup").await;
-    let mut snapshot = SearchSnapshotReader::begin(&db.pool)
+    let snapshot_generation = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO search_generations (
+            generation_id, search_root, schema_version, status, created_at
+         ) VALUES ($1, '/tmp/phase6-snapshot-catchup', 1, 'building', $2)",
+    )
+    .bind(snapshot_generation)
+    .bind(T0)
+    .execute(&db.pool)
+    .await
+    .expect("create snapshot generation");
+    let mut snapshot = SearchSnapshotReader::begin(&db.pool, snapshot_generation)
         .await
         .expect("begin repeatable-read snapshot");
     assert_eq!(snapshot.source_high_water_mark(), 0);
@@ -1659,7 +1672,7 @@ async fn outbox_insert_waits_and_is_catchup_after_activate_generation_share_lock
         .await
     });
 
-    wait_for_outbox_share_lock_granted(&db).await;
+    wait_for_outbox_fence_lock_granted(&db).await;
     let insertion_id = Uuid::now_v7();
     let (insert_tx, mut insert_rx) = mpsc::channel::<Result<i64, String>>(1);
     let insert_db = db.pool.clone();
@@ -1686,7 +1699,7 @@ async fn outbox_insert_waits_and_is_catchup_after_activate_generation_share_lock
             insert_rx.try_recv(),
             Err(tokio::sync::mpsc::error::TryRecvError::Empty)
         ),
-        "outbox insert must remain blocked while activation holds SHARE lock"
+        "outbox insert must remain blocked while activation holds the exclusive fence"
     );
 
     barrier_lock

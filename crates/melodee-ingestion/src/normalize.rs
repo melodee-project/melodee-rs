@@ -560,14 +560,17 @@ pub fn start_normalization_loop(
                 let full_batch = match result {
                     Ok(stats) => {
                         let full_batch = stats.errors == 0 && stats.claimed >= claim_batch_size;
-                        results.push(ReconcileResult {
-                            source: "normalization".to_owned(),
-                            stats: ReconcileStats {
-                                duration_ms: stats.duration_ms,
-                                errors: stats.errors,
-                                ..ReconcileStats::default()
+                        crate::scheduler::retain_result(
+                            &mut results,
+                            ReconcileResult {
+                                source: "normalization".to_owned(),
+                                stats: ReconcileStats {
+                                    duration_ms: stats.duration_ms,
+                                    errors: stats.errors,
+                                    ..ReconcileStats::default()
+                                },
                             },
-                        });
+                        );
                         full_batch
                     }
                     Err(error) => {

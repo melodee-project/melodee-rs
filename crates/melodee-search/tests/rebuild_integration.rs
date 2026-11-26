@@ -1934,7 +1934,11 @@ async fn migration_0045_refreshes_artist_status_in_an_existing_generation() {
             MIGRATOR
                 .migrations
                 .iter()
-                .filter(|migration| migration.version <= 44)
+                // The pre-repair fixture defers 0045's status repair, but the
+                // current worker code needs the performance-remediation
+                // tables that every deployed schema receives at startup. They
+                // are independent of 0045, so include them in the base.
+                .filter(|migration| migration.version <= 44 || migration.version >= 60)
                 .cloned()
                 .collect(),
         ),
@@ -2008,5 +2012,192 @@ async fn migration_0045_refreshes_artist_status_in_an_existing_generation() {
             .is_empty()
     );
     drop(store);
+    db.drop().await;
+}
+
+/// Waits until a rebuild activation is blocked on the outbox fence. This proves
+/// the rebuild finished snapshot + catch-up and is trying to switch generations
+/// while a catalog writer is still uncommitted.
+async fn wait_for_activation_fence_waiter(pool: &sqlx::PgPool) {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            let waiters: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_locks lock
+                 JOIN pg_class relation ON relation.oid = lock.relation
+                 WHERE relation.relname = 'catalog_projection_outbox'
+                   AND lock.locktype = 'relation'
+                   AND lock.mode = 'AccessExclusiveLock'
+                   AND NOT lock.granted",
+            )
+            .fetch_one(pool)
+            .await
+            .expect("query activation fence waiter");
+            if waiters > 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("rebuild reached the activation fence");
+}
+
+/// PERF-V001 / RM-05 permanent regression, real worker + rebuild path.
+///
+/// Reproduces the validator's exact sequence:
+///   1. Transaction A changes an Artist and allocates a low outbox id, but its
+///      outbox row is already marked processed (consumed against the *old*
+///      generation) and remains uncommitted.
+///   2. The rebuild snapshot excludes A.
+///   3. Later ids commit and catch-up advances past A's id.
+///   4. A commits.
+///   5. The new generation activates.
+///
+/// The activated generation must contain A's revision. The old protocol
+/// compared `caught_up_outbox_id` to `max(id)` and activated stale, permanently
+/// omitting an event that had already been acknowledged elsewhere.
+#[tokio::test]
+async fn late_lower_id_commit_is_replayed_before_generation_activation() {
+    let db = TestDb::create("phase6_late_lower_id_replay").await;
+    let directory = TempDir::new().expect("search temp root");
+    let config = SearchConfig {
+        search_root: directory.path().join("search"),
+        enabled: true,
+        ..SearchConfig::default()
+    };
+    let artist_id = uuid::Uuid::now_v7();
+    let public_id = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO artists (
+            id, public_api_id, canonical_name, normalized_name, sort_name,
+            artist_type, status, created_at, updated_at
+         ) VALUES ($1, $2, 'Late Commit Artist Before', 'LATE COMMIT ARTIST BEFORE',
+                   'Late Commit Artist Before', 'person', 'verified', now(), now())",
+    )
+    .bind(artist_id)
+    .bind(public_id)
+    .execute(&db.pool)
+    .await
+    .expect("seed baseline Artist");
+
+    request_rebuild(&config, &db.pool, "late-id-baseline")
+        .await
+        .expect("request baseline rebuild");
+    assert!(
+        run_rebuild_once(&config, &db.pool)
+            .await
+            .expect("run baseline rebuild")
+            .is_some()
+    );
+
+    // Transaction A: catalog mutation + low outbox id, already acknowledged
+    // against the active (baseline) generation, deliberately left open.
+    let mut uncommitted = db.pool.begin().await.expect("begin late transaction");
+    let late_outbox_id: i64 = sqlx::query_scalar(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at, processed_at
+         ) VALUES ($1, 'artist', $2, 'upsert', 2, now(), now(), now())
+         RETURNING id",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(artist_id)
+    .fetch_one(&mut *uncommitted)
+    .await
+    .expect("allocate low outbox id in the uncommitted transaction");
+    sqlx::query(
+        "UPDATE artists SET canonical_name = 'Late Commit Artist After',
+                normalized_name = 'LATE COMMIT ARTIST AFTER',
+                sort_name = 'Late Commit Artist After',
+                revision = 2, updated_at = now()
+          WHERE id = $1",
+    )
+    .bind(artist_id)
+    .execute(&mut *uncommitted)
+    .await
+    .expect("mutate Artist inside the uncommitted transaction");
+
+    // Later ids commit while A is invisible to every reader. Revisions are
+    // distinct from A's so the producer idempotency key does not make these
+    // inserts wait on A's uncommitted row (that wait would defeat the point of
+    // the experiment, which is an invisible *committed* later set).
+    for revision in 3..=13 {
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+                projection_name, entity_type, entity_id, operation,
+                entity_revision, available_at, created_at
+             ) VALUES ($1, 'artist', $2, 'upsert', $3, now(), now())",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(artist_id)
+        .bind(revision)
+        .execute(&db.pool)
+        .await
+        .expect("commit a later outbox id");
+    }
+
+    request_rebuild(&config, &db.pool, "late-id-rebuild")
+        .await
+        .expect("request the late-id rebuild");
+    let rebuild_config = config.clone();
+    let rebuild_pool = db.pool.clone();
+    let rebuild = tokio::spawn(async move {
+        run_rebuild_once(&rebuild_config, &rebuild_pool)
+            .await
+            .map(|job| job.is_some())
+    });
+    wait_for_activation_fence_waiter(&db.pool).await;
+
+    // A commits only now, after catch-up has already advanced past its id.
+    uncommitted
+        .commit()
+        .await
+        .expect("commit the late lower-id transaction");
+    assert!(
+        rebuild
+            .await
+            .expect("join rebuild task")
+            .expect("rebuild pass succeeds"),
+        "the rebuild must activate a generation"
+    );
+    assert!(
+        late_outbox_id > 0,
+        "the late event really did allocate a positive id"
+    );
+
+    let root = SearchRoot::open(&config.search_root).expect("owned search root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read active generation")
+            .expect("activated generation");
+    let store = SearchStore::open_readonly(&root.generation_path(active.generation_id))
+        .expect("open activated generation");
+    let hits = store
+        .search(
+            &parse_and_plan("artist:\"Late Commit Artist After\"").expect("valid Artist query"),
+            10,
+            0,
+        )
+        .expect("query activated generation");
+    assert!(
+        hits.iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == artist_id.to_string()),
+        "the activated generation must contain the late-committed revision; hits={hits:?}"
+    );
+    let stale = store
+        .search(
+            &parse_and_plan("artist:\"Late Commit Artist Before\"")
+                .expect("valid stale Artist query"),
+            10,
+            0,
+        )
+        .expect("query activated generation for the stale revision");
+    assert!(
+        stale.is_empty(),
+        "the activated generation must not retain the pre-commit revision"
+    );
+    drop(store);
+
     db.drop().await;
 }

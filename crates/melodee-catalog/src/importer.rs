@@ -180,8 +180,17 @@ pub(crate) async fn import_once_with_cancellation(
                     .await
                 {
                     Ok(result) => {
-                        reconcile_artist_identities_once(&store, &pool).await;
-                        reconcile_strong_release_identities(&store, &pool).await;
+                        // PERF-004 / RM-09: an identical retry that adopted the
+                        // durable result committed no new observation, so it
+                        // cannot create a new identity candidate. Skipping the
+                        // global closure here removes per-album work for
+                        // already-completed imports without losing outstanding
+                        // historical work, which the startup and periodic
+                        // backstops still cover.
+                        if result.inserted {
+                            reconcile_artist_identities_once(&store, &pool).await;
+                            reconcile_strong_release_identities(&store, &pool).await;
+                        }
                         CatalogTaskOutput::Completed {
                             work_item_id: item.id,
                             result,
@@ -500,7 +509,7 @@ async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) {
 /// are intentionally not identity predicates. The audited persistence
 /// mutation keeps this pass restart-safe: a concurrent winner is fenced and
 /// the next import pass will observe the resulting state.
-async fn reconcile_strong_release_identities(store: &CatalogStore, pool: &PgPool) {
+pub(crate) async fn reconcile_strong_release_identities(store: &CatalogStore, pool: &PgPool) {
     let candidates = match store.strong_release_merge_candidates(pool, 64).await {
         Ok(candidates) => candidates,
         Err(error) => {
