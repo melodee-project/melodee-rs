@@ -1824,3 +1824,198 @@ async fn all_six_legacy_file_owners_survive_an_interrupted_upgrade() {
     );
     db.drop().await;
 }
+
+fn uuidv7() -> uuid::Uuid {
+    uuid::Uuid::now_v7()
+}
+
+/// PERF-009 / RM-20 populated-upgrade rehearsal.
+///
+/// Upgrades a populated pre-remediation database (schema through 0059) with
+/// representative data and deliberately inconsistent derived state, applying the
+/// full chain (0060-0064), and verifies existing rows survive, the new indexes
+/// are valid, and the operator repair converges the corrupted aggregate.
+#[tokio::test]
+async fn perf_remediation_upgrade_from_0059_preserves_data_and_repairs_derived_state() {
+    use melodee_persistence::MIGRATOR;
+    use sqlx::migrate::Migrator;
+    use std::borrow::Cow;
+
+    let db = TestDb::create_unmigrated("migrations_forward_perf").await;
+    let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 59)
+        .cloned()
+        .collect();
+    assert_eq!(prior.len(), 59, "expected migrations 0001..=0059");
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("apply pre-remediation schema");
+
+    // Seed with triggers/FKs bypassed: a minimal but valid catalog plus a
+    // deliberately wrong genre aggregate and a pending outbox row.
+    let mut tx = db.pool.begin().await.expect("begin seed transaction");
+    sqlx::query("SET LOCAL session_replication_role = replica")
+        .execute(&mut *tx)
+        .await
+        .expect("bypass triggers for fixture seed");
+    let release = uuidv7();
+    let audio = uuidv7();
+    let media = uuidv7();
+    let track = uuidv7();
+    sqlx::query(
+        "INSERT INTO releases (id, public_api_id, title, normalized_title, sort_title,
+                status, revision, created_at, updated_at)
+         VALUES ($1, uuidv7(), 'Upgrade Release', 'UPGRADE RELEASE', 'Upgrade Release',
+                'active', 1, now(), now())",
+    )
+    .bind(release)
+    .execute(&mut *tx)
+    .await
+    .expect("seed release");
+    sqlx::query(
+        "INSERT INTO audio_identities (id, status, revision, created_at, updated_at)
+         VALUES ($1, 'verified', 1, now(), now())",
+    )
+    .bind(audio)
+    .execute(&mut *tx)
+    .await
+    .expect("seed audio identity");
+    sqlx::query(
+        "INSERT INTO media_assets (id, canonical_relative_path, byte_hash, byte_size,
+                mime_type, created_at)
+         VALUES ($1, 'upgrade/track.flac', repeat('a', 64), 1000, 'audio/flac', now())",
+    )
+    .bind(media)
+    .execute(&mut *tx)
+    .await
+    .expect("seed media asset");
+    sqlx::query(
+        "INSERT INTO tracks (id, public_api_id, release_id, audio_identity_id,
+                playable_media_asset_id, ordinal, title, normalized_title, sort_title,
+                created_at, updated_at)
+         VALUES ($1, uuidv7(), $2, $3, $4, 1, 'Upgrade Track', 'UPGRADE TRACK',
+                'Upgrade Track', now(), now())",
+    )
+    .bind(track)
+    .bind(release)
+    .bind(audio)
+    .bind(media)
+    .execute(&mut *tx)
+    .await
+    .expect("seed track");
+    sqlx::query(
+        "INSERT INTO catalog_genre_terms (track_id, release_id, surface, display_value, source_order)
+         VALUES ($1, $2, 'native', 'Rock', 0)",
+    )
+    .bind(track)
+    .bind(release)
+    .execute(&mut *tx)
+    .await
+    .expect("seed genre term");
+    sqlx::query(
+        "INSERT INTO catalog_genre_aggregates (surface, display_value, song_count, release_count)
+         VALUES ('native', 'Rock', 9, 4)",
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("seed corrupted aggregate");
+    let outbox_id: i64 = sqlx::query_scalar(
+        "INSERT INTO catalog_projection_outbox (projection_name, entity_type, entity_id,
+                operation, entity_revision, available_at, created_at)
+         VALUES ('tantivy.catalog', 'release', $1, 'upsert', 1, now(), now())
+         RETURNING id",
+    )
+    .bind(release)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("seed pending outbox row");
+    sqlx::query("SET LOCAL session_replication_role = origin")
+        .execute(&mut *tx)
+        .await
+        .expect("restore triggers");
+    tx.commit().await.expect("commit seed transaction");
+
+    migrate(&db.pool)
+        .await
+        .expect("apply remediation migrations");
+
+    // Existing authoritative rows survive verbatim.
+    let preserved: (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM releases WHERE id = $1),
+                (SELECT count(*) FROM tracks WHERE id = $2),
+                (SELECT count(*) FROM catalog_projection_outbox WHERE id = $3)",
+    )
+    .bind(release)
+    .bind(track)
+    .bind(outbox_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("check preserved rows");
+    assert_eq!(preserved, (1, 1, 1));
+
+    // Every new index exists and is valid.
+    let invalid: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_index index
+         JOIN pg_class relation ON relation.oid = index.indexrelid
+         WHERE relation.relname IN (
+             'tracks_playable_media_asset_idx',
+             'catalog_genre_terms_release_surface_idx',
+             'artist_match_decisions_artist_observed_idx',
+             'native_artist_user_states_positive_rating_idx',
+             'catalog_identity_reconciliation_seed_created_idx',
+             'search_rebuild_snapshot_outbox_pkey',
+             'search_rebuild_applied_outbox_pkey'
+         ) AND NOT index.indisvalid",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("validate new indexes");
+    assert_eq!(invalid, 0, "all remediation indexes must be valid");
+
+    // New state tables exist.
+    for table in [
+        "catalog_identity_reconciliation_seed",
+        "search_rebuild_snapshot_outbox",
+        "search_rebuild_applied_outbox",
+        "native_discovery_progress",
+    ] {
+        let exists: bool = sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
+            .bind(format!("public.{table}"))
+            .fetch_one(&db.pool)
+            .await
+            .expect("table existence");
+        assert!(exists, "{table} must exist after upgrade");
+    }
+
+    // The corrupted aggregate is detectable and the repair converges it.
+    let (checked, repaired): (i32, i32) =
+        sqlx::query_as("SELECT * FROM repair_catalog_genre_aggregates(true, 1_000)")
+            .fetch_one(&db.pool)
+            .await
+            .expect("apply genre repair on upgraded data");
+    assert!(checked >= 1, "the corrupted aggregate is detected");
+    assert_eq!(checked, repaired);
+    let counts: (i64, i64) = sqlx::query_as(
+        "SELECT song_count, release_count FROM catalog_genre_aggregates
+          WHERE surface = 'native' AND display_value = 'Rock'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read repaired aggregate");
+    assert_eq!(counts, (1, 1));
+
+    // The discovery progress table is seeded with one cursor per work class.
+    let classes: i64 = sqlx::query_scalar("SELECT count(*) FROM native_discovery_progress")
+        .fetch_one(&db.pool)
+        .await
+        .expect("count discovery classes");
+    assert_eq!(classes, 5);
+
+    db.drop().await;
+}

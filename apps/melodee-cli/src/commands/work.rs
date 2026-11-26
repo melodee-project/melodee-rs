@@ -34,6 +34,21 @@ pub(crate) enum WorkCommands {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Report or remove high-frequency `lease_renewed` events older than an
+    /// explicit cutoff (ADR-0215). Only lease renewals are eligible; transition,
+    /// failure, completion, retry, and lease acquire/release history is always
+    /// preserved. Defaults to a read-only count.
+    PruneLeaseEvents {
+        /// Cutoff age in days. Must be explicitly chosen; there is no default.
+        #[arg(long)]
+        older_than_days: i64,
+        /// Rows removed per transaction batch.
+        #[arg(long, default_value_t = 10_000)]
+        batch_size: u32,
+        /// Apply the deletion instead of only reporting the eligible count.
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+    },
     /// Development only: seed N synthetic ready work items. Requires
     /// --i-know-what-im-doing because it writes test data.
     SeedTest {
@@ -168,6 +183,32 @@ pub(crate) async fn run(command: WorkCommands) {
                 }
                 Err(e) => {
                     eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        WorkCommands::PruneLeaseEvents {
+            older_than_days,
+            batch_size,
+            apply,
+        } => {
+            if older_than_days <= 0 {
+                eprintln!("error: --older-than-days must be positive");
+                std::process::exit(2);
+            }
+            let cutoff = time::OffsetDateTime::now_utc() - time::Duration::days(older_than_days);
+            match store
+                .prune_expired_lease_renewal_events(&pool, cutoff, batch_size, apply)
+                .await
+            {
+                Ok(removed) if apply => {
+                    println!("lease renewal retention: removed={removed} cutoff={cutoff}")
+                }
+                Ok(eligible) => println!(
+                    "lease renewal retention check: eligible={eligible} cutoff={cutoff}; run with --apply to remove"
+                ),
+                Err(error) => {
+                    eprintln!("error: lease renewal retention failed: {error}");
                     std::process::exit(1);
                 }
             }

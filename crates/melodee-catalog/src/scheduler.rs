@@ -9,8 +9,8 @@ use crate::{
     CatalogConfig, CatalogImportStats,
     cancellation::CatalogCancellation,
     importer::{
-        import_once_with_cancellation, reconcile_artist_identities_once,
-        reconcile_strong_release_identities,
+        import_once_with_cancellation, reconcile_affected_identities_once,
+        reconcile_artist_identities_once, reconcile_strong_release_identities,
     },
 };
 
@@ -69,6 +69,14 @@ pub fn start_catalog_loop(
             .unwrap_or_else(|_| TokioDuration::from_secs(5));
         let mut ticker = time::interval(interval);
         let mut latest = None;
+        // Periodic catalog-wide backstop independent of the seed queue. Covers
+        // an installation upgraded from a binary that never persisted seeds,
+        // a restored backup, and any seeds lost to an unrecovered failure.
+        let backstop_interval = TokioDuration::from_secs(30 * 60);
+        let mut last_backstop = std::time::Instant::now();
+        // Bound one import burst before a coalesced closure drain, so the
+        // durable seed queue cannot grow without limit during a long backfill.
+        let max_full_passes_before_drain = 32u32;
         loop {
             if task_cancellation.is_cancelled() {
                 break;
@@ -77,8 +85,10 @@ pub fn start_catalog_loop(
                 _ = ticker.tick() => {}
                 () = task_cancellation.cancelled() => break,
             }
+            let mut full_passes = 0u32;
             loop {
-                match import_once_with_cancellation(
+                let import_started = std::time::Instant::now();
+                let import_result = import_once_with_cancellation(
                     &config,
                     &store,
                     &pool,
@@ -86,12 +96,20 @@ pub fn start_catalog_loop(
                     ::time::OffsetDateTime::now_utc(),
                     &task_cancellation,
                 )
-                .await
-                {
+                .await;
+                melodee_persistence::metrics::observe(
+                    melodee_persistence::metrics::Metric::CatalogImportPass,
+                    import_started.elapsed(),
+                );
+                match import_result {
                     Ok(stats) => {
                         let full_batch = stats.claimed >= claim_batch_size;
                         latest = Some(stats);
-                        if !full_batch || task_cancellation.is_cancelled() {
+                        full_passes = full_passes.saturating_add(1);
+                        if !full_batch
+                            || task_cancellation.is_cancelled()
+                            || full_passes >= max_full_passes_before_drain
+                        {
                             break;
                         }
                         tokio::task::yield_now().await;
@@ -101,6 +119,14 @@ pub fn start_catalog_loop(
                         break;
                     }
                 }
+            }
+            // One coalesced affected-identity closure pass for every batch of
+            // imports instead of five catalog-wide queries per album.
+            reconcile_affected_identities_once(&store, &pool).await;
+            if last_backstop.elapsed() >= backstop_interval {
+                reconcile_artist_identities_once(&store, &pool).await;
+                reconcile_strong_release_identities(&store, &pool).await;
+                last_backstop = std::time::Instant::now();
             }
         }
         latest

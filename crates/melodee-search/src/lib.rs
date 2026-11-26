@@ -36,8 +36,8 @@ pub use service::{
     SearchDiagnostic, autocomplete_active, diagnostic, query_active, query_active_kind,
     query_plan_active, resolve_artist_ids_active,
 };
-pub use store::{GenerationStats, SearchHit, SearchStore};
+pub use store::{GenerationStats, SearchHit, SearchReader, SearchStore};
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
-pub use worker::{SearchApplyTestBarrier, SearchSchedulerTestProbe};
+pub use worker::{SearchApplyTestBarrier, SearchRebuildTestBarrier, SearchSchedulerTestProbe};
 pub use worker::{SearchPassStats, SearchSchedulerHandle, apply_outbox_once, start_search_loop};

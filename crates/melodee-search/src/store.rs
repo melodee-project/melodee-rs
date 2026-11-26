@@ -594,6 +594,89 @@ impl SearchStore {
     }
 }
 
+/// Shareable, read-only view of one verified generation.
+///
+/// PERF-005 / RM-13: opening a Tantivy index (mmap, schema validation, reader
+/// construction) is expensive and was repeated for every request. `SearchReader`
+/// holds only the thread-safe read state, so a bounded registry can reuse it
+/// across requests. `SearchStore` remains the write handle.
+#[derive(Clone)]
+pub struct SearchReader {
+    schema: SearchSchema,
+    reader: IndexReader,
+    tokenizer: TextAnalyzer,
+}
+
+impl SearchReader {
+    #[must_use]
+    pub fn from_store(store: &SearchStore) -> Self {
+        Self {
+            schema: store.schema.clone(),
+            reader: store.reader.clone(),
+            tokenizer: store.tokenizer.clone(),
+        }
+    }
+
+    /// Opens a verified generation directory read-only. Callers that already
+    /// validated the manifest may cache the result by generation identity.
+    pub fn open_readonly(dir: &Path) -> Result<Self, SearchError> {
+        let store = SearchStore::open_readonly(dir)?;
+        Ok(Self::from_store(&store))
+    }
+
+    fn as_store(&self) -> SearchStore {
+        // The registry keeps this reader across incremental projection
+        // commits. Force a reload so a query sees the latest committed
+        // segments immediately, matching the previous per-request open
+        // visibility instead of Tantivy's default delayed reload.
+        let _ = self.reader.reload();
+        // Clones are cheap (Arc-backed index handles); no index is reopened.
+        SearchStore {
+            schema: self.schema.clone(),
+            writer: None,
+            reader: self.reader.clone(),
+            tokenizer: self.tokenizer.clone(),
+            pending_revisions: BTreeMap::new(),
+        }
+    }
+
+    pub fn search(
+        &self,
+        plan: &CatalogQueryPlan,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<SearchHit>, SearchError> {
+        self.as_store().search(plan, limit, offset)
+    }
+
+    pub fn search_kind(
+        &self,
+        plan: &CatalogQueryPlan,
+        kind: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(usize, Vec<SearchHit>), SearchError> {
+        self.as_store().search_kind(plan, kind, limit, offset)
+    }
+
+    pub fn autocomplete(
+        &self,
+        kind: &str,
+        prefix: &str,
+        limit: usize,
+    ) -> Result<Vec<String>, SearchError> {
+        self.as_store().autocomplete(kind, prefix, limit)
+    }
+
+    pub fn resolve_artist_ids(&self, value: &str) -> Result<Vec<String>, SearchError> {
+        self.as_store().resolve_artist_ids(value)
+    }
+
+    pub fn stats(&self) -> Result<GenerationStats, SearchError> {
+        self.as_store().stats()
+    }
+}
+
 fn regex_escape_literal(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {

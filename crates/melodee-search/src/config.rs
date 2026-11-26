@@ -16,7 +16,7 @@ use crate::error::SearchError;
 use crate::secure_fs;
 
 #[cfg(feature = "test-support")]
-use crate::worker::{SearchApplyTestBarrier, SearchSchedulerTestProbe};
+use crate::worker::{SearchApplyTestBarrier, SearchRebuildTestBarrier, SearchSchedulerTestProbe};
 
 pub const ENV_SEARCH_ENABLED: &str = "MELODEE__SEARCH__ENABLED";
 pub const ENV_SEARCH_ROOT: &str = "MELODEE__SEARCH__ROOT";
@@ -67,6 +67,10 @@ pub struct SearchConfig {
     #[serde(skip)]
     #[doc(hidden)]
     pub scheduler_test_probe: Option<SearchSchedulerTestProbe>,
+    #[cfg(feature = "test-support")]
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub rebuild_test_barrier: Option<SearchRebuildTestBarrier>,
 }
 
 impl Default for SearchConfig {
@@ -87,6 +91,8 @@ impl Default for SearchConfig {
             apply_test_barrier: None,
             #[cfg(feature = "test-support")]
             scheduler_test_probe: None,
+            #[cfg(feature = "test-support")]
+            rebuild_test_barrier: None,
         }
     }
 }
@@ -122,6 +128,8 @@ impl SearchConfig {
             apply_test_barrier: None,
             #[cfg(feature = "test-support")]
             scheduler_test_probe: None,
+            #[cfg(feature = "test-support")]
+            rebuild_test_barrier: None,
         };
         config.validate()?;
         if config.enabled && std::env::var_os(ENV_SEARCH_ROOT).is_none() {

@@ -30,7 +30,7 @@ on a separate database and directory and retrieve a known avatar or cover. Rolli
 [Asset storage](./storage/)
 
 
-## Performance remediation upgrade (migrations 0060–0063)
+## Performance remediation upgrade (migrations 0060–0064)
 
 This upgrade adds predicate-aligned indexes, corrects concurrent genre aggregate maintenance,
 makes discovery maintenance progress durable, and changes the search rebuild activation protocol so
@@ -38,7 +38,7 @@ a late-committing catalog change can no longer be omitted from the new search ge
 
 1. Follow **Before the upgrade** below: stop every server and worker that writes to this database,
    take a validated PostgreSQL backup, and keep the pre-upgrade image digest.
-2. Start exactly one candidate instance so it applies migrations `0060`–`0063`. These are ordinary
+2. Start exactly one candidate instance so it applies migrations `0060`–`0064`. These are ordinary
    transactional migrations, so expect write unavailability for the index build; the maintenance
    fence is required.
 3. Verify the genre serving aggregates and repair existing drift. The check is read-only; the
@@ -61,12 +61,23 @@ a late-committing catalog change can no longer be omitted from the new search ge
 
    Do not repair search by replaying only currently pending outbox rows: events already processed
    against the previous generation may be missing from it, and the corrected rebuild replays them.
-5. Durable discovery progress initializes itself; no manual step is required. The discovery worker
-   resumes each work class from its stored cursor instead of restarting at the Track prefix.
+5. Durable discovery progress and the affected-identity seed queue initialize themselves; no manual
+   step is required. Discovery resumes each work class from its stored cursor instead of restarting
+   at the Track prefix, and identity reconciliation is coalesced into bounded closure passes with a
+   periodic catalog-wide backstop. A catalog upgraded from an older binary converges historical
+   identity work through that backstop.
 6. Verify health and one ordinary import before ending the maintenance window, then resume workers
    and replicas.
 
-**Do not** run an older binary against a database migrated to `0063`. The combined schema and
+Optionally bound high-frequency lease renewal history (this never removes transition/failure/
+completion history):
+
+```bash
+docker compose exec melodee melodee-cli work prune-lease-events --older-than-days 30
+docker compose exec melodee melodee-cli work prune-lease-events --older-than-days 30 --apply
+```
+
+**Do not** run an older binary against a database migrated to `0064`. The combined schema and
 application change is a stop-all-writers upgrade; mixed old/new workers are unsupported for this
 release. Rolling back requires restoring the pre-upgrade database and the matching old image.
 

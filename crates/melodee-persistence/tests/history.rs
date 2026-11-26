@@ -117,3 +117,82 @@ async fn history_is_queryable_per_item_without_touching_others() {
     assert!(events_b.iter().all(|e| e.work_item_id == b));
     db.drop().await;
 }
+
+/// PERF-011 / RM-16 / ADR-0215: operator-controlled retention removes only
+/// high-frequency `lease_renewed` rows older than an explicit cutoff, keeps all
+/// transition/failure/completion history, is read-only by default, and is
+/// idempotent.
+#[tokio::test]
+async fn lease_renewal_retention_is_opt_in_bounded_and_preserves_audit_history() {
+    let db = TestDb::create("history_lease_retention").await;
+    let store = WorkItemStore;
+    let id = seed_ready_item(&store, &db.pool, "/inbound/retention-1").await;
+    let now = time::OffsetDateTime::now_utc();
+    let old = now - time::Duration::days(30);
+    let correlation = uuid::Uuid::now_v7();
+
+    sqlx::query(
+        "INSERT INTO release_work_item_events
+            (work_item_id, event_type, reason_code, worker_id, correlation_id, created_at)
+         VALUES ($1, 'lease_renewed', NULL, 'retention-worker', $2, $3),
+                ($1, 'lease_renewed', NULL, 'retention-worker', $2, $4),
+                ($1, 'transitioned', 'catalog.import_complete', 'retention-worker', $2, $3)",
+    )
+    .bind(id)
+    .bind(correlation)
+    .bind(old)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("seed retention events");
+    sqlx::query(
+        "UPDATE release_work_item_events SET from_state='ready', to_state='inspecting'
+          WHERE event_type='transitioned'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("shape transition event");
+
+    let cutoff = now - time::Duration::days(7);
+    let eligible = store
+        .prune_expired_lease_renewal_events(&db.pool, cutoff, 1_000, false)
+        .await
+        .expect("read-only retention check");
+    assert_eq!(eligible, 1, "only the old lease renewal is eligible");
+    let unchanged: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM release_work_item_events WHERE event_type='lease_renewed'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count renewals after check");
+    assert_eq!(unchanged, 2, "check mode never deletes");
+
+    let removed = store
+        .prune_expired_lease_renewal_events(&db.pool, cutoff, 1, true)
+        .await
+        .expect("apply retention");
+    assert_eq!(removed, 1);
+    let remaining: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE event_type='lease_renewed'),
+                count(*) FILTER (
+                    WHERE event_type='transitioned'
+                      AND reason_code='catalog.import_complete')
+           FROM release_work_item_events",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count remaining history");
+    assert_eq!(
+        remaining,
+        (1, 1),
+        "the recent renewal and the transition audit row remain"
+    );
+    assert_eq!(
+        store
+            .prune_expired_lease_renewal_events(&db.pool, cutoff, 1_000, true)
+            .await
+            .expect("idempotent rerun"),
+        0
+    );
+    db.drop().await;
+}

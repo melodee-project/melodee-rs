@@ -634,17 +634,27 @@ const DEFAULT_COVER_RAW: &[u8] = include_bytes!(
 );
 
 const STORED_ARTWORK_CACHE_CAPACITY: usize = 256;
+/// PERF-013 / RM-17: hard byte ceiling for derived artwork. Entry-count bounds
+/// alone let a few large images consume unbounded memory.
+const STORED_ARTWORK_CACHE_MAX_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct StoredArtworkCacheKey {
-    source_sha256: String,
+    /// Stable artwork identity from the request (`album_<uuid>`, `song_<uuid>`,
+    /// `artist_<uuid>`, `playlist_<uuid>`), not a content digest computed per
+    /// request.
+    asset_key: String,
     target_size: u32,
+    /// Transformation parameters that affect the bytes.
+    format: String,
+    no_upscale: bool,
 }
 
 #[derive(Debug, Default)]
 struct StoredArtworkCache {
     values: HashMap<StoredArtworkCacheKey, Vec<u8>>,
     order: VecDeque<StoredArtworkCacheKey>,
+    bytes_used: usize,
 }
 
 static STORED_ARTWORK_CACHE: OnceLock<Mutex<StoredArtworkCache>> = OnceLock::new();
@@ -681,6 +691,11 @@ fn cached_stored_artwork(key: &StoredArtworkCacheKey) -> Option<Vec<u8>> {
 }
 
 fn cache_stored_artwork(key: StoredArtworkCacheKey, bytes: Vec<u8>) {
+    // An entry larger than the whole budget is served but never retained, so a
+    // single pathological image cannot evict every other entry.
+    if bytes.len() > STORED_ARTWORK_CACHE_MAX_BYTES {
+        return;
+    }
     let Some(mut cache) = STORED_ARTWORK_CACHE
         .get_or_init(|| Mutex::new(StoredArtworkCache::default()))
         .lock()
@@ -688,29 +703,36 @@ fn cache_stored_artwork(key: StoredArtworkCacheKey, bytes: Vec<u8>) {
     else {
         return;
     };
-    if let std::collections::hash_map::Entry::Occupied(mut entry) = cache.values.entry(key.clone())
-    {
-        entry.insert(bytes);
-        return;
+    if let Some(existing) = cache.values.get(&key) {
+        cache.bytes_used = cache.bytes_used.saturating_sub(existing.len());
     }
-    while cache.values.len() >= STORED_ARTWORK_CACHE_CAPACITY {
+    cache.bytes_used = cache.bytes_used.saturating_add(bytes.len());
+    cache.order.retain(|entry| entry != &key);
+    cache.order.push_back(key.clone());
+    cache.values.insert(key, bytes);
+    while cache.values.len() > STORED_ARTWORK_CACHE_CAPACITY
+        || cache.bytes_used > STORED_ARTWORK_CACHE_MAX_BYTES
+    {
         let Some(oldest) = cache.order.pop_front() else {
             break;
         };
-        cache.values.remove(&oldest);
+        if let Some(removed) = cache.values.remove(&oldest) {
+            cache.bytes_used = cache.bytes_used.saturating_sub(removed.len());
+        }
     }
-    cache.order.push_back(key.clone());
-    cache.values.insert(key, bytes);
 }
 
 async fn resized_stored_artwork(
     bytes: Vec<u8>,
     mime_type: &str,
     target_size: u32,
+    asset_key: &str,
 ) -> Option<Vec<u8>> {
     let key = StoredArtworkCacheKey {
-        source_sha256: sha256_hex(&bytes),
+        asset_key: asset_key.to_owned(),
         target_size,
+        format: mime_type.to_owned(),
+        no_upscale: true,
     };
     if let Some(cached) = cached_stored_artwork(&key) {
         return Some(cached);
@@ -906,17 +928,18 @@ async fn get_cover_art_impl(
     let requested_size = params_ref.get("size");
     let (bytes, mime_type, etag, is_default) = match artwork {
         Artwork::Stored(bytes, mime_type) => {
-            let (bytes, mime_type, used_default) =
-                if let Some(target_size) = stored_artwork_target_size(requested_size) {
-                    match resized_stored_artwork(bytes.clone(), &mime_type, target_size).await {
-                        Some(resized) => (resized, mime_type, false),
-                        // A corrupt/unsupported stored image follows the ADR's
-                        // fail-degraded default behavior.
-                        None => (DEFAULT_COVER_SIZED.to_vec(), "image/jpeg".to_string(), true),
-                    }
-                } else {
-                    (bytes, mime_type, false)
-                };
+            let (bytes, mime_type, used_default) = if let Some(target_size) =
+                stored_artwork_target_size(requested_size)
+            {
+                match resized_stored_artwork(bytes.clone(), &mime_type, target_size, raw_id).await {
+                    Some(resized) => (resized, mime_type, false),
+                    // A corrupt/unsupported stored image follows the ADR's
+                    // fail-degraded default behavior.
+                    None => (DEFAULT_COVER_SIZED.to_vec(), "image/jpeg".to_string(), true),
+                }
+            } else {
+                (bytes, mime_type, false)
+            };
             let etag = if used_default {
                 "fda2a2741f69f726b74e07522e8e57487ed3d26a32699e798da0877f47348b18".to_string()
             } else {
@@ -1191,10 +1214,10 @@ mod tests {
             .expect("encode fixture");
         let source = encoded.into_inner();
 
-        let first = resized_stored_artwork(source.clone(), "image/png", 100)
+        let first = resized_stored_artwork(source.clone(), "image/png", 100, "album_test")
             .await
             .expect("resize fixture");
-        let second = resized_stored_artwork(source, "image/png", 100)
+        let second = resized_stored_artwork(source, "image/png", 100, "album_test")
             .await
             .expect("cached resize fixture");
         assert_eq!(first, second);

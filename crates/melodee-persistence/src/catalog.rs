@@ -611,6 +611,50 @@ impl CatalogStore {
     }
 
     /// Returns bounded aggregate counts for operational diagnostics.
+    /// Highest durable affected-identity seed id, or `None` when the closure
+    /// queue is empty. This is the coalescing watermark: a drain deletes only
+    /// rows at or below the watermark it captured, so seeds that arrive during
+    /// the pass remain for the next one.
+    pub async fn identity_reconciliation_seed_watermark(
+        &self,
+        pool: &PgPool,
+    ) -> Result<Option<i64>, CatalogStoreError> {
+        let available: bool = sqlx::query_scalar(
+            "SELECT to_regclass('public.catalog_identity_reconciliation_seed') IS NOT NULL",
+        )
+        .fetch_one(pool)
+        .await?;
+        if !available {
+            // A schema older than this migration (historical-schema test
+            // fixture or a not-yet-migrated database) simply has no queue; the
+            // periodic global backstop remains the convergence path.
+            return Ok(None);
+        }
+        sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT max(id) FROM catalog_identity_reconciliation_seed",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(CatalogStoreError::from)
+    }
+
+    /// Deletes drained seed rows at or below the captured watermark. Idempotent
+    /// and bounded so a concurrent producer cannot lose its work.
+    pub async fn delete_identity_reconciliation_seeds_through(
+        &self,
+        pool: &PgPool,
+        through: i64,
+    ) -> Result<u64, CatalogStoreError> {
+        let deleted =
+            sqlx::query("DELETE FROM catalog_identity_reconciliation_seed WHERE id <= $1")
+                .bind(through)
+                .execute(pool)
+                .await
+                .map_err(CatalogStoreError::from)?
+                .rows_affected();
+        Ok(deleted)
+    }
+
     pub async fn counts(&self, pool: &PgPool) -> Result<CatalogCounts, CatalogStoreError> {
         let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(
             "SELECT
@@ -775,7 +819,20 @@ impl CatalogStore {
             return Err(WorkStoreError::InvalidState(work_item_id, item.state).into());
         }
 
-        let binding = load_manifest_binding(&mut tx, work_item_id).await?;
+        // PERF-008 / RM-10: prepare the (potentially large, filesystem-read)
+        // evidence outside the write transaction, then revalidate every binding
+        // field inside the transaction before using it. A metadata change
+        // between phases discards the prepared evidence and re-reads it under
+        // the transaction, so stale evidence can never be imported.
+        let preloaded = load_manifest_binding_snapshot(pool, work_item_id).await;
+        let metadata = load_manifest_binding_metadata(&mut tx, work_item_id).await?;
+        let binding = match preloaded {
+            Ok(Some(snapshot)) if snapshot.metadata.compatible_with(&metadata) => {
+                let payload = metadata.inline_payload.clone().unwrap_or(snapshot.payload);
+                metadata.into_binding(payload)
+            }
+            _ => load_manifest_binding(&mut tx, work_item_id).await?,
+        };
         if let Some(existing) = load_existing_release_result(
             &mut tx,
             binding.receipt_release_id,
@@ -1756,6 +1813,7 @@ impl CatalogStore {
         let mut ordered = merges.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|merge| merge.source_release_id);
         let mut tx = pool.begin().await?;
+        let now = OffsetDateTime::now_utc();
         let mut events = Vec::with_capacity(ordered.len());
         // Only the first source that owns one contributes its operator image;
         // later sources keep theirs on their recoverable tombstones so the
@@ -1764,6 +1822,11 @@ impl CatalogStore {
         for merge in ordered {
             let (event_id, _assets) =
                 merge_release_in_transaction(&mut tx, merge, &mut operator_image_adopted).await?;
+            // PERF-004: the merge changes credits/redirect evidence for both
+            // Releases, so the affected identity facts join the durable closure
+            // queue in this same transaction.
+            enqueue_identity_reconciliation_seeds(&mut tx, merge.source_release_id, now).await?;
+            enqueue_identity_reconciliation_seeds(&mut tx, merge.target_release_id, now).await?;
             events.push(ReleaseMergeEvent {
                 source_release_id: merge.source_release_id,
                 target_release_id: merge.target_release_id,
@@ -2130,6 +2193,8 @@ impl CatalogStore {
         enqueue_release_revision(&mut tx, source_release_id, now).await?;
         enqueue_release_revision(&mut tx, target_release_id, now).await?;
         enqueue_track_revisions(&mut tx, &track_ids, now).await?;
+        enqueue_identity_reconciliation_seeds(&mut tx, source_release_id, now).await?;
+        enqueue_identity_reconciliation_seeds(&mut tx, target_release_id, now).await?;
         audit_release_event(
             &mut tx,
             source_release_id,
@@ -2856,6 +2921,53 @@ async fn audit_release_event(
 // Import preparation and persistence helpers follow below. Keeping them
 // private prevents protocol/application DTOs from becoming the SQL contract.
 
+/// Binding metadata read without the evidence payload. Used to revalidate a
+/// pre-read snapshot inside the write transaction.
+struct ManifestBindingMetadata {
+    manifest_row_id: i64,
+    schema_version: i32,
+    semantic_hash: String,
+    inline_payload: Option<serde_json::Value>,
+    receipt_release_id: Uuid,
+    plan_hash: String,
+    plan_payload: serde_json::Value,
+    sealed_manifest_hash: String,
+}
+
+impl ManifestBindingMetadata {
+    /// True when every field that binds the evidence to the work item is
+    /// unchanged. Payload equality is not required: the inline payload is part
+    /// of the same row, and an externalized payload is addressed by the sealed
+    /// hash compared here.
+    fn compatible_with(&self, other: &Self) -> bool {
+        self.manifest_row_id == other.manifest_row_id
+            && self.schema_version == other.schema_version
+            && self.semantic_hash == other.semantic_hash
+            && self.receipt_release_id == other.receipt_release_id
+            && self.plan_hash == other.plan_hash
+            && self.plan_payload == other.plan_payload
+            && self.sealed_manifest_hash == other.sealed_manifest_hash
+    }
+
+    fn into_binding(self, payload: serde_json::Value) -> ManifestBinding {
+        ManifestBinding {
+            manifest_row_id: self.manifest_row_id,
+            schema_version: self.schema_version,
+            semantic_hash: self.semantic_hash,
+            payload,
+            receipt_release_id: self.receipt_release_id,
+            plan_hash: self.plan_hash,
+            plan_payload: self.plan_payload,
+            sealed_manifest_hash: self.sealed_manifest_hash,
+        }
+    }
+}
+
+struct ManifestBindingSnapshot {
+    metadata: ManifestBindingMetadata,
+    payload: serde_json::Value,
+}
+
 struct ManifestBinding {
     manifest_row_id: i64,
     schema_version: i32,
@@ -3392,10 +3504,11 @@ impl PreparedResolution {
     }
 }
 
-async fn load_manifest_binding(
+/// Metadata-only binding read inside the write transaction. No filesystem I/O.
+async fn load_manifest_binding_metadata(
     tx: &mut Transaction<'_, Postgres>,
     work_item_id: Uuid,
-) -> Result<ManifestBinding, CatalogStoreError> {
+) -> Result<ManifestBindingMetadata, CatalogStoreError> {
     let row = sqlx::query_as::<
         _,
         (
@@ -3421,24 +3534,94 @@ async fn load_manifest_binding(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or(CatalogStoreError::ImportConflict(work_item_id))?;
-    // ADR-0213: catalog import is an authorized lifecycle read of the full
-    // evidence object; routine policy/browse paths use the compact facts.
-    let payload = match row.3 {
-        Some(payload) => payload,
-        None => crate::manifest_evidence::load_manifest_on_connection(&mut *tx, row.0)
-            .await
-            .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?,
-    };
-    Ok(ManifestBinding {
+    Ok(ManifestBindingMetadata {
         manifest_row_id: row.0,
         schema_version: row.1,
         semantic_hash: row.2,
-        payload,
+        inline_payload: row.3,
         receipt_release_id: row.4,
         plan_hash: row.5,
         plan_payload: row.6,
         sealed_manifest_hash: row.7,
     })
+}
+
+/// Phase-one binding read outside any transaction. Reads and cryptographically
+/// verifies externalized evidence through a pooled connection so the read does
+/// not extend the catalog write transaction or its row locks.
+async fn load_manifest_binding_snapshot(
+    pool: &PgPool,
+    work_item_id: Uuid,
+) -> Result<Option<ManifestBindingSnapshot>, CatalogStoreError> {
+    let mut connection = pool.acquire().await?;
+    let row = sqlx::query_as::<
+        _,
+        (
+            i64,
+            i32,
+            String,
+            Option<serde_json::Value>,
+            Uuid,
+            String,
+            serde_json::Value,
+            String,
+        ),
+    >(
+        "SELECT m.id, m.schema_version, m.manifest_hash, m.manifest_payload,
+                r.release_id, p.plan_hash, p.plan_payload, r.sealed_manifest_hash
+         FROM release_work_item_manifests m
+         JOIN release_publication_plans p ON p.work_item_id = m.work_item_id
+         JOIN release_publication_receipts r ON r.work_item_id = p.work_item_id
+         WHERE m.work_item_id = $1",
+    )
+    .bind(work_item_id)
+    .fetch_optional(&mut *connection)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let metadata = ManifestBindingMetadata {
+        manifest_row_id: row.0,
+        schema_version: row.1,
+        semantic_hash: row.2,
+        inline_payload: row.3,
+        receipt_release_id: row.4,
+        plan_hash: row.5,
+        plan_payload: row.6,
+        sealed_manifest_hash: row.7,
+    };
+    // ADR-0213: catalog import is an authorized lifecycle read of the full
+    // evidence object; routine policy/browse paths use the compact facts.
+    let payload = match metadata.inline_payload.clone() {
+        Some(payload) => payload,
+        None => crate::manifest_evidence::load_manifest_on_connection(
+            &mut connection,
+            metadata.manifest_row_id,
+        )
+        .await
+        .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?,
+    };
+    Ok(Some(ManifestBindingSnapshot { metadata, payload }))
+}
+
+/// In-transaction fallback: reads the binding and (when externalized) its
+/// evidence under the transaction. Used when the phase-one snapshot could not
+/// be prepared or its binding changed, so no stale evidence is ever imported.
+async fn load_manifest_binding(
+    tx: &mut Transaction<'_, Postgres>,
+    work_item_id: Uuid,
+) -> Result<ManifestBinding, CatalogStoreError> {
+    let metadata = load_manifest_binding_metadata(tx, work_item_id).await?;
+    let payload = match metadata.inline_payload.clone() {
+        Some(payload) => payload,
+        None => crate::manifest_evidence::load_manifest_on_connection(
+            &mut *tx,
+            metadata.manifest_row_id,
+        )
+        .await
+        .map_err(|error| CatalogStoreError::ManifestEvidence(error.to_string()))?,
+    };
+    Ok(metadata.into_binding(payload))
 }
 
 fn normalize_lookup(value: &str) -> String {
@@ -3638,14 +3821,31 @@ async fn reuse_existing_artists(
     }
     // A check-then-insert race would recreate the duplicate this decision exists to
     // prevent: two imports of the same name running concurrently both find no
-    // candidate and both insert. Serialize them on the name itself, in ascending
-    // order so two imports sharing several names cannot deadlock. The lock is
+    // candidate and both insert. Serialize them on the name itself. The helper
+    // acquires every lock in ascending *computed lock-key* order (not lexical
+    // input order) inside one call, so two imports sharing several names cannot
+    // deadlock and the round trips do not scale with the name count. The lock is
     // transaction-scoped and released by the import commit.
-    for name in &names {
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(name)
+    // A historical-schema forward test runs today's importer against a schema
+    // that predates this helper. Fall back to the previous per-name loop there;
+    // every migrated production schema has the sorted helper.
+    let has_sorted_lock_helper: bool = sqlx::query_scalar(
+        "SELECT to_regprocedure('public.lock_artist_identity_names(text[])') IS NOT NULL",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_sorted_lock_helper {
+        sqlx::query("SELECT lock_artist_identity_names($1)")
+            .bind(&names)
             .execute(&mut **tx)
             .await?;
+    } else {
+        for name in &names {
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(name)
+                .execute(&mut **tx)
+                .await?;
+        }
     }
     // Count every live homonym before checking the sole candidate's eligibility.
     // Aggregate provider rows per Artist: multiple aliases for one provider identity
@@ -3898,40 +4098,68 @@ async fn persist_prepared_import(
         artist_query.build().execute(&mut **tx).await?;
     }
 
+    // PERF-014 / RM-18: one set-based insert for every embedded Artist
+    // external identifier instead of one round trip per identifier. The
+    // NOT EXISTS guard preserves the previous idempotency exactly.
+    let mut external_ids = Vec::new();
+    let mut external_artist_ids = Vec::new();
+    let mut external_values = Vec::new();
+    let mut external_confidences = Vec::new();
+    let mut external_sources = Vec::new();
+    // Deduplicate in input order. The previous per-row loop inserted the first
+    // occurrence and skipped later ones because each statement saw the earlier
+    // insert; one set-based INSERT must reproduce that explicitly.
+    let mut seen_external = std::collections::HashSet::new();
     for resolution in &prepared.resolutions {
         for (family, external_id) in &resolution.musicbrainz_ids {
             if !matches!(family.as_str(), "artist" | "release_artist") {
                 continue;
             }
+            if !seen_external.insert((resolution.artist_id, external_id.clone())) {
+                continue;
+            }
             let trusted_shape = Uuid::parse_str(external_id).is_ok();
-            sqlx::query(
-                "INSERT INTO artist_external_identities (
-                    id, artist_id, entity_type, provider, external_id,
-                    provider_unique_scope, confidence, evidence_source,
-                    verified_at, is_locked, created_at
-                 )
-                 SELECT $1,$2,'artist','musicbrainz',$3,$4,$5,$6,NULL,false,$7
-                 WHERE NOT EXISTS (
-                     SELECT 1 FROM artist_external_identities existing
-                     WHERE existing.artist_id = $2
-                       AND existing.provider = 'musicbrainz'
-                       AND existing.external_id = $3
-                 )",
-            )
-            .bind(Uuid::now_v7())
-            .bind(resolution.artist_id)
-            .bind(external_id)
-            .bind(false)
-            .bind(if trusted_shape { 9500_i32 } else { 1000_i32 })
-            .bind(if trusted_shape {
+            external_ids.push(Uuid::now_v7());
+            external_artist_ids.push(resolution.artist_id);
+            external_values.push(external_id.clone());
+            external_confidences.push(if trusted_shape { 9500_i32 } else { 1000_i32 });
+            external_sources.push(if trusted_shape {
                 "manifest-v3:embedded-musicbrainz"
             } else {
                 "manifest-v3:malformed-musicbrainz-observation"
-            })
-            .bind(now)
-            .execute(&mut **tx)
-            .await?;
+            });
         }
+    }
+    if !external_ids.is_empty() {
+        sqlx::query(
+            "INSERT INTO artist_external_identities (
+                id, artist_id, entity_type, provider, external_id,
+                provider_unique_scope, confidence, evidence_source,
+                verified_at, is_locked, created_at
+             )
+             SELECT evidence.id, evidence.artist_id, 'artist', 'musicbrainz',
+                    evidence.external_id, false, evidence.confidence,
+                    evidence.source, NULL, false, $6
+               FROM (SELECT unnest($1::uuid[]) AS id,
+                            unnest($2::uuid[]) AS artist_id,
+                            unnest($3::text[]) AS external_id,
+                            unnest($4::int[]) AS confidence,
+                            unnest($5::text[]) AS source) evidence
+              WHERE NOT EXISTS (
+                  SELECT 1 FROM artist_external_identities existing
+                   WHERE existing.artist_id = evidence.artist_id
+                     AND existing.provider = 'musicbrainz'
+                     AND existing.external_id = evidence.external_id
+              )",
+        )
+        .bind(&external_ids)
+        .bind(&external_artist_ids)
+        .bind(&external_values)
+        .bind(&external_confidences)
+        .bind(&external_sources)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
     }
 
     let mut release_external_ids = prepared
@@ -4343,6 +4571,11 @@ async fn persist_prepared_import(
     )
     .await?;
 
+    // PERF-004 / RM-09: persist the affected-identity facts in the same
+    // authoritative transaction. A crash after import therefore cannot lose
+    // reconciliation work; the closure drainer reads these rows later.
+    enqueue_identity_reconciliation_seeds(tx, release_id, now).await?;
+
     Ok(CatalogImportResult {
         catalog_import_id: prepared.import_id,
         release_id: prepared.release_id,
@@ -4356,6 +4589,64 @@ async fn persist_prepared_import(
         set_based_mutation_statement_count: SET_BASED_MUTATION_STATEMENT_COUNT,
         inserted: true,
     })
+}
+
+/// Persists the affected identity facts for one Release so the closure drainer
+/// can converge them without a per-album global scan. The rows cover Release
+/// credits, Track credits and their observations, raw observations, and
+/// external identifiers reachable from this Release.
+async fn enqueue_identity_reconciliation_seeds(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    let available: bool = sqlx::query_scalar(
+        "SELECT to_regclass('public.catalog_identity_reconciliation_seed') IS NOT NULL",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if !available {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO catalog_identity_reconciliation_seed (
+            release_id, artist_id, observed_artist_id, normalized_name,
+            external_provider, external_id, created_at
+         )
+         SELECT $1, credit.artist_id, NULL, artist.normalized_name, NULL, NULL, $2
+           FROM release_artists credit
+           JOIN artists artist ON artist.id = credit.artist_id
+          WHERE credit.release_id = $1
+         UNION ALL
+         SELECT $1, credit.artist_id, credit.observed_artist_id,
+                artist.normalized_name, NULL, NULL, $2
+           FROM track_artists credit
+           JOIN tracks track ON track.id = credit.track_id
+           JOIN artists artist ON artist.id = credit.artist_id
+          WHERE track.release_id = $1
+         UNION ALL
+         SELECT $1, NULL, observed.id, observed.normalized_value, NULL, NULL, $2
+           FROM observed_artists observed
+          WHERE observed.release_id = $1
+         UNION ALL
+         SELECT $1, external.artist_id, NULL, artist.normalized_name,
+                external.provider, external.external_id, $2
+           FROM artist_external_identities external
+           JOIN artists artist ON artist.id = external.artist_id
+          WHERE external.artist_id IN (
+              SELECT credit.artist_id FROM release_artists credit
+               WHERE credit.release_id = $1
+              UNION
+              SELECT credit.artist_id FROM track_artists credit
+                JOIN tracks track ON track.id = credit.track_id
+               WHERE track.release_id = $1
+          )",
+    )
+    .bind(release_id)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 const MAX_AUDIO_IDENTITY_PROPOSALS_PER_IMPORT: usize = 256;

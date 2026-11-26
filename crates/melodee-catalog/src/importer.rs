@@ -180,16 +180,14 @@ pub(crate) async fn import_once_with_cancellation(
                     .await
                 {
                     Ok(result) => {
-                        // PERF-004 / RM-09: an identical retry that adopted the
-                        // durable result committed no new observation, so it
-                        // cannot create a new identity candidate. Skipping the
-                        // global closure here removes per-album work for
-                        // already-completed imports without losing outstanding
-                        // historical work, which the startup and periodic
-                        // backstops still cover.
-                        if result.inserted {
-                            reconcile_artist_identities_once(&store, &pool).await;
-                            reconcile_strong_release_identities(&store, &pool).await;
+                        // PERF-004 / RM-09: the import transaction already
+                        // persisted the affected-identity seeds. Reconciliation
+                        // is coalesced by the scheduler's closure drainer, so a
+                        // successful album never triggers a catalog-wide scan in
+                        // its own task. Idempotent adoptions persist no new
+                        // observation and therefore no new seeds.
+                        if !result.inserted {
+                            debug!(work_item_id = %item.id, "idempotent import adopted the durable result; no new identity seeds");
                         }
                         CatalogTaskOutput::Completed {
                             work_item_id: item.id,
@@ -227,27 +225,96 @@ pub(crate) async fn import_once_with_cancellation(
 /// Runs one bounded Artist reconciliation sweep. The scheduler invokes this
 /// once at startup to converge durable duplicates left by older binaries, and
 /// successful imports invoke it again for newly committed observations.
-pub(crate) async fn reconcile_artist_identities_once(store: &CatalogStore, pool: &PgPool) {
-    reconcile_strong_artist_identities(store, pool).await;
-    reconcile_same_release_track_artist_identities(store, pool).await;
-    reconcile_repeated_artist_credit_identities(store, pool).await;
-    propose_name_only_artist_matches(store, pool).await;
+pub(crate) async fn reconcile_artist_identities_once(store: &CatalogStore, pool: &PgPool) -> usize {
+    let mut candidates = reconcile_strong_artist_identities(store, pool).await;
+    candidates += reconcile_same_release_track_artist_identities(store, pool).await;
+    candidates += reconcile_repeated_artist_credit_identities(store, pool).await;
+    candidates += propose_name_only_artist_matches(store, pool).await;
+    candidates
+}
+
+/// Session advisory key serializing affected-identity closure drains.
+const IDENTITY_RECONCILIATION_LOCK_KEY: i64 = (19_761_125_i64 << 32) | 312;
+
+/// Maximum bounded closure iterations per drain. A merge can expose a new
+/// transitive candidate; iterating to a fixed point handles multi-hop
+/// convergence while remaining bounded. Remaining work stays durable as seeds.
+const MAX_IDENTITY_CLOSURE_ITERATIONS: usize = 4;
+
+/// Drains the durable affected-identity queue with one coalesced closure pass.
+///
+/// PERF-004 / RM-09: ordinary imports persist affected identity facts in their
+/// authoritative transaction; this drainer runs the complete candidate
+/// algorithms once per coalesced batch instead of once per album. It is
+/// therefore equivalent to the global oracle (it *is* the global algorithm),
+/// while per-import work is the bounded seed insert. A session advisory lock
+/// elects one drainer; a periodic global backstop covers seeds lost by an older
+/// binary or a restored backup.
+///
+/// Returns whether a drain ran.
+pub async fn reconcile_affected_identities_once(store: &CatalogStore, pool: &PgPool) -> bool {
+    let watermark = match store.identity_reconciliation_seed_watermark(pool).await {
+        Ok(Some(watermark)) => watermark,
+        Ok(None) => return false,
+        Err(error) => {
+            warn!(%error, "identity reconciliation seed watermark could not be read");
+            return false;
+        }
+    };
+    let Ok(mut connection) = pool.acquire().await else {
+        warn!("identity reconciliation drain could not acquire a connection");
+        return false;
+    };
+    let acquired = sqlx::query_scalar::<_, bool>("SELECT pg_try_advisory_lock($1)")
+        .bind(IDENTITY_RECONCILIATION_LOCK_KEY)
+        .fetch_one(&mut *connection)
+        .await
+        .unwrap_or(false);
+    if !acquired {
+        // Another worker owns the closure; its drain covers this batch.
+        return false;
+    }
+    let mut iterations = 0usize;
+    loop {
+        iterations += 1;
+        let artist_candidates = reconcile_artist_identities_once(store, pool).await;
+        let release_candidates = reconcile_strong_release_identities(store, pool).await;
+        if artist_candidates + release_candidates == 0
+            || iterations >= MAX_IDENTITY_CLOSURE_ITERATIONS
+        {
+            break;
+        }
+    }
+    let _ = sqlx::query("SELECT pg_advisory_unlock($1)")
+        .bind(IDENTITY_RECONCILIATION_LOCK_KEY)
+        .execute(&mut *connection)
+        .await;
+    // Only the captured watermark is cleared, so seeds that arrived during the
+    // pass remain queued for the next drain.
+    if let Err(error) = store
+        .delete_identity_reconciliation_seeds_through(pool, watermark)
+        .await
+    {
+        warn!(%error, "identity reconciliation seeds could not be cleared; they will replay");
+    }
+    true
 }
 
 /// Runs the bounded production caller for the pure local resolver after each
 /// successful import. Strong embedded evidence may converge identities; names
 /// alone never enter this path. Merge mutations remain append-only and are
 /// safe to retry when another worker wins the row locks first.
-async fn reconcile_strong_artist_identities(store: &CatalogStore, pool: &PgPool) {
+async fn reconcile_strong_artist_identities(store: &CatalogStore, pool: &PgPool) -> usize {
     let candidates = match store.strong_artist_merge_candidates(pool, 64).await {
         Ok(candidates) => candidates,
         Err(error) => {
             warn!(%error, "strong Artist reconciliation scan failed; import remains durable");
-            return;
+            return 0;
         }
     };
+    let candidate_count = candidates.len();
     let Some(confidence) = Confidence::new(9_500).ok() else {
-        return;
+        return 0;
     };
     let resolver = LocalArtistResolver::default();
     for candidate in candidates {
@@ -312,13 +379,17 @@ async fn reconcile_strong_artist_identities(store: &CatalogStore, pool: &PgPool)
             }
         }
     }
+    candidate_count
 }
 
 /// Runs ADR-0173's Release-bounded Track-credit predicate before name-only
 /// proposals. Collapsing repeated track-only observations to one
 /// provisional identity per Release first prevents candidate ordering from
 /// leaving same-Release siblings behind when a name also occurs elsewhere.
-async fn reconcile_same_release_track_artist_identities(store: &CatalogStore, pool: &PgPool) {
+async fn reconcile_same_release_track_artist_identities(
+    store: &CatalogStore,
+    pool: &PgPool,
+) -> usize {
     let candidates = match store
         .same_release_track_artist_merge_candidates(pool, 64)
         .await
@@ -326,9 +397,10 @@ async fn reconcile_same_release_track_artist_identities(store: &CatalogStore, po
         Ok(candidates) => candidates,
         Err(error) => {
             warn!(%error, "same-Release Track Artist reconciliation scan failed; import remains durable");
-            return;
+            return 0;
         }
     };
+    let candidate_count = candidates.len();
     for candidate in candidates {
         let merge = ArtistMerge {
             id: ArtistMergeId::new(),
@@ -367,13 +439,14 @@ async fn reconcile_same_release_track_artist_identities(store: &CatalogStore, po
             }
         }
     }
+    candidate_count
 }
 
 /// Consolidates repeated, exact primary Release Artist credits only when the
 /// complete active name group is still provisional and carries no
 /// differentiating identity evidence. The persisted Release role is the
 /// contextual evidence that keeps this separate from a name-only match.
-async fn reconcile_repeated_artist_credit_identities(store: &CatalogStore, pool: &PgPool) {
+async fn reconcile_repeated_artist_credit_identities(store: &CatalogStore, pool: &PgPool) -> usize {
     let candidates = match store
         .repeated_artist_credit_merge_candidates(pool, 64)
         .await
@@ -381,9 +454,10 @@ async fn reconcile_repeated_artist_credit_identities(store: &CatalogStore, pool:
         Ok(candidates) => candidates,
         Err(error) => {
             warn!(%error, "repeated primary Release Artist reconciliation scan failed; import remains durable");
-            return;
+            return 0;
         }
     };
+    let candidate_count = candidates.len();
     for candidate in candidates {
         let merge = ArtistMerge {
             id: ArtistMergeId::new(),
@@ -420,13 +494,14 @@ async fn reconcile_repeated_artist_credit_identities(store: &CatalogStore, pool:
             }
         }
     }
+    candidate_count
 }
 
 /// Turns exact normalized-name equality into reviewable evidence without
 /// changing either Melodee-owned Artist identity. Proposals do not advance the
 /// authoritative current pointer, so legitimate same-name Artists remain
 /// distinct unless an administrator confirms or merges them.
-async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) {
+async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) -> usize {
     let candidates = match store
         .name_only_artist_match_proposal_candidates(pool, 64)
         .await
@@ -434,11 +509,12 @@ async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) {
         Ok(candidates) => candidates,
         Err(error) => {
             warn!(%error, "name-only Artist proposal scan failed; import remains durable");
-            return;
+            return 0;
         }
     };
+    let candidate_count = candidates.len();
     let Some(confidence) = Confidence::new(7_000).ok() else {
-        return;
+        return 0;
     };
     for candidate in candidates {
         let now = OffsetDateTime::now_utc();
@@ -502,6 +578,7 @@ async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) {
             }
         }
     }
+    candidate_count
 }
 
 /// Reconciles duplicate active Releases only when the durable catalog contains
@@ -509,14 +586,18 @@ async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) {
 /// are intentionally not identity predicates. The audited persistence
 /// mutation keeps this pass restart-safe: a concurrent winner is fenced and
 /// the next import pass will observe the resulting state.
-pub(crate) async fn reconcile_strong_release_identities(store: &CatalogStore, pool: &PgPool) {
+pub(crate) async fn reconcile_strong_release_identities(
+    store: &CatalogStore,
+    pool: &PgPool,
+) -> usize {
     let candidates = match store.strong_release_merge_candidates(pool, 64).await {
         Ok(candidates) => candidates,
         Err(error) => {
             warn!(%error, "strong Release reconciliation scan failed; import remains durable");
-            return;
+            return 0;
         }
     };
+    let candidate_count = candidates.len();
     for candidate in candidates {
         let reason = format!(
             "trusted {} evidence converged external identifier {}",
@@ -549,6 +630,7 @@ pub(crate) async fn reconcile_strong_release_identities(store: &CatalogStore, po
             }
         }
     }
+    candidate_count
 }
 
 async fn failed_output(

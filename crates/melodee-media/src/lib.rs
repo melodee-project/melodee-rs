@@ -1366,7 +1366,57 @@ pub(crate) fn run_ffprobe_cancellable(
     })
 }
 
+/// PERF-007 / RM-11: a tool's `-version` output is a function of the resolved
+/// executable, not of the media being processed. Normalization previously
+/// started ffmpeg/fpcalc/ffprobe `-version` three times per album. Cache the
+/// result by canonical path plus file identity (size and modification time),
+/// so an in-place tool upgrade invalidates the entry. The map is small and
+/// bounded.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ToolVersionKey {
+    path: std::path::PathBuf,
+    size: u64,
+    modified: Option<StdDuration>,
+    max_output: usize,
+}
+
+const MAX_CACHED_TOOL_VERSIONS: usize = 16;
+
+type ToolVersionCache = std::sync::Mutex<Vec<(ToolVersionKey, Option<String>)>>;
+
+static TOOL_VERSION_CACHE: std::sync::OnceLock<ToolVersionCache> = std::sync::OnceLock::new();
+
 pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(_) => return None,
+    };
+    let key = ToolVersionKey {
+        path: path.canonicalize().unwrap_or_else(|_| path.to_path_buf()),
+        size: metadata.len(),
+        modified: metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok()),
+        max_output,
+    };
+    let cache = TOOL_VERSION_CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    if let Ok(cache) = cache.lock()
+        && let Some((_, cached)) = cache.iter().find(|(entry, _)| entry == &key)
+    {
+        return cached.clone();
+    }
+    let value = probe_tool_version(path, max_output);
+    if let Ok(mut cache) = cache.lock() {
+        if cache.len() >= MAX_CACHED_TOOL_VERSIONS {
+            cache.remove(0);
+        }
+        cache.push((key, value.clone()));
+    }
+    value
+}
+
+fn probe_tool_version(path: &Path, max_output: usize) -> Option<String> {
     let mut child = Command::new(path)
         .arg("-version")
         .stdin(Stdio::null())

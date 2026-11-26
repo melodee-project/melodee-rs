@@ -51,6 +51,79 @@ pub struct SearchApplyTestBarrier {
 
 #[cfg(feature = "test-support")]
 #[derive(Debug, Clone, Default)]
+pub struct SearchRebuildTestBarrier {
+    state: Arc<SearchRebuildTestBarrierState>,
+}
+
+#[cfg(feature = "test-support")]
+#[derive(Debug)]
+struct SearchRebuildTestBarrierState {
+    paused: AtomicBool,
+    paused_notify: Notify,
+    released: AtomicBool,
+    released_notify: Notify,
+}
+
+#[cfg(feature = "test-support")]
+impl SearchRebuildTestBarrier {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Waits until a rebuild reaches the pause point after snapshot validation
+    /// and before catch-up/activation.
+    pub async fn wait_until_paused(&self) {
+        loop {
+            if self.state.paused.load(Ordering::Acquire) {
+                return;
+            }
+            let notified = self.state.paused_notify.notified();
+            if self.state.paused.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    /// Releases a paused rebuild.
+    pub fn release(&self) {
+        self.state.released.store(true, Ordering::Release);
+        self.state.released_notify.notify_waiters();
+    }
+
+    /// Pauses after snapshot validation so a test can drive the ordinary
+    /// outbox consumer against the previous generation before activation.
+    pub async fn pause_before_catchup(&self) {
+        self.state.paused.store(true, Ordering::Release);
+        self.state.paused_notify.notify_waiters();
+        loop {
+            if self.state.released.load(Ordering::Acquire) {
+                return;
+            }
+            let notified = self.state.released_notify.notified();
+            if self.state.released.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
+
+#[cfg(feature = "test-support")]
+impl Default for SearchRebuildTestBarrierState {
+    fn default() -> Self {
+        Self {
+            paused: AtomicBool::new(false),
+            paused_notify: Notify::new(),
+            released: AtomicBool::new(false),
+            released_notify: Notify::new(),
+        }
+    }
+}
+
+#[cfg(feature = "test-support")]
+#[derive(Debug, Clone, Default)]
 pub struct SearchSchedulerTestProbe {
     state: Arc<SearchSchedulerTestProbeState>,
 }
@@ -522,30 +595,53 @@ async fn apply_outbox_once_with_cancel(
         return Ok(SearchPassStats::default());
     }
     let ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
+    // PERF-005 / RM-13: hydrate the whole batch with one round trip per entity
+    // type, preserving the per-event order. On a batch read error, fall back to
+    // per-event reads so the existing retryable/contract failure classification
+    // is unchanged.
     let mut loaded = Vec::with_capacity(items.len());
     let mut load_failures = Vec::new();
-    for item in items {
-        let record = if item.operation == SearchOperation::Delete {
-            None
-        } else {
-            match SearchProjectionStore::load_catalog_record(pool, item.entity_type, item.entity_id)
-                .await
-            {
-                Ok(record) => record,
-                Err(error) => {
-                    let now = OffsetDateTime::now_utc();
-                    let (failure_kind, retry_at) = match &error {
-                        melodee_persistence::SearchStoreError::Database(_) => {
-                            ("catalog_read", Some(now + time::Duration::seconds(1)))
-                        }
-                        _ => ("catalog_contract", None),
-                    };
-                    load_failures.push((item.id, failure_kind, error.to_string(), retry_at));
-                    continue;
-                }
+    match SearchProjectionStore::load_catalog_records(pool, &items).await {
+        Ok(records) => {
+            for (item, record) in items.into_iter().zip(records) {
+                loaded.push((item, record));
             }
-        };
-        loaded.push((item, record));
+        }
+        Err(batch_error) => {
+            warn!(%batch_error, "batched catalog hydration failed; falling back to per-event reads");
+            for item in items {
+                let record = if item.operation == SearchOperation::Delete {
+                    None
+                } else {
+                    match SearchProjectionStore::load_catalog_record(
+                        pool,
+                        item.entity_type,
+                        item.entity_id,
+                    )
+                    .await
+                    {
+                        Ok(record) => record,
+                        Err(error) => {
+                            let now = OffsetDateTime::now_utc();
+                            let (failure_kind, retry_at) = match &error {
+                                melodee_persistence::SearchStoreError::Database(_) => {
+                                    ("catalog_read", Some(now + time::Duration::seconds(1)))
+                                }
+                                _ => ("catalog_contract", None),
+                            };
+                            load_failures.push((
+                                item.id,
+                                failure_kind,
+                                error.to_string(),
+                                retry_at,
+                            ));
+                            continue;
+                        }
+                    }
+                };
+                loaded.push((item, record));
+            }
+        }
     }
     let load_failures_count = load_failures.len();
     if loaded.is_empty() {

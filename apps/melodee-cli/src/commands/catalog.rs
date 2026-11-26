@@ -58,16 +58,23 @@ pub(crate) async fn run(command: CatalogCommands) {
             )
             .await
             {
-                Ok(stats) => println!(
-                    "catalog import: claimed={} completed={} already_completed={} released={} failed={} errors={} duration_ms={}",
-                    stats.claimed,
-                    stats.completed,
-                    stats.already_completed,
-                    stats.released,
-                    stats.failed,
-                    stats.errors,
-                    stats.duration_ms,
-                ),
+                Ok(stats) => {
+                    // PERF-004: drain the durable affected-identity queue once
+                    // after an explicit import burst.
+                    if melodee_catalog::reconcile_affected_identities_once(&store, &pool).await {
+                        println!("identity reconciliation: affected-identity closure drained");
+                    }
+                    println!(
+                        "catalog import: claimed={} completed={} already_completed={} released={} failed={} errors={} duration_ms={}",
+                        stats.claimed,
+                        stats.completed,
+                        stats.already_completed,
+                        stats.released,
+                        stats.failed,
+                        stats.errors,
+                        stats.duration_ms,
+                    )
+                }
                 Err(error) => {
                     eprintln!("error: {error}");
                     std::process::exit(1);

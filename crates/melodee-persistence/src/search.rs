@@ -1563,6 +1563,93 @@ impl SearchProjectionStore {
         })
     }
 
+    /// PERF-005 / RM-13: ordered batch hydration for a set of outbox events.
+    ///
+    /// Returns one outcome per input event, in the same order, so duplicate
+    /// entities, repeated/increasing revisions, deletes, and missing rows keep
+    /// their per-event mapping. Round trips scale with the number of entity
+    /// types in the batch, not the number of events.
+    pub async fn load_catalog_records(
+        pool: &PgPool,
+        items: &[SearchOutboxItem],
+    ) -> Result<Vec<Option<SearchCatalogRecord>>, SearchStoreError> {
+        let mut artist_ids = Vec::new();
+        let mut release_ids = Vec::new();
+        let mut track_ids = Vec::new();
+        for item in items {
+            if item.operation == SearchOperation::Delete {
+                continue;
+            }
+            match item.entity_type {
+                SearchEntityType::Artist => artist_ids.push(item.entity_id),
+                SearchEntityType::Release => release_ids.push(item.entity_id),
+                SearchEntityType::Track => track_ids.push(item.entity_id),
+                SearchEntityType::AudioIdentity => {}
+            }
+        }
+        artist_ids.sort_unstable();
+        artist_ids.dedup();
+        release_ids.sort_unstable();
+        release_ids.dedup();
+        track_ids.sort_unstable();
+        track_ids.dedup();
+
+        let mut artists = std::collections::HashMap::new();
+        if !artist_ids.is_empty() {
+            let rows = sqlx::query(AssertSqlSafe(
+                ARTIST_SELECT_BY_ID.replace("artist.id = $1", "artist.id = ANY($1)"),
+            ))
+            .bind(&artist_ids)
+            .fetch_all(pool)
+            .await?;
+            for row in rows {
+                let record = parse_artist_row(row)?;
+                artists.insert(record.internal_id, SearchCatalogRecord::Artist(record));
+            }
+        }
+        let mut releases = std::collections::HashMap::new();
+        if !release_ids.is_empty() {
+            let rows = sqlx::query(AssertSqlSafe(
+                RELEASE_SELECT_BY_ID.replace("release.id = $1", "release.id = ANY($1)"),
+            ))
+            .bind(&release_ids)
+            .fetch_all(pool)
+            .await?;
+            for row in rows {
+                let record = parse_release_row(row)?;
+                releases.insert(record.internal_id, SearchCatalogRecord::Release(record));
+            }
+        }
+        let mut tracks = std::collections::HashMap::new();
+        if !track_ids.is_empty() {
+            let rows = sqlx::query(AssertSqlSafe(
+                TRACK_SELECT_BY_ID.replace("track.id = $1", "track.id = ANY($1)"),
+            ))
+            .bind(&track_ids)
+            .fetch_all(pool)
+            .await?;
+            for row in rows {
+                let record = parse_track_row(row)?;
+                tracks.insert(record.internal_id, SearchCatalogRecord::Track(record));
+            }
+        }
+
+        Ok(items
+            .iter()
+            .map(|item| {
+                if item.operation == SearchOperation::Delete {
+                    return None;
+                }
+                match item.entity_type {
+                    SearchEntityType::Artist => artists.get(&item.entity_id).cloned(),
+                    SearchEntityType::Release => releases.get(&item.entity_id).cloned(),
+                    SearchEntityType::Track => tracks.get(&item.entity_id).cloned(),
+                    SearchEntityType::AudioIdentity => Some(SearchCatalogRecord::NoDocument),
+                }
+            })
+            .collect())
+    }
+
     pub async fn load_catalog_record(
         pool: &PgPool,
         entity_type: SearchEntityType,

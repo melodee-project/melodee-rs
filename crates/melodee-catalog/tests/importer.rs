@@ -497,3 +497,161 @@ async fn scheduler_startup_reconciles_repeated_track_credits_left_by_an_older_bi
     assert_eq!(statuses, (1, 1, 1));
     db.drop().await;
 }
+
+async fn seed_count(pool: &sqlx::PgPool) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM catalog_identity_reconciliation_seed")
+        .fetch_one(pool)
+        .await
+        .expect("count identity seeds")
+}
+
+/// PERF-004 / RM-09: an ordinary import persists durable affected-identity
+/// seeds in its authoritative transaction; the coalesced drain consumes them
+/// exactly once and is idempotent.
+#[tokio::test]
+async fn import_persists_identity_seeds_and_the_coalesced_drain_clears_them() {
+    let db = TestDb::create("catalog_identity_seeds").await;
+    seed_published_release(
+        &db,
+        181,
+        CatalogFixturePresentation {
+            release_title: "Seed Release",
+            release_artist: "Seed Artist",
+            track_title: "Seed Track",
+            track_artist: "Seed Artist",
+            release_date: "2026-01-01",
+        },
+    )
+    .await;
+    import_once(
+        &CatalogConfig {
+            concurrency: 1,
+            ..CatalogConfig::default()
+        },
+        &CatalogStore,
+        &db.pool,
+        &WorkEngineConfig::default(),
+        time::OffsetDateTime::now_utc(),
+    )
+    .await
+    .expect("import seed fixture");
+
+    assert!(
+        seed_count(&db.pool).await > 0,
+        "the import transaction persists affected-identity seeds"
+    );
+    let watermark = CatalogStore
+        .identity_reconciliation_seed_watermark(&db.pool)
+        .await
+        .expect("read seed watermark");
+    assert!(watermark.is_some());
+
+    assert!(
+        melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
+        "the drain runs when the durable queue is non-empty"
+    );
+    assert_eq!(
+        seed_count(&db.pool).await,
+        0,
+        "the drain clears the captured watermark"
+    );
+    assert!(
+        !melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
+        "an empty queue does no work"
+    );
+    db.drop().await;
+}
+
+/// PERF-004 / RM-09: durable seeds converge a legacy duplicate that the import
+/// path deliberately left apart, proving equivalence with the global algorithm
+/// without a per-album scan.
+#[tokio::test]
+async fn coalesced_drain_converges_legacy_duplicate_artist_identities() {
+    let db = TestDb::create("catalog_identity_drain").await;
+    let mut fixtures = Vec::new();
+    for (offset, title) in ["Legacy One", "Legacy Two", "Legacy Three"]
+        .into_iter()
+        .enumerate()
+    {
+        fixtures.push(
+            seed_published_release(
+                &db,
+                u32::try_from(190 + offset).expect("fixture ordinal"),
+                CatalogFixturePresentation {
+                    release_title: title,
+                    release_artist: "Drain Duplicate",
+                    track_title: title,
+                    track_artist: "Drain Duplicate",
+                    release_date: "2001-01-01",
+                },
+            )
+            .await,
+        );
+    }
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let work_config = WorkEngineConfig {
+        claim_batch_size: 3,
+        ..WorkEngineConfig::default()
+    };
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &work_config, now)
+            .await
+            .expect("claim legacy fixtures")
+            .len(),
+        3
+    );
+    for fixture in &fixtures {
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("legacy-seeds-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import legacy fixture");
+        sqlx::query(
+            "UPDATE artists SET disambiguation='legacy duplicate'
+              WHERE normalized_name='drain duplicate'",
+        )
+        .execute(&db.pool)
+        .await
+        .expect("keep legacy duplicates apart");
+    }
+    let before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM artists
+          WHERE normalized_name='drain duplicate' AND status='active'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count pre-drain duplicates");
+    assert_eq!(before, 3);
+    sqlx::query("UPDATE artists SET disambiguation=NULL WHERE normalized_name='drain duplicate'")
+        .execute(&db.pool)
+        .await
+        .expect("remove legacy blocker");
+
+    assert!(
+        melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
+        "the durable seeds trigger a closure drain"
+    );
+    let (active, merged): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='active'),
+                count(*) FILTER (WHERE status='merged')
+           FROM artists WHERE normalized_name='drain duplicate'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count post-drain identities");
+    assert_eq!(
+        (active, merged),
+        (1, 2),
+        "the closure converges the legacy duplicates the import left apart"
+    );
+    assert_eq!(seed_count(&db.pool).await, 0);
+    db.drop().await;
+}

@@ -288,7 +288,7 @@ async fn effective_settings_are_redacted_and_explained() {
         .iter()
         .find(|setting| setting["key"] == "podcast.retention.keepUnplayedOnly")
         .expect("retention row");
-    assert_eq!(retention["consumer"], "podcast_worker");
+    assert_eq!(retention["consumer"], "melodee-application:podcast_worker");
     assert_eq!(retention["kind"], "boolean");
     let retired = settings
         .iter()

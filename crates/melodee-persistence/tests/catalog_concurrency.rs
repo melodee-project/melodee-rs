@@ -884,7 +884,8 @@ async fn same_name_imports_serialize_on_the_artist_name_lock() {
                 "SELECT count(*) FROM pg_stat_activity
                  WHERE datname=current_database() AND pid<>pg_backend_pid()
                    AND wait_event_type='Lock'
-                   AND query LIKE '%pg_advisory_xact_lock%'",
+                   AND (query LIKE '%pg_advisory_xact_lock%'
+                        OR query LIKE '%lock_artist_identity_names%')",
             )
             .fetch_one(&db.pool)
             .await

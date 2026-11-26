@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::config::SearchConfig;
 use crate::error::SearchError;
 use crate::generation::SearchRoot;
-use crate::store::{GenerationStats, SearchHit, SearchStore};
+use crate::store::{GenerationStats, SearchHit, SearchReader, SearchStore};
 
 #[derive(Debug, Serialize)]
 pub struct SearchDiagnostic {
@@ -44,12 +44,10 @@ pub async fn query_plan_active(
             config.max_limit
         )));
     }
-    let path = active_generation_path(config, pool).await?;
-    tokio::task::spawn_blocking(move || {
-        SearchStore::open_readonly(&path)?.search(&plan, limit, offset)
-    })
-    .await
-    .map_err(|error| SearchError::Retryable(format!("search task failed: {error}")))?
+    let reader = active_generation_reader(config, pool).await?;
+    tokio::task::spawn_blocking(move || reader.search(&plan, limit, offset))
+        .await
+        .map_err(|error| SearchError::Retryable(format!("search task failed: {error}")))?
 }
 
 /// Query the active projection within one entity kind and return the total
@@ -69,13 +67,11 @@ pub async fn query_active_kind(
         )));
     }
     let plan = parse_and_plan_with_bounds(input, &config.mql_bounds())?;
-    let path = active_generation_path(config, pool).await?;
+    let reader = active_generation_reader(config, pool).await?;
     let kind = kind.to_string();
-    tokio::task::spawn_blocking(move || {
-        SearchStore::open_readonly(&path)?.search_kind(&plan, &kind, limit, offset)
-    })
-    .await
-    .map_err(|error| SearchError::Retryable(format!("search task failed: {error}")))?
+    tokio::task::spawn_blocking(move || reader.search_kind(&plan, &kind, limit, offset))
+        .await
+        .map_err(|error| SearchError::Retryable(format!("search task failed: {error}")))?
 }
 
 pub async fn autocomplete_active(
@@ -85,14 +81,12 @@ pub async fn autocomplete_active(
     prefix: &str,
     limit: usize,
 ) -> Result<Vec<String>, SearchError> {
-    let path = active_generation_path(config, pool).await?;
+    let reader = active_generation_reader(config, pool).await?;
     let kind = kind.to_string();
     let prefix = prefix.to_string();
-    tokio::task::spawn_blocking(move || {
-        SearchStore::open_readonly(&path)?.autocomplete(&kind, &prefix, limit)
-    })
-    .await
-    .map_err(|error| SearchError::Retryable(format!("autocomplete task failed: {error}")))?
+    tokio::task::spawn_blocking(move || reader.autocomplete(&kind, &prefix, limit))
+        .await
+        .map_err(|error| SearchError::Retryable(format!("autocomplete task failed: {error}")))?
 }
 
 /// Resolve an Artist display name, alias, internal ID, or public ID to a
@@ -122,13 +116,11 @@ pub async fn resolve_artist_ids_active(
     {
         return Ok(vec![redirected.to_string()]);
     }
-    let path = active_generation_path(config, pool).await?;
+    let reader = active_generation_reader(config, pool).await?;
     let value = value.to_string();
-    tokio::task::spawn_blocking(move || {
-        SearchStore::open_readonly(&path)?.resolve_artist_ids(&value)
-    })
-    .await
-    .map_err(|error| SearchError::Retryable(format!("Artist lookup task failed: {error}")))?
+    tokio::task::spawn_blocking(move || reader.resolve_artist_ids(&value))
+        .await
+        .map_err(|error| SearchError::Retryable(format!("Artist lookup task failed: {error}")))?
 }
 
 pub async fn diagnostic(
@@ -211,16 +203,82 @@ pub async fn diagnostic(
     }
 }
 
-async fn active_generation_path(
+/// Bounded process-local cache of verified read-only generations.
+///
+/// PERF-005 / RM-13: keyed by canonical root + generation id + verified
+/// manifest hash, so an activation, retirement, or manifest corruption forces
+/// a fresh open instead of reusing stale state. The capacity is small and the
+/// oldest entry is evicted; the index handles themselves share the OS page
+/// cache. This is not a substitute for the projection lease or multi-process
+/// fencing.
+struct ReaderRegistry {
+    entries: std::collections::HashMap<(String, Uuid, String), std::sync::Arc<SearchReader>>,
+    order: std::collections::VecDeque<(String, Uuid, String)>,
+}
+
+const MAX_CACHED_READERS: usize = 8;
+
+static READER_REGISTRY: std::sync::OnceLock<std::sync::Mutex<ReaderRegistry>> =
+    std::sync::OnceLock::new();
+
+fn reader_registry() -> &'static std::sync::Mutex<ReaderRegistry> {
+    READER_REGISTRY.get_or_init(|| {
+        std::sync::Mutex::new(ReaderRegistry {
+            entries: std::collections::HashMap::new(),
+            order: std::collections::VecDeque::new(),
+        })
+    })
+}
+
+fn cached_reader(
+    root: &str,
+    generation_id: Uuid,
+    manifest_hash: &str,
+    path: &std::path::Path,
+) -> Result<std::sync::Arc<SearchReader>, SearchError> {
+    let key = (root.to_owned(), generation_id, manifest_hash.to_owned());
+    {
+        let registry = reader_registry()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(reader) = registry.entries.get(&key) {
+            return Ok(std::sync::Arc::clone(reader));
+        }
+        // The guard is dropped here so the index open below does not serialize
+        // every query behind one open. The small duplicate-open window is
+        // cheaper than holding the registry lock across filesystem work.
+    }
+    let reader = std::sync::Arc::new(SearchReader::open_readonly(path)?);
+    let mut registry = reader_registry()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(existing) = registry.entries.get(&key) {
+        return Ok(std::sync::Arc::clone(existing));
+    }
+    registry
+        .entries
+        .insert(key.clone(), std::sync::Arc::clone(&reader));
+    registry.order.push_back(key.clone());
+    while registry.order.len() > MAX_CACHED_READERS {
+        if let Some(evicted) = registry.order.pop_front() {
+            registry.entries.remove(&evicted);
+        }
+    }
+    Ok(reader)
+}
+
+async fn active_generation_reader(
     config: &SearchConfig,
     pool: &PgPool,
-) -> Result<std::path::PathBuf, SearchError> {
+) -> Result<std::sync::Arc<SearchReader>, SearchError> {
     let root = SearchRoot::open(&config.search_root)?;
-    let active =
-        SearchProjectionStore::active_generation(pool, root.path().to_string_lossy().as_ref())
-            .await?
-            .ok_or_else(|| SearchError::NoActiveGeneration(root.path().display().to_string()))?;
-    validate_active_manifest(&root, &active)
+    let root_text = root.path().to_string_lossy().to_string();
+    let active = SearchProjectionStore::active_generation(pool, &root_text)
+        .await?
+        .ok_or_else(|| SearchError::NoActiveGeneration(root.path().display().to_string()))?;
+    let path = validate_active_manifest(&root, &active)?;
+    let manifest_hash = active.manifest_hash.clone().unwrap_or_default();
+    cached_reader(&root_text, active.generation_id, &manifest_hash, &path)
 }
 
 fn validate_active_manifest(

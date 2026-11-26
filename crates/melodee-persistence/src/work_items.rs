@@ -2824,6 +2824,80 @@ impl WorkItemStore {
         Ok(new_expiry)
     }
 
+    /// Counts `lease_renewed` events older than the cutoff. Read-only.
+    pub async fn count_expired_lease_renewal_events(
+        &self,
+        pool: &PgPool,
+        older_than: OffsetDateTime,
+    ) -> Result<u64, WorkStoreError> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM release_work_item_events
+              WHERE event_type = 'lease_renewed' AND created_at < $1",
+        )
+        .bind(older_than)
+        .fetch_one(pool)
+        .await?;
+        Ok(u64::try_from(count).unwrap_or(u64::MAX))
+    }
+
+    /// Bounded, resumable, idempotent retention for high-frequency lease
+    /// renewal events only (ADR-0215). Transition, failure, completion, retry,
+    /// and lease acquire/release events are never eligible, so the operator
+    /// history of "what happened and why" is preserved. A zero batch size or a
+    /// future cutoff is rejected rather than treated as unlimited.
+    pub async fn prune_expired_lease_renewal_events(
+        &self,
+        pool: &PgPool,
+        older_than: OffsetDateTime,
+        batch_size: u32,
+        apply: bool,
+    ) -> Result<u64, WorkStoreError> {
+        if batch_size == 0 || batch_size > 100_000 {
+            return Err(WorkStoreError::InvalidRequest(
+                "lease-event prune batch size must be between 1 and 100000",
+            ));
+        }
+        if !apply {
+            return self
+                .count_expired_lease_renewal_events(pool, older_than)
+                .await;
+        }
+        // Serialize concurrent prunes so two operators cannot interleave
+        // batches for the same table.
+        let mut tx = pool.begin().await?;
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtext('release_work_item_events_retention'))")
+            .execute(&mut *tx)
+            .await?;
+        let mut removed_total = 0_u64;
+        loop {
+            let removed = sqlx::query(
+                "DELETE FROM release_work_item_events
+                  WHERE id IN (
+                      SELECT id FROM release_work_item_events
+                       WHERE event_type = 'lease_renewed' AND created_at < $1
+                       ORDER BY id
+                       LIMIT $2
+                  )",
+            )
+            .bind(older_than)
+            .bind(i64::from(batch_size))
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            removed_total = removed_total.saturating_add(removed);
+            if removed == 0 {
+                break;
+            }
+        }
+        tx.commit().await?;
+        info!(
+            removed = removed_total,
+            cutoff = %older_than,
+            "lease renewal event retention completed"
+        );
+        Ok(removed_total)
+    }
+
     /// Requeue interrupted inspections through the normal retry policy. Other
     /// stages own their recovery and a concurrent pass skips locked rows.
     pub async fn recover_expired_inspections(

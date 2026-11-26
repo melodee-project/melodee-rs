@@ -25,6 +25,7 @@ mod identity_review;
 mod installation;
 mod job_history;
 pub mod manifest_evidence;
+pub mod metrics;
 mod migrate;
 mod native_user_state;
 mod notifications;

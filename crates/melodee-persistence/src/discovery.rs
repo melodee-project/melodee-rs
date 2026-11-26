@@ -228,6 +228,7 @@ impl NativeDiscoveryStore {
                 "discovery batch bounds must be positive",
             ));
         }
+        let started = std::time::Instant::now();
         let per_class = per_class_budget(max_batches);
         let mut stats = NativeDiscoveryMaintenanceStats::default();
 
@@ -245,6 +246,7 @@ impl NativeDiscoveryStore {
                 .await?;
         }
         relink_chart_items(pool, batch_size, per_class, &mut stats).await?;
+        crate::metrics::observe(crate::metrics::Metric::DiscoveryPass, started.elapsed());
         Ok(stats)
     }
 }

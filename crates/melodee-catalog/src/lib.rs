@@ -21,7 +21,7 @@ pub use config::{
     CatalogConfig, CatalogConfigError, ENV_CATALOG_BATCH_SIZE, ENV_CATALOG_CONCURRENCY,
     ENV_CATALOG_ENABLED, ENV_CATALOG_POLL_INTERVAL_SECONDS,
 };
-pub use importer::{CatalogImportError, import_once};
+pub use importer::{CatalogImportError, import_once, reconcile_affected_identities_once};
 pub use resolver::{
     ArtistResolutionError, ArtistResolutionEvaluation, ArtistResolutionRecommendation,
     CandidateAssessment, DEFAULT_MAX_ARTIST_CANDIDATES, DEFAULT_MAX_EVIDENCE_PER_CANDIDATE,

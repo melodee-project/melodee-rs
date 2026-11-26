@@ -126,6 +126,29 @@ fn is_permanent_rebuild_error(error: &SearchError) -> bool {
     )
 }
 
+/// PERF-006 / RM-14: run one bounded page's document construction and commit on
+/// the blocking pool, and return the store so the next page reuses it. The
+/// spawn_blocking queue depth is bounded to one page per rebuild, so this moves
+/// index CPU/IO off the async runtime without an unbounded blocking backlog.
+async fn index_page_blocking(
+    mut store: SearchStore,
+    work: impl FnOnce(&mut SearchStore) -> Result<(), SearchError> + Send + 'static,
+) -> Result<SearchStore, SearchError> {
+    let started = std::time::Instant::now();
+    let result = tokio::task::spawn_blocking(move || {
+        work(&mut store)?;
+        store.commit()?;
+        Ok::<SearchStore, SearchError>(store)
+    })
+    .await
+    .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?;
+    melodee_persistence::metrics::observe(
+        melodee_persistence::metrics::Metric::SearchRebuildPage,
+        started.elapsed(),
+    );
+    result
+}
+
 async fn execute_claimed_rebuild(
     config: &SearchConfig,
     pool: &PgPool,
@@ -166,13 +189,19 @@ async fn execute_claimed_rebuild(
                 break;
             }
             after = page.last().map(|record| record.internal_id);
-            for record in page {
-                store.insert_artist_fresh(&ArtistDoc::from(record))?;
-                counts.artists = counts.artists.checked_add(1).ok_or_else(|| {
-                    SearchError::InvalidQuery("Artist count overflow".to_string())
-                })?;
-            }
-            store.commit()?;
+            let page_count = u64::try_from(page.len())
+                .map_err(|_| SearchError::InvalidQuery("Artist count overflow".to_string()))?;
+            store = index_page_blocking(store, move |store| {
+                for record in page {
+                    store.insert_artist_fresh(&ArtistDoc::from(record))?;
+                }
+                Ok(())
+            })
+            .await?;
+            counts.artists = counts
+                .artists
+                .checked_add(page_count)
+                .ok_or_else(|| SearchError::InvalidQuery("Artist count overflow".to_string()))?;
         }
         let mut after = None;
         loop {
@@ -185,13 +214,19 @@ async fn execute_claimed_rebuild(
                 break;
             }
             after = page.last().map(|record| record.internal_id);
-            for record in page {
-                store.insert_release_fresh(&ReleaseDoc::from(record))?;
-                counts.releases = counts.releases.checked_add(1).ok_or_else(|| {
-                    SearchError::InvalidQuery("Release count overflow".to_string())
-                })?;
-            }
-            store.commit()?;
+            let page_count = u64::try_from(page.len())
+                .map_err(|_| SearchError::InvalidQuery("Release count overflow".to_string()))?;
+            store = index_page_blocking(store, move |store| {
+                for record in page {
+                    store.insert_release_fresh(&ReleaseDoc::from(record))?;
+                }
+                Ok(())
+            })
+            .await?;
+            counts.releases = counts
+                .releases
+                .checked_add(page_count)
+                .ok_or_else(|| SearchError::InvalidQuery("Release count overflow".to_string()))?;
         }
         let mut after = None;
         loop {
@@ -204,14 +239,19 @@ async fn execute_claimed_rebuild(
                 break;
             }
             after = page.last().map(|record| record.internal_id);
-            for record in page {
-                store.insert_track_fresh(&TrackDoc::from(record))?;
-                counts.tracks = counts
-                    .tracks
-                    .checked_add(1)
-                    .ok_or_else(|| SearchError::InvalidQuery("Track count overflow".to_string()))?;
-            }
-            store.commit()?;
+            let page_count = u64::try_from(page.len())
+                .map_err(|_| SearchError::InvalidQuery("Track count overflow".to_string()))?;
+            store = index_page_blocking(store, move |store| {
+                for record in page {
+                    store.insert_track_fresh(&TrackDoc::from(record))?;
+                }
+                Ok(())
+            })
+            .await?;
+            counts.tracks = counts
+                .tracks
+                .checked_add(page_count)
+                .ok_or_else(|| SearchError::InvalidQuery("Track count overflow".to_string()))?;
         }
         snapshot.finish().await?;
         let stats = store.stats()?;
@@ -267,6 +307,13 @@ async fn catch_up_and_activate(
     cancel: &AtomicBool,
 ) -> Result<(), SearchError> {
     let path = root.generation_path(generation.generation_id);
+    // Deterministic test interleaving: pause after the snapshot is validated
+    // and before catch-up so a test can drive the ordinary outbox consumer
+    // against the previous generation. Compiled only for `test-support`.
+    #[cfg(feature = "test-support")]
+    if let Some(barrier) = &config.rebuild_test_barrier {
+        barrier.pause_before_catchup().await;
+    }
     loop {
         check_cancel(cancel)?;
         renew(config, pool, job_id, worker).await?;
@@ -296,25 +343,21 @@ async fn catch_up_and_activate(
                     "outbox replay rows disappeared before they were applied".to_string(),
                 ));
             }
-            let mut store = SearchStore::open(&path)?;
-            for item in &rows {
-                let record = if item.operation == SearchOperation::Delete {
-                    None
-                } else {
-                    SearchProjectionStore::load_catalog_record(
-                        pool,
-                        item.entity_type,
-                        item.entity_id,
-                    )
-                    .await?
-                };
-                apply_record(&mut store, item, record)?;
-            }
+            let records = SearchProjectionStore::load_catalog_records(pool, &rows).await?;
+            let catchup_path = path.clone();
+            let stats = tokio::task::spawn_blocking(move || {
+                let mut store = SearchStore::open(&catchup_path)?;
+                for (item, record) in rows.iter().zip(records) {
+                    apply_record(&mut store, item, record)?;
+                }
+                store.commit()?;
+                store.stats()
+            })
+            .await
+            .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))??;
             // Apply, then commit, then record the durable replay progress.
             // A crash between commit and record replays an idempotent batch;
             // a crash before commit replays from the last recorded point.
-            store.commit()?;
-            let stats = store.stats()?;
             let current_counts = melodee_persistence::SearchDocumentCounts {
                 artists: u64::try_from(stats.artists)
                     .map_err(|_| SearchError::Retryable("Artist count overflow".to_string()))?,

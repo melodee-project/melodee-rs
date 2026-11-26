@@ -249,8 +249,16 @@ async fn stats_report_library_listening_and_database_panels() {
             .windows(2)
             .all(|rows| rows[0]["bytes"].as_i64() >= rows[1]["bytes"].as_i64())
     );
-    assert_eq!(database["assetFileBytes"], 0);
-    assert_eq!(database["assetFileCount"], 0);
+    // The fixture publishes a media asset, which migration 0054 records in the
+    // asset registry. Assert the panel reports the real registry aggregate
+    // (honest, not invented) instead of assuming an empty store.
+    let (registry_count, registry_bytes): (i64, i64) =
+        sqlx::query_as("SELECT count(*), COALESCE(sum(size_bytes), 0) FROM asset_files")
+            .fetch_one(&db.pool)
+            .await
+            .expect("read asset registry aggregate");
+    assert_eq!(database["assetFileCount"].as_i64(), Some(registry_count));
+    assert_eq!(database["assetFileBytes"].as_i64(), Some(registry_bytes));
     // The catalog import enqueues search-projection rows, and no search worker runs
     // in this test, so the honest value is whatever the outbox holds — assert it is
     // reported (not invented) rather than pinned to zero.

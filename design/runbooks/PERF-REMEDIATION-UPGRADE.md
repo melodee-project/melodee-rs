@@ -12,6 +12,7 @@ summary lives in `docs/src/content/docs/installation/upgrading.md`.
 | 0061 | Replaces the genre aggregate refresh functions with an advisory-lock + fresh-recount protocol; adds an actual-status-change guard; adds a Track-release-move term-maintenance trigger; adds `catalog_genre_aggregate_discrepancies()` and `repair_catalog_genre_aggregates(apply, limit)` | functions + triggers |
 | 0062 | `native_discovery_progress` with one durable cursor per discovery work class | additive table |
 | 0063 | `search_rebuild_snapshot_outbox`, `search_rebuild_applied_outbox` | additive tables |
+| 0064 | `catalog_identity_reconciliation_seed`; `lock_artist_identity_names(text[])` | additive table + function |
 
 No column, constraint, or row semantics are removed. The three dropped indexes are exact
 duplicates of an existing constraint index; recreating them with their original `CREATE INDEX`
@@ -36,10 +37,12 @@ text restores the prior shape if a forward fix is ever needed.
      live maintenance uses, works in bounded pages, is idempotent, removes keys with no active
      contributor, and prints progress until it reports `checked=0`.
    - `melodee-cli catalog repair-genres` must report `genre aggregates are consistent` afterwards.
-5. **Initialize durable discovery progress.** Migration 0062 seeds one row per work class with a
-   `nil` cursor, so the first pass starts at the beginning of each class. No manual action is
-   required. The discovery worker resumes from the durable cursor after restart; it no longer
-   restarts at the Track prefix.
+5. **Initialize durable discovery progress and identity reconciliation.** Migration 0062 seeds one
+   row per discovery work class with a `nil` cursor, so the first pass starts at the beginning of
+   each class. Migration 0064 creates the affected-identity seed queue; imports populate it in their
+   authoritative transaction and the catalog scheduler drains it in coalesced closure passes, with a
+   30-minute catalog-wide backstop. No manual action is required. If you upgrade from a binary that
+   predates the queue, the backstop converges historical identity work even with an empty queue.
 6. **Rebuild the search projection.** A normal rebuild now records the snapshot's visible outbox
    rows and replays every late/acknowledged obligation before activation. Trigger it as usual
    (`melodee-cli search rebuild --actor <operator>`, or the Admin action). Do **not** repair by replaying only
@@ -55,6 +58,16 @@ text restores the prior shape if a forward fix is ever needed.
 8. **Resume workloads** in the documented order: PostgreSQL, then one server, then workers/replicas
    after the first reports healthy.
 
+## Optional retention maintenance
+
+Lease renewal events are high-frequency. Retention is opt-in and preserves all transition/failure/
+completion history (ADR-0215):
+
+```bash
+melodee-cli work prune-lease-events --older-than-days 30            # read-only count
+melodee-cli work prune-lease-events --older-than-days 30 --apply    # bounded, resumable
+```
+
 ## Concurrency and maintenance requirements
 
 | Command | Requires exclusive maintenance? | Safe with live writers? |
@@ -64,6 +77,8 @@ text restores the prior shape if a forward fix is ever needed.
 | `melodee-cli catalog repair-genres --apply` | Recommended | Yes — takes the live advisory keys, but a maintenance window keeps counts stable for verification |
 | Search rebuild | No | Yes — snapshot + commit-safe catch-up + activation |
 | Discovery maintenance | No | Yes — durable cursors, transaction-fenced |
+| Identity reconciliation drain | No | Yes — durable seeds, session-fenced, bounded iterations |
+| `melodee-cli work prune-lease-events --apply` | No | Yes — only lease_renewed rows, advisory-fenced batches |
 
 ## Interrupted operation
 

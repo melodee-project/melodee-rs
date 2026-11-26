@@ -2015,31 +2015,146 @@ async fn migration_0045_refreshes_artist_status_in_an_existing_generation() {
     db.drop().await;
 }
 
-/// Waits until a rebuild activation is blocked on the outbox fence. This proves
-/// the rebuild finished snapshot + catch-up and is trying to switch generations
-/// while a catalog writer is still uncommitted.
-async fn wait_for_activation_fence_waiter(pool: &sqlx::PgPool) {
+/// PERF-V001 / RM-05 permanent regression (no test-support hooks required).
+///
+/// A low outbox id is already marked `processed_at` (representing an event the
+/// previous generation consumed) and commits only after the rebuild snapshot
+/// and catch-up have moved past its id. Activation must still deliver it.
+#[tokio::test]
+async fn late_lower_id_commit_is_replayed_before_generation_activation() {
+    let db = TestDb::create("phase6_late_lower_id_simple").await;
+    let directory = TempDir::new().expect("search temp root");
+    let config = SearchConfig {
+        search_root: directory.path().join("search"),
+        enabled: true,
+        ..SearchConfig::default()
+    };
+    let artist_id = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO artists (
+            id, public_api_id, canonical_name, normalized_name, sort_name,
+            artist_type, status, created_at, updated_at
+         ) VALUES ($1, $2, 'Late Simple Before', 'LATE SIMPLE BEFORE',
+                   'Late Simple Before', 'person', 'verified', now(), now())",
+    )
+    .bind(artist_id)
+    .bind(uuid::Uuid::now_v7())
+    .execute(&db.pool)
+    .await
+    .expect("seed baseline Artist");
+    request_rebuild(&config, &db.pool, "late-simple-baseline")
+        .await
+        .expect("request baseline rebuild");
+    assert!(
+        run_rebuild_once(&config, &db.pool)
+            .await
+            .expect("run baseline rebuild")
+            .is_some()
+    );
+
+    let mut uncommitted = db.pool.begin().await.expect("begin late transaction");
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at, processed_at
+         ) VALUES ($1, 'artist', $2, 'upsert', 2, now(), now(), now())",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(artist_id)
+    .execute(&mut *uncommitted)
+    .await
+    .expect("allocate low outbox id");
+    sqlx::query(
+        "UPDATE artists SET canonical_name = 'Late Simple After',
+                normalized_name = 'LATE SIMPLE AFTER', sort_name = 'Late Simple After',
+                revision = 2, updated_at = now()
+          WHERE id = $1",
+    )
+    .bind(artist_id)
+    .execute(&mut *uncommitted)
+    .await
+    .expect("mutate Artist");
+    for revision in 3..=13 {
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+                projection_name, entity_type, entity_id, operation,
+                entity_revision, available_at, created_at
+             ) VALUES ($1, 'artist', $2, 'upsert', $3, now(), now())",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(artist_id)
+        .bind(revision)
+        .execute(&db.pool)
+        .await
+        .expect("commit a later outbox id");
+    }
+    request_rebuild(&config, &db.pool, "late-simple-rebuild")
+        .await
+        .expect("request the late rebuild");
+    let rebuild_config = config.clone();
+    let rebuild_pool = db.pool.clone();
+    let rebuild = tokio::spawn(async move {
+        run_rebuild_once(&rebuild_config, &rebuild_pool)
+            .await
+            .map(|job| job.is_some())
+    });
+    // Wait deterministically until the rebuild's snapshot is validated; that
+    // commits before catch-up starts. The late commit then happens after an
+    // id-ordered catch-up could already have passed its low id.
+    let root_text = SearchRoot::open(&config.search_root)
+        .expect("owned search root")
+        .path()
+        .to_string_lossy()
+        .to_string();
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
-            let waiters: i64 = sqlx::query_scalar(
-                "SELECT count(*) FROM pg_locks lock
-                 JOIN pg_class relation ON relation.oid = lock.relation
-                 WHERE relation.relname = 'catalog_projection_outbox'
-                   AND lock.locktype = 'relation'
-                   AND lock.mode = 'AccessExclusiveLock'
-                   AND NOT lock.granted",
+            let validated: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM search_generations
+                  WHERE search_root = $1 AND status = 'validated'",
             )
-            .fetch_one(pool)
+            .bind(&root_text)
+            .fetch_one(&db.pool)
             .await
-            .expect("query activation fence waiter");
-            if waiters > 0 {
+            .expect("poll validated generation");
+            if validated > 0 {
                 break;
             }
             tokio::task::yield_now().await;
         }
     })
     .await
-    .expect("rebuild reached the activation fence");
+    .expect("rebuild validated its snapshot");
+    uncommitted.commit().await.expect("commit late transaction");
+    assert!(
+        rebuild
+            .await
+            .expect("join rebuild")
+            .expect("rebuild activates"),
+        "the rebuild must activate"
+    );
+
+    let root = SearchRoot::open(&config.search_root).expect("owned search root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read active generation")
+            .expect("activated generation");
+    let store = SearchStore::open_readonly(&root.generation_path(active.generation_id))
+        .expect("open activated generation");
+    let hits = store
+        .search(
+            &parse_and_plan("artist:\"Late Simple After\"").expect("valid query"),
+            10,
+            0,
+        )
+        .expect("query activated generation");
+    assert!(
+        hits.iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == artist_id.to_string()),
+        "the activated generation must contain the late revision"
+    );
+    drop(store);
+    db.drop().await;
 }
 
 /// PERF-V001 / RM-05 permanent regression, real worker + rebuild path.
@@ -2056,8 +2171,14 @@ async fn wait_for_activation_fence_waiter(pool: &sqlx::PgPool) {
 /// The activated generation must contain A's revision. The old protocol
 /// compared `caught_up_outbox_id` to `max(id)` and activated stale, permanently
 /// omitting an event that had already been acknowledged elsewhere.
+///
+/// This variant uses the `test-support` rebuild pause to drive the *real*
+/// ordinary outbox consumer against the previous generation between A's commit
+/// and activation, reproducing the validator's exact acknowledgement
+/// interleaving rather than pre-marking `processed_at`.
+#[cfg(feature = "test-support")]
 #[tokio::test]
-async fn late_lower_id_commit_is_replayed_before_generation_activation() {
+async fn late_lower_id_commit_survives_old_generation_acknowledgement() {
     let db = TestDb::create("phase6_late_lower_id_replay").await;
     let directory = TempDir::new().expect("search temp root");
     let config = SearchConfig {
@@ -2090,14 +2211,15 @@ async fn late_lower_id_commit_is_replayed_before_generation_activation() {
             .is_some()
     );
 
-    // Transaction A: catalog mutation + low outbox id, already acknowledged
-    // against the active (baseline) generation, deliberately left open.
+    // Transaction A: catalog mutation + low outbox id, deliberately left open.
+    // It is *not* pre-marked processed; the real outbox consumer will
+    // acknowledge it against the previous generation later in the test.
     let mut uncommitted = db.pool.begin().await.expect("begin late transaction");
     let late_outbox_id: i64 = sqlx::query_scalar(
         "INSERT INTO catalog_projection_outbox (
             projection_name, entity_type, entity_id, operation,
-            entity_revision, available_at, created_at, processed_at
-         ) VALUES ($1, 'artist', $2, 'upsert', 2, now(), now(), now())
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'upsert', 2, now(), now())
          RETURNING id",
     )
     .bind(SEARCH_PROJECTION_NAME)
@@ -2139,20 +2261,53 @@ async fn late_lower_id_commit_is_replayed_before_generation_activation() {
     request_rebuild(&config, &db.pool, "late-id-rebuild")
         .await
         .expect("request the late-id rebuild");
-    let rebuild_config = config.clone();
+    let barrier = melodee_search::SearchRebuildTestBarrier::new();
+    let mut rebuild_config = config.clone();
+    rebuild_config.rebuild_test_barrier = Some(barrier.clone());
+    let consumer_config = config.clone();
     let rebuild_pool = db.pool.clone();
     let rebuild = tokio::spawn(async move {
         run_rebuild_once(&rebuild_config, &rebuild_pool)
             .await
             .map(|job| job.is_some())
     });
-    wait_for_activation_fence_waiter(&db.pool).await;
+    // The rebuild has finished its consistent snapshot and validated it. A's
+    // change is not in that snapshot.
+    barrier.wait_until_paused().await;
 
-    // A commits only now, after catch-up has already advanced past its id.
+    // A commits only now, after the snapshot was taken and after later ids
+    // already exist, so its low id is invisible to the snapshot.
     uncommitted
         .commit()
         .await
         .expect("commit the late lower-id transaction");
+
+    // The *real* ordinary worker consumes and acknowledges A against the
+    // previous (still active) generation, exactly as in the validator's
+    // reproduction. This must not erase the new generation's obligation.
+    let mut drained = 0usize;
+    for _ in 0..8 {
+        let pass = apply_outbox_once(&consumer_config, &db.pool)
+            .await
+            .expect("ordinary outbox pass against the previous generation");
+        drained += pass.claimed;
+        if pass.claimed == 0 {
+            break;
+        }
+    }
+    assert!(drained >= 1, "the ordinary consumer claimed the late event");
+    let acknowledged: Option<time::OffsetDateTime> =
+        sqlx::query_scalar("SELECT processed_at FROM catalog_projection_outbox WHERE id = $1")
+            .bind(late_outbox_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("read late outbox acknowledgement");
+    assert!(
+        acknowledged.is_some(),
+        "the previous generation really acknowledged the late event"
+    );
+
+    barrier.release();
     assert!(
         rebuild
             .await

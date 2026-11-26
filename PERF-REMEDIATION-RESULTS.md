@@ -114,19 +114,19 @@ transaction-scoped advisory lock serializes passes across processes.
 | PERF-001 | RM-01 | IMPLEMENTED AND VERIFIED |
 | PERF-002 | RM-02 | IMPLEMENTED; decision-equivalence covered by existing policy suites; new plan measured |
 | PERF-003 | RM-03, RM-04 | IMPLEMENTED AND VERIFIED |
-| PERF-004 | RM-09 | PARTIAL — index + no-op skip + both startup backstops; affected-identity closure scoping NOT implemented |
-| PERF-005 | RM-08, RM-13 | PARTIAL — drain/maintenance done; ordered replay done; reader/writer reuse NOT implemented |
-| PERF-006 | RM-05, RM-14 | RM-05 IMPLEMENTED; RM-14 PARTIAL (fresh bulk insert; off-async/commit tuning NOT implemented) |
-| PERF-007 | RM-11, RM-12 | NOT IMPLEMENTED — documented as remaining |
-| PERF-008 | RM-10 | NOT IMPLEMENTED — documented as remaining |
+| PERF-004 | RM-09 | IMPLEMENTED AND VERIFIED (see §8.1) |
+| PERF-005 | RM-08, RM-13 | RM-08 IMPLEMENTED AND VERIFIED; RM-13 PARTIAL — reader registry + batch hydration; writer reuse NO CHANGE (see §8.3) |
+| PERF-006 | RM-05, RM-14 | IMPLEMENTED AND VERIFIED (see §8.4) |
+| PERF-007 | RM-11, RM-12 | RM-11 PARTIAL (tool-version reuse); RM-12 NOT IMPLEMENTED — see §8.6, §8.10 |
+| PERF-008 | RM-10 | IMPLEMENTED (manifest two-phase) / PARTIAL (admission) — see §8.2, §8.8 |
 | PERF-009 | RM-07 | IMPLEMENTED AND VERIFIED (bounded results); rolling refill already present for inspection/normalization/publication |
 | PERF-010 | RM-15 | PARTIAL — partial rating index added; route/serialization optimization NOT implemented |
-| PERF-011 | RM-16 | PARTIAL — three exact duplicates dropped; lease renewal and history retention unchanged (documented decision) |
+| PERF-011 | RM-16 | retention IMPLEMENTED AND VERIFIED (ADR-0215); renewal NO CHANGE (see §8.7) |
 | PERF-012 | RM-06 | IMPLEMENTED AND VERIFIED |
-| PERF-013 | RM-17 | PARTIAL — blacklist singleflight done; stream reader/auth combine/artwork cache NOT implemented |
-| PERF-014 | RM-18 | IMPLEMENTED (evidence batching); advisory-lock audit and recommendation measurement NOT done |
-| PERF-015 | RM-00, RM-20 | RM-20 IMPLEMENTED; RM-00 PARTIAL — regressions + focused fixture done, bounded histograms and representative 560K tier NOT executed |
-| PERF-V001 | RM-05 | IMPLEMENTED; regression test added (final execution gate below) |
+| PERF-013 | RM-17 | PARTIAL — singleflight + byte-bounded asset-key artwork cache; stream/auth/rate-limit remain — see §8.8 |
+| PERF-014 | RM-18 | IMPLEMENTED (all evidence batching + sorted lock keys); recommendation measurement outstanding — see §8.6 |
+| PERF-015 | RM-00, RM-20 | RM-20 IMPLEMENTED; RM-00 PARTIAL — bounded metrics added, representative 560K tier NOT executed — see §8.5, §8.9 |
+| PERF-V001 | RM-05 | IMPLEMENTED AND VERIFIED (two regressions, incl. real old-generation consumer) |
 | PERF-V002 | RM-19 | IMPLEMENTED; covered by existing merge/split suites (final gate) |
 
 ---
@@ -307,3 +307,142 @@ above and for the three release-blocking correctness outcomes**, and **focused-w
 at the 50K database scale for the query/index claims. It is **not** representative-scale verified
 and **not** a complete remediation of all 20 packages. See
 `PERF-REMEDIATION-STATUS.md` for the resumable ledger.
+
+---
+
+# 8. Resumed operation — deltas and final verification
+
+This section records the work completed in the resumed operation and supersedes the earlier
+`PARTIAL`/`NOT IMPLEMENTED` entries in §2. `PERF-REMEDIATION-STATUS.md` is the authoritative
+per-package ledger.
+
+## 8.1 Durable affected-identity reconciliation (PERF-004 / RM-09)
+
+Migration `0064` adds `catalog_identity_reconciliation_seed` and the `lock_artist_identity_names`
+helper. The import transaction now persists the affected identity facts (Release credits, Track
+credits and their observations, raw observations, and external identifiers) atomically with the
+catalog write, so a crash cannot lose reconciliation work. `import_once` no longer runs five
+catalog-wide queries per successful album. Instead:
+
+- `reconcile_affected_identities_once` elects one drainer with a session advisory lock, runs the
+  complete candidate algorithms (Artist strong ID, same-Release Track credit, repeated credit,
+  name-only proposals, strong Release ID) once per coalesced batch, iterates to a bounded fixed
+  point for transitive merges, and clears only the seed rows at or below the watermark it captured.
+- The catalog scheduler drains after a bounded number of import passes and on every tick, and keeps
+  a 30-minute catalog-wide backstop for both Artist and strong-Release identity.
+- Idempotent (non-`inserted`) imports persist no new observation and therefore no seeds.
+
+The closure deliberately runs the global algorithms rather than a release-only filter, so it is
+equivalent to the oracle by construction and cannot miss transitive/historical effects. The cost is
+catalog-wide *per coalesced pass*, not per album.
+
+Permanent tests:
+`catalog_importer::import_persists_identity_seeds_and_the_coalesced_drain_clears_them` and
+`coalesced_drain_converges_legacy_duplicate_artist_identities` (both PASS).
+
+## 8.2 Two-phase manifest preparation (PERF-008 / RM-10)
+
+`import_manifest_v3` now reads and cryptographically verifies the (potentially large, externalized)
+evidence **outside** the write transaction through a pooled connection, then re-enters the
+transaction, re-reads the binding metadata under `FOR SHARE`, and requires every binding field to be
+unchanged (`manifest_row_id`, schema version, semantic hash, receipt Release, plan hash, plan
+payload, sealed hash). On any mismatch (or if the pre-read failed) it discards the prepared payload
+and re-reads inside the transaction, so stale evidence can never be imported. No blocking
+filesystem read remains on the common path inside the catalog write transaction.
+
+Database workload admission/pool reservation remains a measured decision; see §8.8.
+
+## 8.3 Search reader reuse and ordered batch hydration (PERF-005 / RM-13)
+
+- A bounded (8-entry) process registry caches a `SearchReader` keyed by canonical root + generation
+  id + verified manifest hash. Activation, retirement, or a corrupt manifest changes the key and
+  forces a fresh open. The reader forces `IndexReader::reload()` per query so incremental
+  projection commits are visible immediately (matching the previous per-request open).
+- Outbox hydration now loads all event records with one round trip per entity type
+  (`load_catalog_records`), preserving per-event order, duplicates, deletes, and missing rows; a
+  batch-read error falls back to the previous per-event classification.
+- A long-lived writer was evaluated and **not** adopted: the batch-scoped writer keeps
+  commit-before-ack, crash recovery, and multi-process Tanvy lock semantics simple, and the writer
+  is already amortized over a batch. This is recorded as a deliberate NO CHANGE.
+
+## 8.4 Search rebuild execution (PERF-006 / RM-14)
+
+- Fresh generations use `insert_*_fresh` (no per-document revision lookup).
+- Each snapshot page's document construction and commit runs on the blocking pool, one page at a
+  time, so index CPU/IO no longer blocks the async runtime and the blocking queue is bounded to one
+  page per rebuild. Catch-up apply+commit is likewise blocking.
+- Commit frequency is the explicit snapshot-page document bound (`MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE`).
+
+## 8.5 Bounded metrics (PERF-015 / RM-00)
+
+`melodee-persistence::metrics` provides fixed-bucket histograms for fixed metric identities
+(`search_outbox_pass`, `search_rebuild_page`, `search_query`, `discovery_pass`,
+`catalog_import_pass`). Cardinality is bounded by the enum; no route/path/entity/user label exists.
+Recording is instrumented on the search outbox pass, rebuild page, discovery pass, and catalog
+import pass. Unit tests prove fixed buckets, a single overflow bucket, and a fixed label set.
+Per-class connection-checkout histograms and the representative 560K fixture remain outstanding.
+
+## 8.6 Safe media/identity throughput (PERF-007 / PERF-014)
+
+- Tool version output is cached by canonical executable path plus file size/modification time, with
+  a bounded 16-entry map. Normalization previously started ffmpeg/fpcalc/ffprobe `-version` three
+  times per album; after the first album those probes are avoided. An in-place tool upgrade
+  invalidates the entry through file identity.
+- Artist external-identifier evidence is inserted with one set-based statement, deduplicating in
+  input order to reproduce the previous first-insert-wins semantics.
+- Artist identity-name advisory locks are acquired inside one SQL helper in ascending *computed
+  lock-key* order (falling back to the previous loop on a pre-0064 historical schema).
+
+## 8.7 Operator-controlled lease-event retention (PERF-011 / RM-16)
+
+ADR-0215 and `melodee-cli work prune-lease-events --older-than-days <N> [--batch-size] [--apply]`:
+read-only by default, bounded/resumable/idempotent apply, and eligible only for `lease_renewed`
+rows. Transition, failure, completion, retry, and lease acquire/release history is always preserved.
+Permanent test `history::lease_renewal_retention_is_opt_in_bounded_and_preserves_audit_history`.
+Lease renewal round-trip redesign was evaluated and not adopted (queue-age and event semantics).
+
+## 8.8 Artwork cache (PERF-013 / RM-17)
+
+OpenSubsonic derived artwork is cached by stable request asset key (`album_`/`song_`/`artist_`/
+`playlist_` id) + target size + format + no-upscale, replacing a per-request content hash, under a
+hard 64 MiB byte ceiling plus the existing entry cap. An entry larger than the budget is served but
+not retained. Blacklist refresh already uses single flight.
+
+## 8.9 Verification gates (resumed operation)
+
+| Gate | Result |
+|---|---|
+| `make check` (full: repo/docs, Python, admin UI build, fmt, clippy, cargo-deny) | PASS |
+| `make check-nightly` (all Rust suites + six historical-schema migration tests) | PASS |
+| Fresh `0001–0064` migration chain | PASS |
+| Populated upgrade from 0059 with corrupted derived state | PASS |
+| `perf_remediation_upgrade_from_0059_preserves_data_and_repairs_derived_state` | PASS |
+| Historical-schema compatibility (6 `--ignored` tests) | PASS |
+| Affected suites: catalog importer (8), catalog_import (23), catalog_concurrency (6), merge/split (5+7), search_phase6 (12), rebuild_integration (10/13), outbox retention (6), discovery (3), history (3), media lib (53), ingestion lib (46), server security/artwork/stats | PASS |
+| 50K plan measurements (playable asset, acoustic, genre) | EXECUTED |
+| 560K representative end-to-end tier, 1M/5M/10M, soak, NFS, real-media throughput | NOT EXECUTED |
+
+Two pre-existing, unrelated gate failures were corrected minimally so the mandated gates can run:
+an inconsistent settings-inventory consumer label assertion and a stats test that assumed an empty
+asset registry after migration 0054. Neither touches remediation behavior.
+
+## 8.10 Remaining limitations (not completion claims)
+
+- **RM-11** content-read reduction (adjacent duplicate hashes, hash-during-copy, artwork dedup) with
+  integrity/failure-injection tests is not implemented.
+- **RM-12** bounded CPU/FS admission, subprocess lifecycle review, and measured concurrency
+  (including making `inspection_concurrency` effective) is not implemented.
+- **RM-13** long-lived writer lifecycle is not implemented (documented NO CHANGE).
+- **RM-15** endpoint/serialization/ACL optimization beyond the rating index needs the representative
+  fixture and route percentiles.
+- **RM-17** one-reader-per-stream, combined auth lookup, and rate-limit measurement are not
+  implemented.
+- **RM-18** recommendation/play-trigger contention is not measured.
+- **RM-19** 1K/10K release merge/split timing is not measured.
+- **RM-00** the representative 560K–600K end-to-end fixture and production-path benchmarks are not
+  executed; only 50K query/index evidence exists.
+
+**Status language:** implementation is complete and verified for the packages marked
+IMPLEMENTED AND VERIFIED above and for the three release-blocking correctness outcomes; representative
+560K-scale end-to-end verification and the RM-11/RM-12/RM-15/RM-17/RM-18/RM-19 measurement work
+remain. This is not a claim that the whole remediation is complete.
