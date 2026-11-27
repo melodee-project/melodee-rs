@@ -1867,3 +1867,19 @@ Additional current execution state:
   current engine cannot execute claim/write paths against a pre-0071 schema;
   fixtures therefore never do, and any real deployment still migrates before
   the binary starts per the runbook.
+- Handoff restart (cont.): comprehensive fresh-database regression sweep on the
+  final integrated sources. The full persistence integration set passes:
+  85 test binaries, 368 tests, 0 failures (plus `perf_claims` 1/1 on a
+  10,000-item queue with 32 workers, zero duplicate claims, after aligning its
+  EXPLAIN with the six-parameter claim lane; the invocation-owned
+  release-build merge fixture stays ignored by design). Also green:
+  `settling_capture` 9/9 (after raw-seeding fix), application lib/bins 41/41,
+  domain/MQL/policy/media 229/229, and server suites
+  admin_catalog 4, admin_policies 3, admin_stats 12, admin_system 10,
+  admin_review 11, admin_catalog_delete 4, admin_purge 11 (reconfirmed),
+  native_catalog 24, native_auth 34, native_stream 19, native_stream_acl 21,
+  opensubsonic_browse 18, opensubsonic_media 7, opensubsonic_conditional 1,
+  jellyfin_core 32, jellyfin_media 20, worker_pools 4, discovery_worker 7,
+  policy_worker 11, scripting_service 3, podcast_retention 4 (serialized
+  harness), enrichment_capacity 12, lastfm_scrobble 15, notification_smtp 2,
+  admin_identity 10, admin_duplicates 5, retained_obligations CLI 1/1.
