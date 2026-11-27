@@ -1847,3 +1847,23 @@ Additional current execution state:
   `inbound_custody` 2/2, `retained_baseline` 4/4, `retained_sources` 8/8, and
   the full `catalog_hard_delete` binary 23/23 including the extended recovery
   authority test.
+- Handoff restart (cont.): repaired the historical populated-upgrade fixtures
+  that the 0071-era engine broke, and brought all six ignored historical
+  migration compatibility tests plus 17 non-ignored schema tests green on the
+  final tree. The 0041 pre-repair base now covers every migration except the
+  0041 subject and the recommendation fixture covers everything except the
+  0065/0066 subjects (both rely on no later-migration dependency on the
+  subject), because the current claim/policy engine unconditionally references
+  the 0071 guard columns/tables. The 0067/0070/0071 DDL subjects seed data via
+  a new old-engine-faithful raw work-item insert helper (`seed_raw_work_item`)
+  instead of driving the current guarded `WorkItemStore.create` against a
+  schema that predates its guard tables; read paths remain plain selects.
+  Evidence on fresh owned databases: migrations.rs 17/17 non-ignored (was
+  13/4) and `make test-migrations` 6/6 ignored (was 5/1). Additional
+  fresh-database reruns on final sources: `catalog_merge_split` 6/6,
+  `claiming` 9/9, `connection_metrics` 1/1, `catalog_import` 31/31,
+  `claim_epoch_paths` 1/1, `inbound_occurrence_identity` 3/3,
+  `catalog_concurrency` 6/6, `catalog_identity` 7/7. Honest limitation: the
+  current engine cannot execute claim/write paths against a pre-0071 schema;
+  fixtures therefore never do, and any real deployment still migrates before
+  the binary starts per the runbook.
