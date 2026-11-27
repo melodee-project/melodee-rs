@@ -190,6 +190,9 @@ async fn measure_large_release_merge_and_split() {
         "DELETE FROM artist_track_associations WHERE track_id = ANY($1)",
         "DELETE FROM track_artists WHERE track_id = ANY($1)",
         "DELETE FROM observed_artists WHERE track_id = ANY($1)",
+        // Fixture ratings would otherwise contribute to release popularity after
+        // the merge, making the expected counter value depend on seed data.
+        "DELETE FROM native_track_user_states WHERE track_id = ANY($1)",
     ] {
         sqlx::query(statement)
             .bind(&selected)
