@@ -2006,3 +2006,19 @@ Additional current execution state:
   `final-codec-matrix-baseline-2026-11-27.json`, and
   `final-matrix-2026-11-27.md` §3.3. RM-00 remains PARTIAL with nine workload
   rows outstanding.
+- Handoff restart (cont.): reran the production-store mutation benchmarks on
+  the final source inside the 600K fixture.
+  `perf_recommendation_contention` passed: `recommendation_consistency=exact`
+  across three scenarios (shared Track, shared Artist, concurrent Artist
+  changes), one round, 8 workers, `p50/p95/p99` stage samples recorded; sampled
+  lock spans are approximate and SQLx events exclude BEGIN/trigger internals.
+  `perf_large_release_merge` did **not** run: it panicked before any timed
+  operation at `crates/melodee-persistence/tests/perf_large_release_merge.rs:183`
+  (`assertion left == right failed: left 0, right 1001`) because its pre-timing
+  selection needs Tracks with no `observed_artists`/`track_artists` rows, while
+  the representative fixture now seeds Track credits for essentially every
+  Track (601,002 credits / 600,000 Tracks). RM-19 stays PARTIAL; the earlier
+  1K/10K samples must not be cited as final-source evidence. Next action: give
+  the benchmark controlled credits (dedicated source/target Releases or move
+  the fixture credits with the Tracks) and rerun 1K/10K. No production defect
+  is implied.

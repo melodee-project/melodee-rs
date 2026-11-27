@@ -961,6 +961,17 @@ worktree at `a0979cde…`; only benchmark harness/test files were added there.
   peak throughput for supervision and bounded memory; no worker default was
   changed on this evidence. A media-stage result, not an import measurement.
 
+## 10.1b Mutation workloads on the final source
+
+`perf_recommendation_contention` (RM-18) passed on the final source inside the
+600K fixture with `recommendation_consistency=exact` across shared-Track,
+shared-Artist and concurrent-Artist-change scenarios (one round, eight workers;
+lock sampling approximate). `perf_large_release_merge` (RM-19) aborted before
+timing because its pre-timing Track selection now matches zero rows: the
+representative fixture seeds Track credits for essentially every Track. That is
+a benchmark-fixture drift, not a production defect; RM-19's 1K/10K rerun remains
+outstanding and the earlier samples are not final-source evidence.
+
 ## 10.2 Final-only production-path measurement
 
 **Identity reconciliation at 600K (RM-09 / PERF-004).** The pre-remediation

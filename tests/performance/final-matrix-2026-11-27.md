@@ -152,6 +152,33 @@ any worker default is changed. Evidence: `final-codec-matrix-2026-11-27.json`
 `final-codec-matrix-baseline-2026-11-27.json` (baseline worktree, dirty only by
 the copied harness/benchmark).
 
+## 3.4 Production scrobble/recommendation contention (RM-18 / PERF-014): final-only
+
+`perf_recommendation_contention` ran on the final source inside the 600K fixture
+(fresh owned database, release build, 8 concurrent workers, one round, three
+scenarios including shared-Track, shared-Artist and concurrent Artist changes).
+It reported `recommendation_consistency=exact`: recommendation counters matched
+authoritative plays in every scenario after the relationship changes. Sampled
+lock spans are approximate (5 ms polling) and SQLx event counts exclude BEGIN and
+trigger-internal statements; network and PostgreSQL CPU/I/O are not measured.
+This is a correctness-plus-contention reverification, not an interactive-load
+percentile study.
+
+## 3.5 Merge/split (RM-19 / PERF-V002): BLOCKED by fixture drift
+
+The ignored `perf_large_release_merge` benchmark aborted before any timed
+operation in this round: `measure_large_release_merge_and_split` panicked at
+`crates/melodee-persistence/tests/perf_large_release_merge.rs:183`
+(`assertion left == right failed: left 0, right 1001`) because its pre-timing
+selection requires Tracks that have neither an `observed_artists` row nor a
+`track_artists` row, and the representative fixture now seeds real Track
+credits/observations for essentially every Track (601,002 credits over 600,000
+Tracks). No merge/split measurement was produced; the earlier 1K/10K samples
+predate the fixture change and must not be reused as final-source evidence.
+The next action is to give the benchmark its own dedicated source/target
+Releases with controlled credits (or to select Tracks whose fixture credits can
+be moved with them), then rerun 1K and 10K. No production code is implicated.
+
 ## 4. Identity reconciliation (RM-09 / PERF-004): final-only
 
 The pre-remediation revision has no scoped candidate methods, so this harness
