@@ -193,6 +193,9 @@ async fn measure_large_release_merge_and_split() {
         // Fixture ratings would otherwise contribute to release popularity after
         // the merge, making the expected counter value depend on seed data.
         "DELETE FROM native_track_user_states WHERE track_id = ANY($1)",
+        // Plays recorded by the preceding contention workload in the same owned
+        // database would make release popularity depend on execution order.
+        "DELETE FROM native_track_plays WHERE track_id = ANY($1)",
     ] {
         sqlx::query(statement)
             .bind(&selected)
