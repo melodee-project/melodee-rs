@@ -4,9 +4,11 @@ This document records the representative-scale measurement round executed on the
 final integrated sources of this performance-remediation operation. It does
 **not** complete the RM-00 matrix: two of the thirteen required workloads now
 have matched baseline/final production-path measurements at the representative
-560K–600K tier, one has final-only production-path measurements with a
-documented reason it cannot be run against the pre-remediation baseline, and
-the remaining ten were not re-executed in this round.
+560K–600K tier, a third comparable pair exists for real media normalization
+(a stage workload, not a database-scale one), one has final-only
+production-path measurements with a documented reason it cannot be run against
+the pre-remediation baseline, and the remaining nine were not re-executed in
+this round.
 
 Everything below is **MEASURED IN THIS RUN** unless a row says otherwise. No
 number is a target, an estimate, or an extrapolation. Fixture construction time
@@ -28,6 +30,7 @@ throughput.
 | `perf_rebuild` (final / baseline) sha256 | `8461252a00a0f717…` / `f0fc69c71e6d4393…` |
 | `perf_catalog_policy` (final / baseline) sha256 | `1bcd810506d5fa8c…` / `49c4884c2870d5a1…` |
 | `perf_identity_reconciliation` (final) sha256 | `73f056f81523713b…` (full digest in the build record) |
+| Codec matrix executables (final / baseline) | `40f576d013da7c64…` / `12bcba92e9763173…` |
 | Harness `scripts/perf_representative.py` | sha256 `029d125041331286…` (same content copied into the baseline worktree) |
 
 Toolchain Rust 1.99.0 (pinned), release profile, `CARGO_BUILD_JOBS=2`,
@@ -113,6 +116,42 @@ the old global and the new scoped acoustic queries and printed by the test; the
 raw plan output is deliberately not committed because it contains synthetic but
 identifier-shaped values.
 
+## 3.3 Real media normalization matrix (RM-11 / RM-12 / PERF-007)
+
+Four generated mono codecs, 60 s of source audio per Release, eight single-Track
+Releases per case, two samples, unmodified production FFmpeg options and
+subprocess handling, warm source reuse. The timer covers normalization only
+(inspection finishes before it starts). This is a media-stage measurement, not
+an import: no PostgreSQL, HTTP, scheduler, or acquisition. Baseline production
+code is `a0979cd`; the same benchmark test and harness were copied into that
+worktree without changing its production sources.
+
+| Codec | Workers | Baseline releases/s | Final releases/s | Baseline peak RSS MiB | Final peak RSS MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MP3 | 1 | 1.116 | 1.257 | 73.3 | 75.7 |
+| MP3 | 2 | 2.257 | 2.430 | 138.3 | 107.3 |
+| MP3 | 4 | 4.377 | 3.956 | 244.6 | 182.1 |
+| FLAC | 1 | 0.978 | 1.089 | 74.6 | 74.7 |
+| FLAC | 2 | 1.949 | 2.088 | 143.1 | 143.8 |
+| FLAC | 4 | 3.773 | 3.525 | 279.3 | 194.4 |
+| OGG | 1 | 0.996 | 1.109 | 74.2 | 73.9 |
+| OGG | 2 | 1.993 | 2.164 | 141.7 | 137.0 |
+| OGG | 4 | 3.865 | 3.524 | 277.1 | 187.2 |
+| WAV | 1 | 0.979 | 1.089 | 76.3 | 73.8 |
+| WAV | 2 | 1.960 | 2.061 | 141.0 | 130.9 |
+| WAV | 4 | 3.853 | 3.522 | 276.0 | 208.0 |
+
+The final supervised/admitted path is 9–12 % faster at one and two workers and
+9–12 % slower at four workers, while sampled process-tree peak RSS at four
+workers falls by 60–93 MiB. An earlier unsupervised intermediate revision
+reached up to 6.65 releases/s for MP3 at four workers, so the current path is a
+deliberate throughput-for-supervision/bounded-memory trade, not an unexplained
+regression; the 60K-fixture and full-import rows remain the ones needed before
+any worker default is changed. Evidence: `final-codec-matrix-2026-11-27.json`
+(final, clean tree at `9889896`) and
+`final-codec-matrix-baseline-2026-11-27.json` (baseline worktree, dirty only by
+the copied harness/benchmark).
+
 ## 4. Identity reconciliation (RM-09 / PERF-004): final-only
 
 The pre-remediation revision has no scoped candidate methods, so this harness
@@ -170,7 +209,6 @@ for closure; the spread is single-sample variance, not a change.
 | Single-album import | NOT EXECUTED in this round | Earlier ingestion workload evidence is intermediate and predates the final source. |
 | 200-album import | NOT EXECUTED in this round | `perf_ingestion_workload.py`/`perf_genre_scheduler.py` exist; final-source release-build run is outstanding. |
 | Unchanged reimport | NOT EXECUTED in this round | Needs the ingestion workload on the final source; idempotency is covered by functional tests only. |
-| Media processing | NOT EXECUTED in this round | `codec-matrix-2026-11-26.md` is an intermediate single-revision sample; final-source rerun and baseline pair outstanding. |
 | Concurrent genre imports | NOT EXECUTED in this round | `genre-scheduler-600k-2026-11-26.md` intermediate. |
 | Incremental indexing | NOT EXECUTED in this round | `search-outbox-mixed-2026-11-26.md` intermediate; final-source rerun outstanding. |
 | Concurrent interactive load | NOT EXECUTED in this round | `db-competition-baseline-2026-11-26.md` covers a baseline; final-source mixed-load pair outstanding. |

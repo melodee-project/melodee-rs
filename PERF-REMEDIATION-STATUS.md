@@ -13,7 +13,7 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 
 | Package | State | What exists | Exact remaining action |
 |---|---|---|---|
-| RM-00 | PARTIAL | Disposable 35K/50K/600K fixture and real-media workloads; matched baseline/final 600K production-path pairs for full search rebuild and policy evaluation/dry-run, final-only 600K identity reconciliation, with full provenance (`tests/performance/final-matrix-2026-11-27.md`) | Execute the ten remaining workload rows (single/200-album import, unchanged reimport, media processing, concurrent genre imports, incremental indexing, concurrent interactive load, streaming during ingestion, worker scheduling, merge/split) and their baseline pairs. |
+| RM-00 | PARTIAL | Disposable 35K/50K/600K fixture and real-media workloads; matched baseline/final 600K production-path pairs for full search rebuild and policy evaluation/dry-run, a matched baseline/final real-media normalization matrix, final-only 600K identity reconciliation, with full provenance (`tests/performance/final-matrix-2026-11-27.md`) | Execute the nine remaining workload rows (single/200-album import, unchanged reimport, concurrent genre imports, incremental indexing, concurrent interactive load, streaming during ingestion, worker scheduling, merge/split) and their baseline pairs. |
 | RM-01 | IMPLEMENTED AND VERIFIED | narrow index 0060; historical 50K plan and regression evidence | Reconfirm in final integrated verification. |
 | RM-02 | IMPLEMENTED AND VERIFIED | scoped normal and dry-run acoustic queries; focused tests; matched baseline/final 600K production policy measurements (600,008 → 1 retained digest per evaluation; 16.4 s → 0.39 s bounded dry-run) in `tests/performance/final-matrix-2026-11-27.md` | Reconciled in the final integrated verification. |
 | RM-03 | IMPLEMENTED AND VERIFIED | genre indexes, status guard, Track-move term maintenance | Reconfirm in final integrated verification. |
@@ -1990,3 +1990,19 @@ Additional current execution state:
   genre imports, incremental indexing, concurrent interactive load, streaming
   during ingestion, worker scheduling, merge/split) still need execution and,
   for comparable pairs, baseline runs on this final source.
+- Handoff restart (cont.): added a matched baseline/final **real-media
+  normalization** matrix (RM-11/RM-12) on the final source: four codecs ×
+  one/two/four concurrent Release workers × two samples, 60 s mono source
+  audio, production FFmpeg options, normalization timer only. Final
+  `9889896` (clean) versus baseline `a0979cd` (benchmark test/harness copied,
+  production sources unchanged): final is 9–12 % faster at one and two workers
+  (MP3 1.116→1.257 and 2.257→2.430 releases/s) and 9–12 % slower at four
+  workers (MP3 4.377→3.956; FLAC 3.773→3.525; OGG 3.865→3.524; WAV
+  3.853→3.522), while four-worker sampled process-tree peak RSS falls 60–93 MiB
+  (MP3 244.6→182.1, FLAC 279.3→194.4 MiB). The earlier unsupervised
+  intermediate reached 6.65 releases/s for MP3 at four workers, so this is a
+  throughput-for-supervision/bounded-memory trade; no worker default changed.
+  Evidence: `tests/performance/final-codec-matrix-2026-11-27.json`,
+  `final-codec-matrix-baseline-2026-11-27.json`, and
+  `final-matrix-2026-11-27.md` §3.3. RM-00 remains PARTIAL with nine workload
+  rows outstanding.

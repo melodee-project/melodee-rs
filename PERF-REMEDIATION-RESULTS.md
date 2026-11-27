@@ -951,6 +951,16 @@ worktree at `a0979cde…`; only benchmark harness/test files were added there.
   374.7–396.4 ms retaining 1 digest. The scoped query returns the same
   cross-Release match; three samples per case per side.
 
+- **Real media normalization (RM-11 / RM-12 / PERF-007).** Four codecs x
+  one/two/four concurrent Release workers, two samples, 60 s source audio,
+  normalization timer only. Final is 9-12 % faster at one and two workers
+  (MP3 1.116→1.257, 2.257→2.430 releases/s) and 9-12 % slower at four workers
+  (MP3 4.377→3.956), with sampled process-tree peak RSS at four workers
+  falling 60-93 MiB (MP3 244.6→182.1 MiB). An earlier unsupervised intermediate
+  reached 6.65 releases/s for MP3 at four workers, so the current path trades
+  peak throughput for supervision and bounded memory; no worker default was
+  changed on this evidence. A media-stage result, not an import measurement.
+
 ## 10.2 Final-only production-path measurement
 
 **Identity reconciliation at 600K (RM-09 / PERF-004).** The pre-remediation
@@ -975,9 +985,9 @@ search code are unchanged by these edits.
 
 ## 10.4 Still outstanding in RM-00
 
-Ten of the thirteen required workload rows were not executed in this round:
-single-album import, 200-album import, unchanged reimport, media processing,
-concurrent genre imports, incremental indexing, concurrent interactive load,
-streaming during ingestion, worker scheduling, and merge/split. Their existing
+Nine of the thirteen required workload rows were not executed in this round:
+single-album import, 200-album import, unchanged reimport, concurrent genre
+imports, incremental indexing, concurrent interactive load, streaming during
+ingestion, worker scheduling, and merge/split. Their existing
 artifacts are intermediate and must not be presented as final-source
 before/after evidence. RM-00 therefore remains PARTIAL.
