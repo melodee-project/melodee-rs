@@ -2056,3 +2056,29 @@ Additional current execution state:
   ingestion-driven workload (single/200-album, re-drop, genre, streaming, mixed
   load) requires `--without-acl-placeholders` because the ACL placeholders
   create work items the workloads refuse; this is documented in the matrix.
+- Handoff restart (cont.): the final-source nightly exposed an intermittent
+  P1-class podcast publication race, and it is fixed. Evidence first:
+  `melodee-server --test native_podcasts_api -- --exact
+  all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized` failed
+  roughly 1 run in 3–5 with `successor enclosure: Os { code: 2, kind:
+  NotFound }`. Diagnosis (temporary error-context instrumentation, now
+  documented as a permanent diagnosability improvement): publication renames a
+  verified temporary file to `<public_id>.media` **before** its row commits
+  `local_path`, so a concurrent worker's `reconcile_owned_files` pass could see
+  a committed-or-in-flight final name with no matching `local_path` and delete
+  it as an orphan; the publishing row then referenced a missing file. Fix in
+  `crates/melodee-application/src/podcast_worker.rs`: a live download lease
+  (`download_status='Downloading' AND download_lease_expires_at > now()`)
+  now also protects the final `.media` name during the rename→commit window
+  (`OwnedFileKind::Media` referenced predicate), which is the same durable fact
+  that already protects temporary files; expired/absent leases do not protect.
+  `PodcastWorkerError::Io` now preserves its source in the stored
+  `download_error` text and filesystem failures carry the operation and owned
+  file name, so this class of failure is diagnosable instead of a generic
+  "podcast filesystem operation failed". Evidence on fresh owned databases
+  with the final sources: the failing test passed **18/18 consecutive runs**
+  (10 then 8), `native_podcasts_api` 3/3, `podcast_retention` 5/5 twice,
+  `native_podcasts_real_feed` 1/1, `podcast_http_fixtures` 11/11, and strict
+  workspace `cargo clippy --all-targets --all-features -D warnings` is clean.
+  No API, schema, retention or lease semantics changed; the regression is the
+  existing concurrency test that reproduced the defect before the fix.

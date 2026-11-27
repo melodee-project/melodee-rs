@@ -507,8 +507,33 @@ pub enum PodcastWorkerError {
     Http(#[from] reqwest::Error),
     #[error("podcast response was invalid or exceeded a configured bound")]
     InvalidResponse,
-    #[error("podcast filesystem operation failed")]
-    Io(#[from] std::io::Error),
+    #[error("podcast filesystem operation failed: {0}")]
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for PodcastWorkerError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+/// Wraps a filesystem failure with the operation and file name so operators can
+/// diagnose it. The stored `download_error` previously read only
+/// "podcast filesystem operation failed"; the path is not exposed, only the
+/// owned podcast file name.
+fn io_context(
+    operation: &str,
+    path: &std::path::Path,
+    error: std::io::Error,
+) -> PodcastWorkerError {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    PodcastWorkerError::Io(std::io::Error::new(
+        error.kind(),
+        format!("{operation} failed for {name}: {error}"),
+    ))
 }
 
 fn http_client(
@@ -1246,7 +1271,13 @@ async fn create_owned_temp(
         OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::CLOEXEC | OFlags::NOFOLLOW,
         Mode::RUSR | Mode::WUSR,
     )
-    .map_err(std::io::Error::from)?;
+    .map_err(|error| {
+        io_context(
+            "create temporary download",
+            path,
+            std::io::Error::from(error),
+        )
+    })?;
     Ok(tokio::fs::File::from_std(std::fs::File::from(file)))
 }
 
@@ -1287,7 +1318,13 @@ async fn rename_owned_noreplace(
             .ok_or(PodcastWorkerError::InvalidResponse)?,
         RenameFlags::NOREPLACE,
     )
-    .map_err(std::io::Error::from)?;
+    .map_err(|error| {
+        io_context(
+            "publish downloaded enclosure",
+            destination,
+            std::io::Error::from(error),
+        )
+    })?;
     Ok(())
 }
 
@@ -1363,7 +1400,13 @@ async fn remove_owned_file(root: &Path, path: &Path) -> Result<(), PodcastWorker
     if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
         return Err(PodcastWorkerError::InvalidResponse);
     }
-    unlinkat(&directory, name, AtFlags::empty()).map_err(std::io::Error::from)?;
+    unlinkat(&directory, name, AtFlags::empty()).map_err(|error| {
+        io_context(
+            "remove owned podcast file",
+            path,
+            std::io::Error::from(error),
+        )
+    })?;
     Ok(())
 }
 
@@ -1584,7 +1627,14 @@ async fn reconcile_owned_file_batch(
     let mut removed = 0_u64;
     for (path, kind) in candidates.drain(..) {
         let referenced = facts.get(&kind.public_id()).is_some_and(|fact| match kind {
-            OwnedFileKind::Media(_) => fact.1.as_deref() == path.to_str(),
+            // A publication renames its verified temporary file to the final
+            // name *before* committing the row that records `local_path`
+            // (commit-before-ack cannot cover both stores atomically). A live
+            // download lease therefore protects the final name from another
+            // worker's orphan pass during that window; without this a
+            // concurrent pass can delete an in-flight publication and the
+            // publishing row would then reference a missing file.
+            OwnedFileKind::Media(_) => fact.1.as_deref() == path.to_str() || fact.3,
             OwnedFileKind::Temporary { worker, .. } => fact.3 && fact.2 == Some(worker),
         });
         if !referenced {
