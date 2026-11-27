@@ -1908,3 +1908,14 @@ Additional current execution state:
   `environment_faults` 5/7 (rerun later in the nightly tier),
   `inspection` 7/7, `normalization` 15/15, persistence runtime_settings 24/24,
   server admin_config_api 6/6.
+- Handoff restart (cont.): the second nightly run exposed one more wip-era
+  fixture drift: `catalog_reuse::migration_repairs_projection_and_appends_
+  overlay_without_rewriting_history` used a sub-0045 schema base that the
+  0071-era fixture engine cannot drive (missing guard columns). Restructured
+  to the same "full chain minus the 0045 subject" base with the repair-failure
+  trigger injected before the single migrate() that seeds the repair queue;
+  the repair runs at the end of `migrate()`, so the failure/retry/queue
+  semantics are unchanged and sqlx `VersionMissing` is avoided (the database
+  already contains later applied versions). Evidence on a fresh owned
+  database: catalog_reuse 4/4. This test's base also verifies that nothing
+  after 0045 depends on 0045 objects (grep-checked across migrations 0046-0071).

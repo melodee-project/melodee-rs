@@ -160,7 +160,12 @@ async fn migration_repairs_projection_and_appends_overlay_without_rewriting_hist
             MIGRATOR
                 .migrations
                 .iter()
-                .filter(|migration| migration.version <= 44)
+                // The 0045 projection repair is the test subject. Every other
+                // migration is additive and independent, and the current
+                // claim/policy engine behind the historical fixture driver
+                // references the 0071 guard columns, so the whole chain minus
+                // the subject must be present before seeding.
+                .filter(|migration| migration.version != 45)
                 .cloned()
                 .collect(),
         ),
@@ -222,26 +227,15 @@ async fn migration_repairs_projection_and_appends_overlay_without_rewriting_hist
         .execute(&db.pool)
         .await
         .expect("historical pointer");
-    Migrator {
-        migrations: Cow::Owned(
-            MIGRATOR
-                .migrations
-                .iter()
-                .filter(|migration| migration.version <= 45)
-                .cloned()
-                .collect(),
-        ),
-        ..Migrator::DEFAULT
-    }
-    .run(&db.pool)
-    .await
-    .expect("inventory repair queue");
+    // The derived-state repair runs at the end of `migrate()`, so the injected
+    // failure trigger must exist before the migration that seeds the repair
+    // queue. A failed repair retains the queue row while applied migration
+    // history stays intact and the retry happens with the next startup.
     sqlx::raw_sql(sqlx::AssertSqlSafe("CREATE FUNCTION reject_repair_for_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected repair failure'; END $$; CREATE TRIGGER reject_repair_for_test BEFORE INSERT ON catalog_semantic_overlays FOR EACH ROW EXECUTE FUNCTION reject_repair_for_test();"))
         .execute(&db.pool).await.expect("inject repair failure");
-    assert!(
-        migrate(&db.pool).await.is_err(),
-        "repair failure prevents startup success"
-    );
+    migrate(&db.pool)
+        .await
+        .expect_err("repair failure prevents startup success");
     let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM catalog_overlay_repair_queue")
         .fetch_one(&db.pool)
         .await
