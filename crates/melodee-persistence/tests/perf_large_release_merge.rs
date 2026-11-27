@@ -174,13 +174,29 @@ async fn measure_large_release_merge_and_split() {
             .bind(id).bind(title).execute(&pool).await.unwrap();
     }
     // Select existing fixture Tracks and their real related asset/evidence rows;
-    // all setup runs before the timed operations.
-    let selected: Vec<Uuid> = sqlx::query_scalar("SELECT t.id FROM tracks t WHERE NOT EXISTS (SELECT 1 FROM observed_artists o WHERE o.track_id=t.id) AND NOT EXISTS (SELECT 1 FROM track_artists a WHERE a.track_id=t.id) ORDER BY t.id LIMIT $1")
+    // all setup runs before the timed operations. The representative fixture now
+    // seeds Track credits and observations for essentially every Track, so the
+    // previous "no credits" filter matched zero rows. Clear the fixture's
+    // Track-level artist rows for the selected Tracks and install one controlled
+    // observation+credit per Track instead, so the merge/split evidence arrays
+    // and counts are unambiguous.
+    let selected: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id LIMIT $1")
         .bind(n + 1)
         .fetch_all(&pool)
         .await
         .unwrap();
     assert_eq!(selected.len(), usize::try_from(n + 1).unwrap());
+    for statement in [
+        "DELETE FROM artist_track_associations WHERE track_id = ANY($1)",
+        "DELETE FROM track_artists WHERE track_id = ANY($1)",
+        "DELETE FROM observed_artists WHERE track_id = ANY($1)",
+    ] {
+        sqlx::query(statement)
+            .bind(&selected)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
     sqlx::query("UPDATE tracks t SET release_id=$1, ordinal=m.ordinal::int FROM (SELECT id, row_number() OVER (ORDER BY id) ordinal FROM unnest($2::uuid[]) id) m WHERE t.id=m.id")
         .bind(source).bind(&selected[..usize::try_from(n).unwrap()]).execute(&pool).await.unwrap();
     sqlx::query("UPDATE tracks SET release_id=$1,ordinal=1 WHERE id=$2")
