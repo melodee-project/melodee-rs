@@ -158,10 +158,12 @@ guard; it does not delete media or work-item data or repeat the purge. The opera
 assertion by the local administrator, not a verified login. The command cannot prove remote
 processes have stopped; maintain the fence until the evidence is reviewed and recovery is complete.
 
-The current pre-catalog purge also refuses an existing inbound source when there is no staging
-handoff, reporting `source_custody_required` before deleting any storage. This temporary
-restriction remains until occurrence-bound source removal is available. Preserve the source and
-do not bypass the restriction by deleting it manually.
+The current pre-catalog purge removes an inbound source occurrence without a staging handoff only
+when the pinned occurrence is an empty directory, through a descriptor-relative
+pin/move/verify/unlink protocol that preserves all bytes if any race is observed. A non-empty
+inbound source still refuses with `source_custody_required` before deleting any storage; this
+restriction remains until occurrence-bound removal of retained source bytes is available.
+Preserve the source and do not bypass the restriction by deleting it manually.
 
 ## Retained inbound sources awaiting verification
 

@@ -181,9 +181,12 @@ melodee-cli work prune-lease-events --older-than-days 30 --apply    # bounded, r
   does not delete media or work-item rows or retry the purge. The database cannot prove an old
   external process stopped; if a writer, filesystem outcome, or identity is uncertain, keep the
   guard and investigate. Fence tokens and actor names are operator evidence, not authentication.
-  A pre-catalog purge with an existing inbound source and no staging handoff currently fails
-  before filesystem mutation with `source_custody_required`; occurrence-bound source deletion
-  remains unfinished. This is a temporary compatibility restriction, not a completed remediation.
+  A pre-catalog purge with an existing inbound source and no staging handoff removes the occurrence
+  through a guarded, occurrence-bound descriptor-relative protocol only when the pinned directory
+  is empty (any observed race leaves the moved bytes quarantined and fails closed); a non-empty
+  inbound source currently fails before filesystem mutation with `source_custody_required`.
+  Occurrence-bound removal of retained source bytes remains unfinished. This is a temporary
+  compatibility restriction, not a completed remediation.
 
 ## Rollback
 

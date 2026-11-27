@@ -161,10 +161,17 @@ Hard-deletes failed, pre-catalog work items and their processing evidence. The r
 require a reason. An optional `reason` note is recorded when supplied; otherwise the audit row uses
 the fixed reason “administrator confirmed bulk purge of failed pre-catalog work items”. For each item the server removes the work item, its event log,
 manifests, settling snapshots, staging handoff, publication journal/plan/receipt/authorization,
-and the owned staging, work-area, and canonical directories. The inbound candidate is removed only
-when no staging handoff exists; once a handoff exists its path may have been released for a new
-arrival, so the durable staging tree is the authoritative copy. Only relative paths derived from
-durable work-item evidence below configured roots are touched; symlinks, traversal, or an ambiguous
+and the owned staging, work-area, and canonical directories. The inbound occurrence is removed
+only when no staging handoff exists and the pinned occurrence is an empty directory: the server
+pins the configured inbound root and every intermediate directory without following symlinks,
+refuses a non-directory or non-empty occurrence, moves the empty directory to a unique
+no-replace quarantine sibling, re-opens the moved name and compares it against the pinned
+occurrence, re-verifies emptiness, and only then unlinks and fsyncs. Any observed change leaves
+the moved bytes in place under the quarantine name and fails the item. A non-empty inbound
+source is refused with `source_custody_required` before any deletion, because occurrence-bound
+removal of retained source bytes is not yet implemented. Once a handoff exists, its path may
+have been released for a new arrival, so the durable staging tree is the authoritative copy.
+Only relative paths derived from durable work-item evidence below configured roots are touched; symlinks, traversal, or an ambiguous
 inbound root fail closed. An item bound to a catalog Release is refused with
 `cataloged` — use Release Review deletion for that case. The response reports per-item outcomes:
 
