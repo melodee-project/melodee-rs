@@ -1883,3 +1883,10 @@ Additional current execution state:
   policy_worker 11, scripting_service 3, podcast_retention 4 (serialized
   harness), enrichment_capacity 12, lastfm_scrobble 15, notification_smtp 2,
   admin_identity 10, admin_duplicates 5, retained_obligations CLI 1/1.
+- Handoff restart (cont.): the full pre-merge gate `make check` passes on the
+  final integrated tree (exit 0): repository/doc validation (123 ADRs,
+  8 mockups, 239 requirements), requirements index, Python gate, Admin UI
+  pnpm frozen-lockfile/typecheck/lint/i18n/unit tests (318 passed),
+  `cargo fmt --check`, strict workspace clippy, and `cargo deny` (advisories,
+  bans, licenses, sources). The release-readiness `make check-nightly` tier
+  remains the only unexecuted gate this session.
