@@ -56,3 +56,4 @@ playwright-report/
 
 # Emitted by scripts/verify_known_corpus.py --emit-ui-expectations
 admin-ui/e2e/live/known-corpus.generated.json
+.admin-ab-baseline-dd7f597b8c114e2d855a4a92cbb80899/tree
