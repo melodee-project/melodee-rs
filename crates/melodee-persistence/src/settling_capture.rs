@@ -343,17 +343,16 @@ impl WorkItemStore {
         fence: &DiscoveryScanFence,
     ) -> Result<ReleaseWorkItem, WorkStoreError> {
         let expected = observation.expected;
-        if let Some(staged) = observation.staged {
-            if observation.latest_snapshot_id != Some(staged.verified.snapshot_id)
+        if let Some(staged) = observation.staged
+            && (observation.latest_snapshot_id != Some(staged.verified.snapshot_id)
                 || staged.verified.work_item_id != expected.id
                 || staged.verified.scope_key != fence.scope_key
                 || staged.verified.generation != fence.generation
-                || staged.verified.owner != fence.owner
-            {
-                return Err(WorkStoreError::InvalidRequest(
-                    "settling snapshot pointer mismatch",
-                ));
-            }
+                || staged.verified.owner != fence.owner)
+        {
+            return Err(WorkStoreError::InvalidRequest(
+                "settling snapshot pointer mismatch",
+            ));
         }
         let mut tx = pool.begin().await?;
         if let Some(staged) = observation.staged {

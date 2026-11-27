@@ -317,6 +317,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         budget(&mut tx).await?;
         let expiry = fences(&mut tx, fence, reservation).await?;
+        #[allow(clippy::type_complexity)]
         let snapshot:Option<(String,String,Option<Uuid>,Option<i32>,Option<Uuid>,Option<Uuid>,Option<String>)>=sqlx::query_as("SELECT state,capture_phase,cursor_release,cursor_ordinal,cursor_track,cursor_asset,cursor_purpose FROM admin_media_snapshots WHERE reservation_id=$1 FOR UPDATE").bind(reservation.id).fetch_optional(&mut *tx).await?;
         let Some((state, phase, release, ordinal, track, asset, purpose)) = snapshot else {
             return Err(invalid());

@@ -305,7 +305,7 @@ impl SealedStageFile {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::panic, clippy::unwrap_used)]
+    #![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::{config::InboundSource, custody::validate_custody_namespace, source::GuardedRoot};
     use std::{

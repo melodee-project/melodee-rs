@@ -42,14 +42,14 @@ impl<S: Subscriber> Layer<S> for CaptureStatements {
         if event.metadata().target() == "sqlx::query" {
             let mut visitor = StatementVisitor::default();
             event.record(&mut visitor);
-            if let Some(statement) = visitor.0 {
-                if statement.starts_with("WITH ") {
-                    let mut statements = self.0.lock().expect("statement capture lock");
-                    if statements.len() == 8 {
-                        statements.remove(0);
-                    }
-                    statements.push(statement);
+            if let Some(statement) = visitor.0
+                && statement.starts_with("WITH ")
+            {
+                let mut statements = self.0.lock().expect("statement capture lock");
+                if statements.len() == 8 {
+                    statements.remove(0);
                 }
+                statements.push(statement);
             }
         }
     }

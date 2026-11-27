@@ -4,7 +4,10 @@
 //! paths below the configured staging and canonical roots. The underlying
 //! descriptor-relative operation refuses symlinks and special files.
 
-use std::{io, path::{Component, Path, PathBuf}};
+use std::{
+    io,
+    path::{Component, Path, PathBuf},
+};
 
 use thiserror::Error;
 
@@ -40,7 +43,9 @@ pub enum ReleaseDeletionError {
     TooManyLifecycleHolds,
     #[error("the inbound source occurrence {path} is not empty; nothing was removed")]
     InboundNotEmpty { path: PathBuf },
-    #[error("the inbound source occurrence {path} changed identity during removal; moved bytes retained")]
+    #[error(
+        "the inbound source occurrence {path} changed identity during removal; moved bytes retained"
+    )]
     InboundIdentityChanged { path: PathBuf },
 }
 
@@ -538,7 +543,10 @@ mod tests {
         std::fs::write(occurrence.join("track.flac"), b"producer bytes").expect("bytes");
 
         let result = delete_purged_inbound_occurrence(root.path(), "producer").await;
-        assert!(matches!(result, Err(ReleaseDeletionError::InboundNotEmpty { .. })));
+        assert!(matches!(
+            result,
+            Err(ReleaseDeletionError::InboundNotEmpty { .. })
+        ));
         assert_eq!(
             std::fs::read(occurrence.join("track.flac")).expect("bytes retained"),
             b"producer bytes"

@@ -53,7 +53,7 @@ pub fn encode_native_root(path: &Path) -> io::Result<String> {
 pub fn decode_native_root(encoded: &str) -> io::Result<PathBuf> {
     if encoded.is_empty()
         || encoded.len() > MAX_PATH_BYTES * 2
-        || encoded.len() % 2 != 0
+        || !encoded.len().is_multiple_of(2)
         || !encoded
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
@@ -69,7 +69,9 @@ pub fn decode_native_root(encoded: &str) -> io::Result<PathBuf> {
     };
     let bytes: Vec<u8> = encoded
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| digit(pair[0]) * 16 + digit(pair[1]))
         .collect();
     let path = PathBuf::from(OsString::from_vec(bytes));

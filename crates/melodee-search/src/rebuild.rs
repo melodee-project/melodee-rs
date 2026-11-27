@@ -689,6 +689,26 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), SearchError> {
     }
 }
 
+#[must_use]
+pub fn generation_manifest(
+    generation_id: Uuid,
+    created_at: OffsetDateTime,
+    source_high_water_mark: i64,
+) -> GenerationManifest {
+    GenerationManifest {
+        generation_id,
+        kind: "melodee-search-generation".to_string(),
+        created_at,
+        document_counts: melodee_persistence::SearchDocumentCounts {
+            artists: 0,
+            releases: 0,
+            tracks: 0,
+        },
+        schema_version: SCHEMA_VERSION,
+        source_high_water_mark,
+    }
+}
+
 #[cfg(test)]
 mod admission_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
@@ -704,8 +724,10 @@ mod admission_tests {
             .acquire_timeout(Duration::from_millis(150))
             .connect_lazy("postgres://test:test@127.0.0.1:1/test")
             .expect("lazy pool");
-        let mut config = SearchConfig::default();
-        config.lease_seconds = 1;
+        let config = SearchConfig {
+            lease_seconds: 1,
+            ..SearchConfig::default()
+        };
         let cancelled = AtomicBool::new(false);
         let task = RebuildTask {
             config: &config,
@@ -772,25 +794,5 @@ mod admission_tests {
         );
         assert!(result.is_err());
         assert!(semaphore.try_acquire_owned().is_ok());
-    }
-}
-
-#[must_use]
-pub fn generation_manifest(
-    generation_id: Uuid,
-    created_at: OffsetDateTime,
-    source_high_water_mark: i64,
-) -> GenerationManifest {
-    GenerationManifest {
-        generation_id,
-        kind: "melodee-search-generation".to_string(),
-        created_at,
-        document_counts: melodee_persistence::SearchDocumentCounts {
-            artists: 0,
-            releases: 0,
-            tracks: 0,
-        },
-        schema_version: SCHEMA_VERSION,
-        source_high_water_mark,
     }
 }

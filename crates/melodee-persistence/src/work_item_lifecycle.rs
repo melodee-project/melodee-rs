@@ -270,6 +270,7 @@ impl WorkItemStore {
             return Err(invalid());
         }
         sqlx::query("SELECT singleton FROM work_item_lifecycle_attestation_budget WHERE singleton FOR UPDATE").execute(&mut *tx).await?;
+        #[allow(clippy::type_complexity)]
         let existing:Option<(String,String,String,Option<Uuid>,Option<Uuid>)>=sqlx::query_as("SELECT actor,reason,backup_reference,recovery_reservation_id,recovery_reservation_token FROM work_item_lifecycle_attestations WHERE token=$1").bind(fence.token).fetch_optional(&mut *tx).await?;
         if let Some((actor, reason, backup, previous_id, previous_token)) = existing {
             if actor != fence.owner
@@ -305,7 +306,9 @@ impl WorkItemStore {
                 )
                 .fetch_one(&mut *tx)
                 .await?;
-                if bound_id.is_some() && (bound_id != Some(reservation.id) || bound_token != Some(reservation.token)) {
+                if bound_id.is_some()
+                    && (bound_id != Some(reservation.id) || bound_token != Some(reservation.token))
+                {
                     return Err(invalid());
                 }
                 sqlx::query("UPDATE work_item_lifecycle_maintenance SET quiesced=false,recovery_reservation_id=$1,recovery_reservation_token=$2 WHERE singleton")

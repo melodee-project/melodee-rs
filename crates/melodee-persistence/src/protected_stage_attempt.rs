@@ -190,6 +190,7 @@ async fn lock_claim(
     )
     .execute(&mut **tx)
     .await?;
+    #[allow(clippy::type_complexity)]
     let row:Option<(Option<Uuid>,String,i16,bool,Option<String>,Option<Uuid>,Option<OffsetDateTime>)>=sqlx::query_as("SELECT source_library_id,source_path,discovery_path_format,inbound_active,lease_owner,protected_attempt_lease_epoch,lease_expires_at FROM release_work_items WHERE id=$1 FOR UPDATE").bind(claim.item_id).fetch_optional(&mut **tx).await?;
     let Some((library, path, format, active, owner, epoch, expiry)) = row else {
         return Err(WorkStoreError::LeaseExpired(claim.item_id));
@@ -289,7 +290,10 @@ fn decode_verity(
     let device = u64::from_str_radix(device, 16).map_err(|_| invalid())?;
     let inode = u64::from_str_radix(inode, 16).map_err(|_| invalid())?;
     let mut bytes = [0_u8; 32];
-    for (slot, pair) in bytes.iter_mut().zip(digest.as_bytes().chunks_exact(2)) {
+    for (slot, pair) in bytes
+        .iter_mut()
+        .zip(digest.as_bytes().as_chunks::<2>().0.iter())
+    {
         *slot = u8::from_str_radix(std::str::from_utf8(pair).map_err(|_| invalid())?, 16)
             .map_err(|_| invalid())?;
     }
@@ -313,6 +317,7 @@ impl WorkItemStore {
             return Err(invalid());
         }
         let mut tx = pool.begin().await?;
+        #[allow(clippy::type_complexity)]
         let row:Option<(Option<String>,Option<Uuid>,Option<OffsetDateTime>,Uuid)>=sqlx::query_as("SELECT lease_owner,protected_attempt_lease_epoch,lease_expires_at,correlation_id FROM release_work_items WHERE id=$1 FOR UPDATE").bind(claim.item_id).fetch_optional(&mut *tx).await?;
         let Some((owner, epoch, old_expiry, correlation)) = row else {
             return Err(WorkStoreError::LeaseExpired(claim.item_id));

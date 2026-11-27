@@ -25,12 +25,14 @@ use crate::{
 
 /// The fields are private so callers cannot turn an arbitrary digest into a
 /// verified legacy observation. The seal still requires fenced DB validation.
+#[allow(dead_code)]
 pub(crate) struct VerifiedStagingLegacy {
     seal: SealedCustodyHash,
     legacy_hash: String,
 }
 
 impl VerifiedStagingLegacy {
+    #[allow(dead_code)]
     pub(crate) fn seal(&self) -> &SealedCustodyHash {
         &self.seal
     }
@@ -40,6 +42,7 @@ impl VerifiedStagingLegacy {
     }
 }
 
+#[allow(dead_code)]
 enum Command {
     Entry(CustodyLegacyEntry),
     Finish,
@@ -48,6 +51,7 @@ enum Command {
 /// Hash metadata emitted only to a provisional baseline writer. The writer
 /// must not publish it unless the enclosing verified staging pass succeeds.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum StagingBaselineEvent {
     DirectoryVerified {
         path_key: String,
@@ -71,6 +75,7 @@ pub(crate) enum StagingBaselineEvent {
     Complete,
 }
 
+#[allow(dead_code)]
 fn emit_baseline(
     sender: &Option<mpsc::Sender<StagingBaselineEvent>>,
     event: StagingBaselineEvent,
@@ -95,6 +100,7 @@ pub(crate) fn staging_chunk_digest(index: u64, bytes: &[u8]) -> String {
 /// An admitted thread holds its permit until it actually exits. If the async
 /// caller is dropped, closing the channel stops it and the bounded process-wide
 /// reaper retains the thread and its admission until termination.
+#[allow(dead_code)]
 struct LegacyVerifier {
     sender: Option<mpsc::Sender<Command>>,
     thread: Option<std::thread::JoinHandle<Result<String, AcquisitionError>>>,
@@ -102,6 +108,7 @@ struct LegacyVerifier {
 }
 
 impl LegacyVerifier {
+    #[allow(dead_code)]
     async fn start(
         root: cap_std::fs::Dir,
         expected_generation: String,
@@ -196,6 +203,7 @@ impl LegacyVerifier {
     }
 }
 
+#[allow(dead_code)]
 fn verify_root_generation(root: &std::fs::File, expected: &str) -> Result<(), AcquisitionError> {
     let actual = source_generation_from_directory(root, Path::new("<pinned staging>"))?;
     if actual != expected {
@@ -218,10 +226,12 @@ impl Drop for LegacyVerifier {
     }
 }
 
+#[allow(dead_code)]
 fn invalid_evidence() -> AcquisitionError {
     AcquisitionError::IncompleteReceipt("invalid legacy custody observation".to_owned())
 }
 
+#[allow(dead_code)]
 fn checked_path(entry: &CustodyLegacyEntry) -> Result<PathBuf, AcquisitionError> {
     let path = decode_candidate_relative_path(&entry.path_key).map_err(|_| invalid_evidence())?;
     if path.as_os_str().is_empty()
@@ -256,6 +266,7 @@ fn checked_path(entry: &CustodyLegacyEntry) -> Result<PathBuf, AcquisitionError>
     Ok(path)
 }
 
+#[allow(dead_code)]
 fn hash_entry(
     root: &cap_std::fs::Dir,
     entry: &CustodyLegacyEntry,
@@ -446,6 +457,7 @@ fn hash_entry(
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 struct Frame {
     after: Option<CustodyLegacyCursor>,
     directories: bool,
@@ -455,6 +467,7 @@ struct Frame {
 /// DB pages and bounded, admitted filesystem work. The caller is responsible
 /// for lease heartbeat and namespace validation before and after this future.
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) async fn verify_legacy_staging(
     pool: &PgPool,
     store: &WorkItemStore,
@@ -468,6 +481,7 @@ pub(crate) async fn verify_legacy_staging(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 async fn verify_legacy_staging_inner(
     pool: &PgPool,
     store: &WorkItemStore,
@@ -561,6 +575,7 @@ async fn verify_legacy_staging_inner(
 /// revalidates each v3 entry and computes the legacy receipt. A returned pair
 /// still requires private-namespace revalidation and atomic receipt binding.
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) async fn verify_legacy_staging_with_baseline(
     pool: &PgPool,
     store: &WorkItemStore,
@@ -590,6 +605,7 @@ pub(crate) async fn verify_legacy_staging_with_baseline(
     tokio::try_join!(scan, writer)
 }
 
+#[allow(dead_code)]
 async fn write_provisional_baseline(
     pool: &PgPool,
     store: &WorkItemStore,

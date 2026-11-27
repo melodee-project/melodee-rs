@@ -372,9 +372,7 @@ async fn reconcile_strong_artist_identities(
         }
     };
     let candidate_count = candidates.len();
-    let Some(confidence) = Confidence::new(9_500).ok() else {
-        return None;
-    };
+    let confidence = Confidence::new(9_500).ok()?;
     let resolver = LocalArtistResolver::default();
     for candidate in candidates {
         let evaluation = match resolver.evaluate(
@@ -599,9 +597,7 @@ async fn propose_name_only_artist_matches(
         }
     };
     let candidate_count = candidates.len();
-    let Some(confidence) = Confidence::new(7_000).ok() else {
-        return None;
-    };
+    let confidence = Confidence::new(7_000).ok()?;
     for candidate in candidates {
         let now = OffsetDateTime::now_utc();
         let evidence = ArtistMatchEvidence {

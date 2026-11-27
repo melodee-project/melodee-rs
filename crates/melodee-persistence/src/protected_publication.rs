@@ -240,6 +240,7 @@ impl WorkItemStore {
         if crate::work_items::active_purge_guard(&mut tx, library, &path).await? {
             return Err(invalid());
         }
+        #[allow(clippy::type_complexity)]
         let item:Option<(Option<Uuid>,String,i16,bool,Option<String>,Option<Uuid>,Option<OffsetDateTime>)>=sqlx::query_as("SELECT source_library_id,source_path,discovery_path_format,inbound_active,lease_owner,protected_attempt_lease_epoch,lease_expires_at FROM release_work_items WHERE id=$1 FOR UPDATE").bind(claim.item_id).fetch_optional(&mut *tx).await?;
         let Some((item_library, item_path, format, active, owner, epoch, expiry)) = item else {
             return Err(WorkStoreError::LeaseExpired(claim.item_id));
@@ -275,6 +276,7 @@ impl WorkItemStore {
         if source_generation != after.generation() || stage_path != stage.target_binding() {
             return Err(invalid());
         }
+        #[allow(clippy::type_complexity)]
         let attempt:Option<(String,String,Uuid,String,String,Option<String>,Option<String>,Option<Uuid>,Option<Uuid>,Option<String>,Option<String>)>=sqlx::query_as("SELECT state,owner,claim_epoch,source_generation,final_binding,promoted_generation,promotion_parent_generation,consumed_baseline_id,consumed_session_id,consumed_legacy_hash,consumed_source_digest FROM inbound_protected_stage_attempts WHERE id=$1 AND work_item_id=$2 FOR UPDATE").bind(p.attempt.id()).bind(claim.item_id).fetch_optional(&mut *tx).await?;
         let Some((
             attempt_state,

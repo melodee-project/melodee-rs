@@ -144,6 +144,7 @@ impl WorkItemStore {
         Ok(claim)
     }
 
+    #[allow(clippy::too_many_arguments)]
     /// Advance one verified custody state while preserving the processing lease.
     pub async fn advance_inbound_custody(
         &self,

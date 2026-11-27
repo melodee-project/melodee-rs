@@ -184,6 +184,7 @@ mod platform {
     }
 
     /// Rename one child between already pinned directories without replacement.
+    #[allow(dead_code)]
     pub fn rename_child_noreplace(
         source_parent: &File,
         source_name: &OsStr,
@@ -214,6 +215,7 @@ mod platform {
         .map_err(io_error)
     }
 
+    #[allow(dead_code)]
     pub fn mkdir_private_child(parent: &File, name: &OsStr) -> io::Result<()> {
         validate_child_name(name)?;
         mkdirat(
@@ -511,6 +513,9 @@ mod platform {
     }
 }
 
+// Some helpers are only exercised by the test binaries so far; production
+// integration is tracked in the remediation ledger. Scoped, not suppressed.
+#[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use platform::{
     create_directory_tree, link_new, mkdir_new, mkdir_private_child, open_child_directory,
     open_directory, open_lock, open_read, open_write, open_write_new, remove_directory_tree,

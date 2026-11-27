@@ -1105,6 +1105,7 @@ fn hash_path_parts(hasher: &mut blake3::Hasher, path: &Path, is_dir: bool, lengt
 
 /// Hash a custody tree using a versioned, native-path encoding. Existing
 /// staging receipts retain their legacy encoding; they are not custody proof.
+#[allow(dead_code)]
 pub(crate) fn tree_hash_from_pinned_directory(
     root: &std::fs::File,
 ) -> Result<String, AcquisitionError> {
@@ -1113,12 +1114,14 @@ pub(crate) fn tree_hash_from_pinned_directory(
 
 /// Both digests describe the same traversal and byte reads. The legacy digest
 /// is only for comparing existing receipts, never by itself for custody.
+#[allow(dead_code)]
 pub(crate) fn tree_hashes_from_pinned_directory(
     root: &std::fs::File,
 ) -> Result<(String, String), AcquisitionError> {
     tree_hashes_from_pinned_directory_with_hook(root, |_| {})
 }
 
+#[allow(dead_code)]
 fn tree_hashes_from_pinned_directory_with_hook(
     root: &std::fs::File,
     mut after_file: impl FnMut(&Path),

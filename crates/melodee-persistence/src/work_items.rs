@@ -829,6 +829,7 @@ impl WorkItemStore {
             .bind(after).fetch_all(pool).await?)
     }
 
+    #[allow(clippy::too_many_arguments)]
     /// Release only a specifically reviewed guard. Callers must first stop all
     /// writers and inspect affected storage: the database cannot establish
     /// whether a crashed process already performed filesystem mutations.
@@ -1194,6 +1195,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn begin_staging_handoff_inner(
         &self,
         pool: &PgPool,

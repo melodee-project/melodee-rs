@@ -1,5 +1,5 @@
 //! Release-profile, in-process API measurements against the disposable fixture.
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 #[path = "../../../crates/melodee-persistence/tests/catalog_common/mod.rs"]
 mod catalog_common;

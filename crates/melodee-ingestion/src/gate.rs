@@ -38,6 +38,7 @@ impl std::fmt::Debug for StageLifetimeHold {
 }
 
 impl StageLifetimeHold {
+    #[allow(dead_code)]
     pub(crate) fn from_arc(hold: Arc<dyn Send + Sync>) -> Self {
         Self(hold)
     }

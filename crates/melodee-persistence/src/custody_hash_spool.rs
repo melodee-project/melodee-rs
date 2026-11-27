@@ -366,6 +366,7 @@ impl WorkItemStore {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     /// Create provisional observations bound to the exact processing claim.
     pub async fn begin_protected_custody_hash_spool(
         &self,
@@ -413,6 +414,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn revalidate_protected_custody_hash_spool(
         &self,
         pool: &PgPool,
@@ -470,6 +472,7 @@ impl WorkItemStore {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     /// Create one provisional capture. A resumed worker must explicitly
     /// reconcile an existing capture; this method never replaces its evidence.
     pub async fn begin_custody_hash_spool(
@@ -496,6 +499,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn begin_custody_hash_spool_retained(
         &self,
         retained_token: Uuid,
@@ -521,6 +525,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn begin_custody_hash_spool_fenced(
         &self,
         pool: &PgPool,
@@ -572,6 +577,7 @@ impl WorkItemStore {
         Ok(capture)
     }
 
+    #[allow(clippy::too_many_arguments)]
     /// A new lease owner may retain staged records only as provisional hints.
     /// Every previous path must be read and verified again in the new epoch
     /// before freezing; a changed path fails instead of replacing evidence.
@@ -599,6 +605,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn revalidate_custody_hash_spool_retained(
         &self,
         retained_token: Uuid,
@@ -624,6 +631,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn revalidate_custody_hash_spool_fenced(
         &self,
         pool: &PgPool,
@@ -667,6 +675,7 @@ impl WorkItemStore {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn append_custody_hash_spool_retained(
         &self,
         retained_token: Uuid,
@@ -690,6 +699,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn append_custody_hash_spool_fenced(
         &self,
         pool: &PgPool,
@@ -823,6 +833,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn freeze_custody_hash_spool_retained(
         &self,
         retained_token: Uuid,
@@ -846,6 +857,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn freeze_custody_hash_spool_fenced(
         &self,
         pool: &PgPool,
@@ -887,6 +899,7 @@ impl WorkItemStore {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn custody_hash_spool_page_retained(
         &self,
         retained_token: Uuid,
@@ -910,6 +923,7 @@ impl WorkItemStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn custody_hash_spool_page_fenced(
         &self,
         pool: &PgPool,
@@ -1263,6 +1277,7 @@ impl WorkItemStore {
             tx.commit().await?;
             return Ok(false);
         };
+        #[allow(clippy::type_complexity)]
         let lease: Option<(Option<String>, Option<Uuid>, Option<OffsetDateTime>, bool)> = if purpose
             == "retained"
         {

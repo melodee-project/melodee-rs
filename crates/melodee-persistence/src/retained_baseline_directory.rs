@@ -165,6 +165,7 @@ impl WorkItemStore {
         if !due {
             return Err(invalid());
         }
+        #[allow(clippy::type_complexity)]
         let row:Option<(i64,i64,String,Option<String>,Option<String>)>=sqlx::query_as("SELECT stage_ordinal,scan_revision,path_key,scan_cookie,scan_generation FROM inbound_retained_baseline_directories WHERE baseline_id=$1 AND next_scan_at<=statement_timestamp() ORDER BY next_scan_at,stage_ordinal LIMIT 1").bind(baseline).fetch_optional(&mut *tx).await?;
         let (ordinal, revision, path, cookie, generation) = row.ok_or_else(invalid)?;
         end_reader(&mut tx, lease, expiry).await?;

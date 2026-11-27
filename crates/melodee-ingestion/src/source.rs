@@ -114,7 +114,7 @@ pub(crate) fn decode_candidate_relative_path(value: &str) -> Result<PathBuf, Sou
             return Err(SourceDiscoveryError::PathTraversal(PathBuf::from(value)));
         }
         let mut bytes = Vec::with_capacity(hex.len() / 2);
-        for pair in hex.as_bytes().chunks_exact(2) {
+        for pair in hex.as_bytes().as_chunks::<2>().0 {
             let value = std::str::from_utf8(pair)
                 .ok()
                 .and_then(|pair| u8::from_str_radix(pair, 16).ok())
@@ -327,6 +327,7 @@ mod guarded {
     pub(crate) struct GuardedCandidate {
         pub(crate) relative_path: PathBuf,
         pub(crate) directory: Arc<File>,
+        #[allow(dead_code)]
         parent: Arc<File>,
         leaf: OsString,
     }
@@ -586,6 +587,7 @@ mod guarded {
             proc_path(&candidate.directory)
         }
 
+        #[allow(dead_code)]
         pub(crate) fn custody_source_handles(
             &self,
             candidate: &GuardedCandidate,

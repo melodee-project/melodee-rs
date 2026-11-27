@@ -90,6 +90,7 @@ async fn lock_cleanup(
     tx: &mut Transaction<'_, Postgres>,
     lease: &ProtectedCleanupLease,
 ) -> Result<(String, OffsetDateTime), WorkStoreError> {
+    #[allow(clippy::type_complexity)]
     let row:Option<(String,Option<String>,Option<Uuid>,Option<OffsetDateTime>,Uuid,String,String,String,String,String)>=sqlx::query_as("SELECT state,cleanup_owner,cleanup_token,cleanup_expires_at,consumed_baseline_id,root_generation,namespace_name,namespace_generation,marker_generation,lock_generation FROM inbound_protected_stage_attempts WHERE id=$1 FOR UPDATE").bind(lease.attempt).fetch_optional(&mut **tx).await?;
     let Some((state, owner, token, expiry, baseline, root, name, namespace, marker, lock)) = row
     else {

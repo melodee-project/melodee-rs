@@ -265,7 +265,10 @@ impl WorkItemStore {
         if values.iter().any(|s| s.is_empty() || s.len() > 256)
             || observation.quarantine_parent_relative_hex.is_empty()
             || observation.quarantine_parent_relative_hex.len() > 262200
-            || observation.quarantine_parent_relative_hex.len() % 2 != 0
+            || !observation
+                .quarantine_parent_relative_hex
+                .len()
+                .is_multiple_of(2)
             || !observation
                 .quarantine_parent_relative_hex
                 .bytes()
@@ -527,6 +530,7 @@ impl WorkItemStore {
         let expiry = fences(&mut tx, fence, reservation).await?;
         let snapshot:Option<(Uuid,Option<Uuid>)>=sqlx::query_as("SELECT revision,root_set_revision FROM admin_media_snapshots WHERE reservation_id=$1 AND state='frozen' FOR UPDATE").bind(reservation.id).fetch_optional(&mut *tx).await?;
         let (snapshot_revision, root_set_revision) = snapshot.ok_or_else(invalid)?;
+        #[allow(clippy::type_complexity)]
         let prior:Option<(Uuid,String,Uuid,Uuid,Uuid,Option<Uuid>,String,i32)>=sqlx::query_as("SELECT reservation_id,kind,maintenance_token,reservation_token,snapshot_revision,root_set_revision,state,entry_count FROM admin_media_page_intents WHERE id=$1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await?;
         if let Some((
             owner,

@@ -79,7 +79,7 @@ impl WorkItemStore {
                 "unix-hex-v1" | "windows-u16-hex-v1"
             )
             || root.path_hex.len() > 131072
-            || root.path_hex.len() % 2 != 0
+            || !root.path_hex.len().is_multiple_of(2)
             || !hex(&root.path_hex)
             || root.generation.is_empty()
             || root.generation.len() > 256

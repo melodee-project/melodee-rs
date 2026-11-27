@@ -309,6 +309,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let expiry = locks(&mut tx, worker, seal).await?;
         lock_baseline(&mut tx, id, worker, seal, "capturing").await?;
+        #[allow(clippy::type_complexity)]
         let row:Option<(bool,Option<String>,Option<String>,Option<String>)>=sqlx::query_as("SELECT finished,stage_verity_device,stage_verity_inode,stage_verity_sha256 FROM inbound_retained_baseline_files WHERE baseline_id=$1 AND stage_ordinal=$2 FOR UPDATE").bind(id).bind(ordinal).fetch_optional(&mut *tx).await?;
         let Some((finished, device, inode, digest)) = row else {
             return Err(invalid());
@@ -363,7 +364,10 @@ impl WorkItemStore {
         let device = u64::from_str_radix(&device, 16).map_err(|_| invalid())?;
         let inode = u64::from_str_radix(&inode, 16).map_err(|_| invalid())?;
         let mut bytes = [0_u8; 32];
-        for (slot, pair) in bytes.iter_mut().zip(digest.as_bytes().chunks_exact(2)) {
+        for (slot, pair) in bytes
+            .iter_mut()
+            .zip(digest.as_bytes().as_chunks::<2>().0.iter())
+        {
             let value = std::str::from_utf8(pair).map_err(|_| invalid())?;
             *slot = u8::from_str_radix(value, 16).map_err(|_| invalid())?;
         }

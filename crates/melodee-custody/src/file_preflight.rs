@@ -233,7 +233,7 @@ fn same_file_state(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool 
 }
 
 enum RunningHash {
-    Blake3(blake3::Hasher),
+    Blake3(Box<blake3::Hasher>),
     Sha256(sha2::Sha256),
 }
 
@@ -299,7 +299,7 @@ impl<S: ObservationScope> IncrementalFileCheck<S> {
             return Err(invalid("unexpected file size or type"));
         }
         let hash = match expected.hash {
-            ExpectedHash::Blake3(_) => RunningHash::Blake3(blake3::Hasher::new()),
+            ExpectedHash::Blake3(_) => RunningHash::Blake3(Box::new(blake3::Hasher::new())),
             ExpectedHash::Sha256(_) => RunningHash::Sha256(sha2::Sha256::new()),
         };
         let check = Self {

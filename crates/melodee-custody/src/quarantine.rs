@@ -102,6 +102,7 @@ struct QuarantinedObservation {
     _file: File,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn move_observed(
     scope: crate::HeldLifecycleLocks,
     source_path: &Path,

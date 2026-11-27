@@ -89,7 +89,10 @@ fn decode_hash(value: &str) -> Result<[u8; 32], WorkStoreError> {
         return Err(invalid());
     }
     let mut out = [0; 32];
-    for (slot, pair) in out.iter_mut().zip(value.as_bytes().chunks_exact(2)) {
+    for (slot, pair) in out
+        .iter_mut()
+        .zip(value.as_bytes().as_chunks::<2>().0.iter())
+    {
         let s = std::str::from_utf8(pair).map_err(|_| invalid())?;
         *slot = u8::from_str_radix(s, 16).map_err(|_| invalid())?;
     }

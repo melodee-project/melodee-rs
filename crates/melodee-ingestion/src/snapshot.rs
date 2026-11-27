@@ -495,7 +495,7 @@ impl StreamFrame {
             let directory = open_cap_relative(root, relative)?;
             let entries = directory
                 .entries()
-                .map_err(|error| SnapshotCaptureError::io(&relative, error))?;
+                .map_err(|error| SnapshotCaptureError::io(relative, error))?;
             StreamCursor::Live { directory, entries }
         } else {
             StreamCursor::Rescan { last: None }

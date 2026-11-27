@@ -16,10 +16,6 @@ use crate::{
     source::GuardedRoot,
 };
 
-#[cfg(all(test, feature = "test-support", target_os = "linux"))]
-#[path = "../../melodee-persistence/tests/common/mod.rs"]
-mod protected_attempt_test_db;
-
 struct CustodyProducer {
     receiver: Option<tokio::sync::mpsc::Receiver<melodee_persistence::CustodyHashObservation>>,
     thread: Option<std::thread::JoinHandle<Result<u64, AcquisitionError>>>,
@@ -163,6 +159,7 @@ enum RetainedDirectoryContinuation {
     Invalidated,
 }
 
+#[allow(clippy::type_complexity)]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn read_retained_directory_page(
     root: &cap_std::fs::Dir,
@@ -545,8 +542,11 @@ pub async fn test_custody_producers_quiescent() -> bool {
 /// Provisional evidence only. Publishing a receipt requires an additional
 /// atomic binding and a protected, independently verified staged copy.
 pub(crate) struct ProvisionalCustodyDigest {
+    #[allow(dead_code)]
     pub(crate) capture_id: uuid::Uuid,
+    #[allow(dead_code)]
     pub(crate) digest: String,
+    #[allow(dead_code)]
     pub(crate) entries: u64,
     pub(crate) seal: melodee_persistence::SealedCustodyHash,
 }
@@ -583,6 +583,7 @@ impl ObservationTarget {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    #[allow(dead_code)]
     fn staging(
         namespace: std::sync::Arc<CustodyNamespace>,
         root: crate::source::GuardedRoot,
@@ -630,6 +631,7 @@ impl ObservationTarget {
     }
 }
 
+#[allow(dead_code)]
 async fn with_custody_lease<T>(
     future: impl std::future::Future<Output = Result<T, AcquisitionError>>,
     store: &melodee_persistence::WorkItemStore,
@@ -664,6 +666,7 @@ async fn with_custody_lease<T>(
 /// Capture a bounded, restartable content observation under an active lease.
 /// All records remain provisional and can be cleaned without touching media.
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 async fn capture_provisional_custody_digest(
     store: &melodee_persistence::WorkItemStore,
     pool: &sqlx::PgPool,
@@ -684,6 +687,7 @@ async fn capture_provisional_custody_digest(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 async fn capture_provisional_custody_digest_inner(
     store: &melodee_persistence::WorkItemStore,
     pool: &sqlx::PgPool,
@@ -1494,6 +1498,7 @@ pub(crate) async fn reobserve_retained_baseline_page(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn reobserve_retained_source(
     config: &crate::config::IngestionConfig,
     pool: &sqlx::PgPool,
@@ -1607,12 +1612,14 @@ pub(crate) async fn reobserve_retained_source(
         .map_err(Into::into)
 }
 
+#[allow(dead_code)]
 struct RetentionProofSession {
     id: uuid::Uuid,
     before: melodee_persistence::SealedCustodyHash,
     staging: crate::legacy_custody_verify::VerifiedStagingLegacy,
 }
 
+#[allow(dead_code)]
 async fn validate_frozen_seal(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     item: uuid::Uuid,
@@ -1639,12 +1646,14 @@ async fn validate_frozen_seal(
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn lock_live_retention_item(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     item: uuid::Uuid,
     worker: &melodee_persistence::WorkerId,
 ) -> Result<(String, Option<uuid::Uuid>), AcquisitionError> {
     let db_error = |error: sqlx::Error| AcquisitionError::Persistence(error.into());
+    #[allow(clippy::type_complexity)]
     let row: Option<(String,Option<uuid::Uuid>,bool,Option<String>,Option<time::OffsetDateTime>)> = sqlx::query_as("SELECT source_path,source_library_id,inbound_active,lease_owner,lease_expires_at FROM release_work_items WHERE id=$1 FOR UPDATE")
         .bind(item).fetch_optional(&mut **tx).await.map_err(db_error)?;
     let Some((source_path, library_id, active, owner, expiry)) = row else {
@@ -1667,6 +1676,7 @@ async fn lock_live_retention_item(
     Ok((source_path, library_id))
 }
 
+#[allow(dead_code)]
 async fn ensure_retention_lease_live(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     item: uuid::Uuid,
@@ -1683,6 +1693,7 @@ async fn ensure_retention_lease_live(
 }
 
 /// Persist the before seal before a staging verification can be registered.
+#[allow(dead_code)]
 async fn begin_retention_proof_session(
     pool: &sqlx::PgPool,
     item: uuid::Uuid,
@@ -1721,6 +1732,7 @@ async fn begin_retention_proof_session(
 
 /// Register staging only while the original before epoch is still current.
 /// Thus a source-after scan started early cannot be replayed past this step.
+#[allow(dead_code)]
 async fn register_retention_staging(
     pool: &sqlx::PgPool,
     item: uuid::Uuid,
@@ -1768,6 +1780,7 @@ async fn register_retention_staging(
 /// staging legacy digest can only be constructed by the staging verifier.
 /// This remains disconnected until protected copy and reobservation are ready.
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 async fn bind_retained_receipt(
     pool: &sqlx::PgPool,
     store: &melodee_persistence::WorkItemStore,
@@ -1848,6 +1861,7 @@ async fn bind_retained_receipt(
             .execute(&mut *tx)
             .await
             .map_err(db_error)?;
+        #[allow(clippy::type_complexity)]
         let item: Option<(String,Option<uuid::Uuid>,bool,Option<String>,Option<time::OffsetDateTime>,i16)> = sqlx::query_as("SELECT source_path,source_library_id,inbound_active,lease_owner,lease_expires_at,discovery_path_format FROM release_work_items WHERE id=$1 FOR UPDATE")
             .bind(item_id).fetch_optional(&mut *tx).await.map_err(db_error)?;
         let Some((source_path, library_id, active, owner, expiry, path_format)) = item else {
@@ -1984,6 +1998,7 @@ pub async fn test_capture_provisional_custody_digest(
     any(target_os = "linux", target_os = "android")
 ))]
 #[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
 pub async fn test_capture_provisional_staging_digest(
     pool: &sqlx::PgPool,
     item: uuid::Uuid,
@@ -2117,6 +2132,7 @@ pub async fn test_verify_staging_baseline(
     any(target_os = "linux", target_os = "android")
 ))]
 #[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
 pub async fn test_bind_retained_receipt(
     pool: &sqlx::PgPool,
     item: uuid::Uuid,
@@ -2354,6 +2370,7 @@ pub async fn test_custody_lease_pending(
 /// Emit content observations without retaining a tree-wide collection. The
 /// bounded consumer must persist every emitted record before accepting a
 /// completed traversal, and later revalidate the source before receipt use.
+#[allow(dead_code)]
 pub(crate) fn stream_custody_hash_observations(
     root: &cap_std::fs::Dir,
     cancelled: impl Fn() -> bool,
@@ -2364,6 +2381,7 @@ pub(crate) fn stream_custody_hash_observations(
 
 /// Copy into a newly created protected tree while hashing the source bytes.
 /// A partial destination remains owned recovery state on any failure.
+#[allow(dead_code)]
 fn stream_custody_copy_observations(
     root: &cap_std::fs::Dir,
     destination: &cap_std::fs::Dir,
@@ -2493,22 +2511,20 @@ fn stream_custody_observations_inner(
         if !is_dir && !metadata.is_file() {
             continue;
         }
-        if is_dir {
-            if let Some(destination) = destination {
-                let parent = open_cap_relative(destination, &path)
-                    .map_err(|error| AcquisitionError::Task(error.to_string()))?;
-                let mut options = cap_std::fs::DirBuilder::new();
-                #[cfg(unix)]
-                {
-                    use cap_std::fs::DirBuilderExt;
-                    options.mode(0o700);
-                }
-                parent
-                    .create_dir_with(&name, &options)
-                    .map_err(|error| AcquisitionError::Task(error.to_string()))?;
-                sync_cap_directory(&parent)
-                    .map_err(|error| AcquisitionError::Task(error.to_string()))?;
+        if is_dir && let Some(destination) = destination {
+            let parent = open_cap_relative(destination, &path)
+                .map_err(|error| AcquisitionError::Task(error.to_string()))?;
+            let mut options = cap_std::fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use cap_std::fs::DirBuilderExt;
+                options.mode(0o700);
             }
+            parent
+                .create_dir_with(&name, &options)
+                .map_err(|error| AcquisitionError::Task(error.to_string()))?;
+            sync_cap_directory(&parent)
+                .map_err(|error| AcquisitionError::Task(error.to_string()))?;
         }
         let mut digest = blake3::Hasher::new();
         digest.update(b"melodee-custody-entry-v3\0");
@@ -2843,6 +2859,7 @@ fn stream_protected_stage_copy(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum QuarantineOutcome {
     Held,
     ReplacementRestored,
@@ -2863,6 +2880,7 @@ pub(crate) struct CustodyNamespace {
 
 #[derive(Clone, Copy)]
 enum CustodyTopologyPolicy {
+    #[allow(dead_code)]
     RenameSameMount,
     #[cfg(target_os = "linux")]
     LegacyLocalMounts,
@@ -3024,6 +3042,7 @@ fn revalidate_legacy_topology(
     revalidate_legacy_topology_with(namespace, held, || Ok(()))
 }
 
+#[allow(clippy::type_complexity)]
 #[cfg(target_os = "linux")]
 fn legacy_root_ancestry(
     path: &std::path::Path,
@@ -3294,6 +3313,7 @@ impl LegacyLifecycleCapability {
         lock.revalidate()
     }
 
+    #[allow(dead_code)]
     fn lifetime_hold(&self) -> crate::StageLifetimeHold {
         crate::StageLifetimeHold::from_arc(self.inner.clone())
     }
@@ -3598,7 +3618,7 @@ fn exact_lower_hex_hash(value: &str) -> Result<[u8; 32], AcquisitionError> {
         return Err(AcquisitionError::SourceChanged);
     }
     let mut out = [0; 32];
-    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, chunk) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let digit = |byte: u8| {
             if byte.is_ascii_digit() {
                 byte - b'0'
@@ -4192,7 +4212,7 @@ fn provisional_decode_quarantine_component(
     use std::os::unix::ffi::OsStringExt;
     if encoded.is_empty()
         || encoded.len() > 262_200
-        || encoded.len() % 2 != 0
+        || !encoded.len().is_multiple_of(2)
         || !encoded
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
@@ -4208,7 +4228,9 @@ fn provisional_decode_quarantine_component(
     };
     let bytes: Vec<_> = encoded
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| digit(pair[0]) * 16 + digit(pair[1]))
         .collect();
     if bytes.contains(&0) || bytes.contains(&b'/') || bytes == b"." || bytes == b".." {
@@ -4482,6 +4504,7 @@ async fn provisional_ready_quarantine_scan(
 /// worker owns its admission permit and lock until it actually exits, even if
 /// its async waiter is cancelled. DB acknowledgement must be separately fenced.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 async fn create_reserved_legacy_lifecycle(
     namespace: std::sync::Arc<CustodyNamespace>,
     root: GuardedRoot,
@@ -5952,6 +5975,7 @@ async fn spawn_protected_attempt_create(
 /// worker or the DB acknowledgement leaves an ambiguous reserved attempt;
 /// neither this wrapper nor its caller may delete or adopt those bytes.
 #[cfg(all(test, target_os = "linux"))]
+#[allow(clippy::too_many_arguments)]
 async fn reserve_and_create_protected_attempt(
     pool: &sqlx::PgPool,
     store: &melodee_persistence::WorkItemStore,
@@ -6024,6 +6048,7 @@ async fn reserve_and_create_protected_attempt(
 /// An intent replay must inspect the protected custody entry before deciding
 /// whether the source should be revisited. Neither result authorizes removal.
 #[cfg(unix)]
+#[allow(dead_code)]
 pub(crate) enum PendingCustodyObservation {
     Missing,
     Matching { held: File, legacy_hash: String },
@@ -6034,6 +6059,7 @@ pub(crate) enum PendingCustodyObservation {
 /// parent. A changed root aborts replay; callers must revalidate again at the
 /// staging boundary. Unexpected bytes remain held intact for review.
 #[cfg(unix)]
+#[allow(dead_code)]
 pub(crate) fn inspect_pending_custody(
     guarded_root: &GuardedRoot,
     private_parent: &File,
@@ -6070,6 +6096,7 @@ pub(crate) fn inspect_pending_custody(
 /// not prove that producers have relinquished writable file handles, and is
 /// therefore insufficient on its own to authorize draining any source.
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[allow(dead_code)]
 pub(crate) fn validate_custody_namespace(
     private_path: &std::path::Path,
     source_path: &std::path::Path,
@@ -6435,6 +6462,8 @@ fn verify_acl_free(_directory: &File) -> Result<(), AcquisitionError> {
 /// with the still-open original occurrence and its preclaim content hash.
 /// Mismatches are restored only with NOREPLACE or retained intact for recovery.
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn quarantine_verified_occurrence(
     guarded_root: &GuardedRoot,
     source_parent: &File,
@@ -6462,6 +6491,8 @@ pub(crate) fn quarantine_verified_occurrence(
 }
 
 #[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 fn quarantine_verified_occurrence_with_hook(
     guarded_root: &GuardedRoot,
     source_parent: &File,
@@ -7821,7 +7852,7 @@ mod tests {
         config.staging_root = Some(staging.clone());
         config.work_area_base = work;
         config.storage_root = Some(canonical.clone());
-        let db = super::protected_attempt_test_db::TestDb::create("lifecycle_fs_provision").await;
+        let db = crate::common::TestDb::create("lifecycle_fs_provision").await;
         let store = melodee_persistence::WorkItemStore;
         let now = time::OffsetDateTime::now_utc();
         let first = melodee_domain::ReleaseWorkItem::discovered(
@@ -8183,7 +8214,7 @@ mod tests {
         config.staging_root = Some(stage);
         config.work_area_base = work;
         config.storage_root = Some(canonical);
-        let db = super::protected_attempt_test_db::TestDb::create("admin_scope_128").await;
+        let db = crate::common::TestDb::create("admin_scope_128").await;
         let store = melodee_persistence::WorkItemStore;
         let mut ids = Vec::new();
         for number in 0..128 {
@@ -9317,7 +9348,7 @@ mod tests {
         .expect("root");
         let stage = open_directory(&private.join("source")).expect("stage handle");
         let stage_generation = ProtectedStageAttempt::identity(&stage).expect("stage generation");
-        let db = super::protected_attempt_test_db::TestDb::create("cleaned_page_ingestion").await;
+        let db = crate::common::TestDb::create("cleaned_page_ingestion").await;
         let now = time::OffsetDateTime::now_utc();
         let mut item = melodee_domain::ReleaseWorkItem::discovered(
             "candidate".to_owned(),
@@ -10054,8 +10085,7 @@ mod tests {
         let root_handle = root.custody_root_handle().expect("root handle");
         let root_generation = source_generation_from_directory(&root_handle, Path::new("root"))
             .expect("root generation");
-        let db =
-            super::protected_attempt_test_db::TestDb::create("protected_attempt_ingestion").await;
+        let db = crate::common::TestDb::create("protected_attempt_ingestion").await;
         let now = time::OffsetDateTime::now_utc();
         let mut item = melodee_domain::ReleaseWorkItem::discovered(
             "candidate".to_owned(),
@@ -10678,7 +10708,7 @@ mod tests {
             validate_custody_namespace(&private, &inbound, producer_uid).is_err(),
             "rename custody remains same-mount only"
         );
-        let db = super::protected_attempt_test_db::TestDb::create("lifecycle_cross_device").await;
+        let db = crate::common::TestDb::create("lifecycle_cross_device").await;
         let store = melodee_persistence::WorkItemStore;
         let item = melodee_domain::ReleaseWorkItem::discovered(
             "candidate".to_owned(),

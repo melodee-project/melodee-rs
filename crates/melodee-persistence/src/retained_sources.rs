@@ -212,6 +212,7 @@ pub(crate) async fn lock_retained_source_lease(
     tx: &mut Transaction<'_, Postgres>,
     lease: &RetainedSourceLease,
 ) -> Result<OffsetDateTime, WorkStoreError> {
+    #[allow(clippy::type_complexity)]
     let row: Option<(Option<Uuid>, String, i16, String, String, String, Option<String>, Option<Uuid>, Option<OffsetDateTime>)> = sqlx::query_as(
         "SELECT source_library_id,source_path,source_path_format,source_generation,content_digest,status,lease_owner,lease_token,lease_expires_at FROM inbound_retained_sources WHERE work_item_id=$1 FOR UPDATE",
     ).bind(lease.item_id).fetch_optional(&mut **tx).await?;
@@ -491,6 +492,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         lock_retained_source_lease(&mut tx, lease).await?;
         lock_retained_seal(&mut tx, lease, before).await?;
+        #[allow(clippy::type_complexity)]
         let existing: Option<(Uuid, Uuid, Uuid, Uuid, String, i64, String, String)> = sqlx::query_as(
             "SELECT session_id,lease_token,capture_id,before_epoch,before_digest,before_entries,source_generation,source_root_generation FROM inbound_retained_recheck_sessions WHERE work_item_id=$1 FOR UPDATE",
         ).bind(lease.item_id).fetch_optional(&mut *tx).await?;
@@ -629,15 +631,14 @@ impl WorkItemStore {
 
         let prior: Option<(Option<Uuid>,String,i16,bool)> = sqlx::query_as("SELECT source_library_id,source_path,discovery_path_format,inbound_active FROM release_work_items WHERE id=$1 FOR UPDATE")
             .bind(lease.item_id).fetch_optional(&mut *tx).await?;
-        if let Some((library, path, format, _)) = &prior {
-            if *library != lease.source_library_id
+        if let Some((library, path, format, _)) = &prior
+            && (*library != lease.source_library_id
                 || *path != lease.source_path
-                || *format != lease.source_path_format
-            {
-                return Err(WorkStoreError::InvalidRequest(
-                    "retained-source work item binding changed",
-                ));
-            }
+                || *format != lease.source_path_format)
+        {
+            return Err(WorkStoreError::InvalidRequest(
+                "retained-source work item binding changed",
+            ));
         }
         let prior_active = prior.is_some_and(|(_, _, _, active)| active);
         let unchanged = prior_active

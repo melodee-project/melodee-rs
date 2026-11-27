@@ -129,7 +129,10 @@ impl RetainedMerkleFile {
                 return Err(invalid("retained Merkle checkpoint peak is invalid"));
             }
             let mut value = [0_u8; 32];
-            for (slot, pair) in value.iter_mut().zip(encoded.as_bytes().chunks_exact(2)) {
+            for (slot, pair) in value
+                .iter_mut()
+                .zip(encoded.as_bytes().as_chunks::<2>().0.iter())
+            {
                 let hex =
                     std::str::from_utf8(pair).map_err(|_| invalid("invalid digest encoding"))?;
                 *slot =

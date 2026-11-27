@@ -4,7 +4,7 @@
 //! work item, and orphaned media asset rows are removed. Audit rows retain the
 //! fact that an operator confirmed the deletion.
 
-#![allow(clippy::expect_used, clippy::panic)]
+#![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 mod catalog_common;
 mod common;

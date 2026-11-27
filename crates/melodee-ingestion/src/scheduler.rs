@@ -391,7 +391,7 @@ fn start_reconciliation_loop_inner(
     let handle = tokio::spawn(async move {
         let mut results = Vec::new();
         let cleanup_pool = pool.clone();
-        let cleanup_store = store.clone();
+        let cleanup_store = store;
         let mut cleanup = tokio::task::JoinSet::new();
         cleanup.spawn(async move {
             let mut prefer_expired = false;
@@ -457,7 +457,7 @@ fn start_reconciliation_loop_inner(
         if config.enabled() {
             let retained_config = config.clone();
             let retained_pool = pool.clone();
-            let retained_store = store.clone();
+            let retained_store = store;
             cleanup.spawn(async move {
                 let worker = melodee_persistence::WorkerId::new();
                 loop {

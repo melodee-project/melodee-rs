@@ -96,6 +96,7 @@ async fn end(
     }
     Ok(())
 }
+#[allow(clippy::too_many_arguments)]
 fn matches(
     cursor: &Cursor,
     lease: &RetainedSourceLease,
