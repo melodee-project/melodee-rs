@@ -264,3 +264,55 @@ pub async fn seed_ready_item(store: &WorkItemStore, pool: &PgPool, path: &str) -
 pub fn test_config() -> WorkEngineConfig {
     WorkEngineConfig::default()
 }
+
+/// Writes exactly what the pre-upgrade engine's plain insert wrote. The
+/// pre-remediation store did not acquire runtime admission, occurrence locks,
+/// purge guards, or a protected-attempt epoch (0001..=0064 schema), so a
+/// forward-migration fixture must not drive the current guarded write path
+/// against the historical schema. Read paths are plain selects and safe to
+/// use before and after the upgrade.
+#[allow(dead_code)]
+pub async fn seed_raw_work_item(pool: &PgPool, item: &melodee_domain::ReleaseWorkItem) {
+    sqlx::query(
+        "INSERT INTO release_work_items (
+            id, api_key, source_library_id, target_library_id, source_path,
+            current_path, target_path, source_fingerprint, manifest_hash, state,
+            state_reason, attempt_count, next_attempt_at, lease_owner,
+            lease_acquired_at, lease_expires_at, latest_settling_snapshot_id,
+            stable_since, last_observed_at, last_error_code, last_error_message,
+            correlation_id, discovered_at, first_started_at, last_attempt_at,
+            updated_at, created_at, completed_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)",
+    )
+    .bind(item.id)
+    .bind(item.api_key)
+    .bind(item.source_library_id)
+    .bind(item.target_library_id)
+    .bind(&item.source_path)
+    .bind(&item.current_path)
+    .bind(&item.target_path)
+    .bind(&item.source_fingerprint)
+    .bind(&item.manifest_hash)
+    .bind(item.state.as_str())
+    .bind(&item.state_reason)
+    .bind(i32::try_from(item.attempt_count).unwrap_or(i32::MAX))
+    .bind(item.next_attempt_at)
+    .bind(&item.lease_owner)
+    .bind(item.lease_acquired_at)
+    .bind(item.lease_expires_at)
+    .bind(item.latest_settling_snapshot_id)
+    .bind(item.stable_since)
+    .bind(item.last_observed_at)
+    .bind(item.last_error_code.as_ref().map(|c| c.as_str().to_string()))
+    .bind(&item.last_error_message)
+    .bind(item.correlation_id)
+    .bind(item.discovered_at)
+    .bind(item.first_started_at)
+    .bind(item.last_attempt_at)
+    .bind(item.updated_at)
+    .bind(item.created_at)
+    .bind(item.completed_at)
+    .execute(pool)
+    .await
+    .expect("seed historical work item");
+}

@@ -1461,10 +1461,19 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
     let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
         .migrations
         .iter()
-        .filter(|migration| migration.version <= 40)
+        // The 0041 reconciliation of stored decisions is the test subject, so
+        // it stays deferred. Every other migration is additive and must be
+        // present before seeding: the current worker code the driver invokes
+        // (claim lanes, policy store) references remediation columns such as
+        // `release_work_items.protected_custody_required` from 0071.
+        .filter(|migration| migration.version != 0041)
         .cloned()
         .collect();
-    assert_eq!(prior.len(), 40, "expected migrations 0001..=0040");
+    assert_eq!(
+        prior.len(),
+        MIGRATOR.migrations.len() - 1,
+        "expected every migration except the 0041 subject"
+    );
     Migrator {
         migrations: Cow::Owned(prior),
         ..Migrator::DEFAULT
@@ -2050,10 +2059,20 @@ async fn recommendation_lock_upgrade_preserves_popularity_and_accepts_new_plays(
     let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
         .migrations
         .iter()
-        .filter(|migration| migration.version <= 64)
+        // The 0065/0066 recommendation upgrades are the test subject. Every
+        // other migration is additive and independent for the fixture, and
+        // the 0067-0071 schema the current claim/claim-guard code requires
+        // must be present before seeding.
+        .filter(|migration| {
+            !matches!(migration.version, 0065 | 0066)
+        })
         .cloned()
         .collect();
-    assert_eq!(prior.len(), 64);
+    assert_eq!(
+        prior.len(),
+        MIGRATOR.migrations.len() - 2,
+        "expected every migration except the 0065/0066 subjects"
+    );
     Migrator {
         migrations: Cow::Owned(prior),
         ..Migrator::DEFAULT
@@ -2203,12 +2222,12 @@ async fn migration_0067_preserves_populated_work_items() {
     .run(&db.pool)
     .await
     .expect("pre-0067 migrations");
+    // The old engine wrote rows with a plain insert; the current guarded
+    // store path requires the guard schema that the subject migration
+    // creates. Read paths below are plain selects and stay safe.
     let item =
         ReleaseWorkItem::discovered("kept/source".to_owned(), None, Uuid::now_v7(), common::T0);
-    WorkItemStore
-        .create(&db.pool, &item)
-        .await
-        .expect("seed work item");
+    common::seed_raw_work_item(&db.pool, &item).await;
     let created = item;
     migrate(&db.pool).await.expect("upgrade through 0067");
     let persisted = WorkItemStore
@@ -2268,16 +2287,15 @@ async fn migration_0070_preserves_existing_inbound_state() {
     .run(&db.pool)
     .await
     .expect("pre-0070 migrations");
+    // Old-engine-faithful raw insert: the current guarded create requires the
+    // 0071 guard schema the subject migration creates.
     let item = ReleaseWorkItem::discovered(
         "inbound/retained".to_owned(),
         None,
         Uuid::now_v7(),
         common::T0,
     );
-    WorkItemStore
-        .create(&db.pool, &item)
-        .await
-        .expect("existing item");
+    common::seed_raw_work_item(&db.pool, &item).await;
     migrate(&db.pool).await.expect("upgrade through 0070");
     let retained = WorkItemStore
         .get(&db.pool, item.id)
@@ -2299,7 +2317,6 @@ async fn migration_0071_preserves_populated_custody_and_initializes_budget() {
     use melodee_domain::ReleaseWorkItem;
     use melodee_persistence::WorkItemStore;
     use uuid::Uuid;
-
     let db = TestDb::create_unmigrated("migration_0071_populated").await;
     let prior: Vec<_> = MIGRATOR
         .migrations
@@ -2314,10 +2331,14 @@ async fn migration_0071_preserves_populated_custody_and_initializes_budget() {
     .run(&db.pool)
     .await
     .expect("pre-0071 migrations");
-    let item = ReleaseWorkItem::discovered("existing".to_owned(), None, Uuid::now_v7(), common::T0);
-    WorkItemStore.create(&db.pool, &item).await.expect("item");
-    let claim_name = format!(".melodee-custody-{}", item.id);
-    let native_hash = format!("v2:{}", "a".repeat(64));
+    let (item, claim_name, native_hash) = {
+        let item =
+            ReleaseWorkItem::discovered("existing".to_owned(), None, Uuid::now_v7(), common::T0);
+        common::seed_raw_work_item(&db.pool, &item).await;
+        let claim_name = format!(".melodee-custody-{}", item.id);
+        let native_hash = format!("v2:{}", "a".repeat(64));
+        (item, claim_name, native_hash)
+    };
     sqlx::query("INSERT INTO inbound_custody_claims (work_item_id,source_path,custody_name,source_root_generation,source_generation,preclaim_tree_hash,preclaim_legacy_tree_hash,status,created_at,updated_at) VALUES ($1,'existing',$2,'unix:1:1','unix:1:2',$3,$4,'intent',$5,$5)")
         .bind(item.id).bind(&claim_name).bind(&native_hash).bind("a".repeat(64)).bind(common::T0)
         .execute(&db.pool).await.expect("existing custody");
