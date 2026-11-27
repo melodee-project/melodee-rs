@@ -271,6 +271,10 @@ async fn execute_claimed_rebuild(
         // late-committing low ids stay a delivery obligation (PERF-V001).
         let mut snapshot = SearchSnapshotReader::begin(pool, generation_id).await?;
         let snapshot_started = std::time::Instant::now();
+        #[cfg(feature = "test-support")]
+        if let Some(barrier) = &config.rebuild_test_barrier {
+            barrier.pause_after_snapshot_started().await;
+        }
         let mut commit_count = 0_u64;
         let mut counts = SearchDocumentCounts {
             artists: 0,
@@ -560,6 +564,10 @@ async fn catch_up_and_activate(
         .await
         {
             Ok(_) => {
+                #[cfg(feature = "test-support")]
+                if let Some(barrier) = &config.rebuild_test_barrier {
+                    barrier.mark_activated();
+                }
                 info!(%job_id, generation_id = %generation.generation_id, catchup_seconds = catchup_started.elapsed().as_secs_f64(), catchup_batches, catchup_rows, activation_seconds = activation_started.elapsed().as_secs_f64(), "search rebuild activated");
                 retire_old_generations(pool, root).await;
                 return Ok(());

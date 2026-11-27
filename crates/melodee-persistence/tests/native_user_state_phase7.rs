@@ -54,6 +54,27 @@ async fn wait_for_lock_query(pool: &sqlx::PgPool, query_fragment: &str) {
     }).await.expect("expected lock wait");
 }
 
+fn scrobble_probe_count() -> u64 {
+    melodee_persistence::metrics::snapshot()
+        .into_iter()
+        .find(|metric| metric.name == "scrobble_wait_probe")
+        .expect("probe metric")
+        .count
+}
+
+async fn wait_for_scrobble_probe(after: u64) {
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            if scrobble_probe_count() > after {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("scrobble probes contended parent");
+}
+
 #[tokio::test]
 async fn discovery_recount_observes_plays_and_relationship_changes_after_candidate_wait() {
     let db = common::TestDb::create("discovery_candidate_race").await;
@@ -655,6 +676,7 @@ async fn scrobble_retries_if_primary_artist_changes_during_parent_lock_acquisiti
         .execute(&mut *change)
         .await
         .expect("lock old Artist before Track");
+    let probes = scrobble_probe_count();
     let pool = db.pool.clone();
     let play = tokio::spawn(async move {
         let now = OffsetDateTime::now_utc();
@@ -669,7 +691,7 @@ async fn scrobble_retries_if_primary_artist_changes_during_parent_lock_acquisiti
         )
         .await
     });
-    wait_for_lock_query(&db.pool, "SELECT id FROM artists WHERE id=ANY").await;
+    wait_for_scrobble_probe(probes).await;
     sqlx::query("UPDATE track_artists SET artist_id=$2 WHERE track_id=$1 AND role='primary'")
         .bind(track)
         .bind(new_artist)
@@ -733,6 +755,7 @@ async fn scrobble_retries_if_release_changes_during_parent_lock_acquisition() {
         .execute(&mut *change)
         .await
         .expect("lock old Release before Track");
+    let probes = scrobble_probe_count();
     let pool = db.pool.clone();
     let play = tokio::spawn(async move {
         let now = OffsetDateTime::now_utc();
@@ -747,11 +770,7 @@ async fn scrobble_retries_if_release_changes_during_parent_lock_acquisition() {
         )
         .await
     });
-    wait_for_lock_query(
-        &db.pool,
-        "SELECT id FROM releases WHERE id=$1 FOR KEY SHARE",
-    )
-    .await;
+    wait_for_scrobble_probe(probes).await;
     sqlx::query("UPDATE tracks SET release_id=$2,ordinal=2 WHERE id=$1")
         .bind(track)
         .bind(target)
@@ -829,7 +848,836 @@ async fn scrobble_parent_credit_cursors_cover_more_than_one_page() {
 }
 
 #[tokio::test]
-async fn phased_forward_cursor_preserves_one_credit_snapshot_and_closes_on_rollback() {
+async fn scrobble_succeeds_after_more_than_eight_parent_contentions() {
+    let db = common::TestDb::create("scrobble_retry_exhaustion").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7210,
+        CatalogFixturePresentation {
+            release_title: "Retry Exhaustion",
+            release_artist: "Existing Credit",
+            track_title: "Retry Track",
+            track_artist: "Existing Credit",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (track, public): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks WHERE release_id=$1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read Track");
+    sqlx::query("INSERT INTO artists(id,public_api_id,canonical_name,normalized_name,sort_name,artist_type,status,created_at,updated_at) SELECT uuidv7(),uuidv7(),'Retry Artist ' || n,'retry artist ' || n,'Retry Artist ' || n,'group','verified',now(),now() FROM generate_series(1,2048) n")
+        .execute(&db.pool).await.expect("seed Artists");
+    sqlx::query("INSERT INTO track_artists(id,track_id,artist_id,role,presentation_order,display_value,join_phrase,created_at) SELECT uuidv7(),$1,id,'primary',row_number() OVER (ORDER BY id)::int+1,canonical_name,'',now() FROM artists WHERE canonical_name LIKE 'Retry Artist %'")
+        .bind(track).execute(&db.pool).await.expect("seed credits");
+    let contention_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(16)
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open contention pool");
+    let mut reader = contention_pool.begin().await.expect("begin cursor reader");
+    sqlx::query("DECLARE scrobble_artists NO SCROLL CURSOR FOR SELECT artist_id FROM track_artists WHERE track_id=$1 AND role='primary'")
+        .bind(track).execute(&mut *reader).await.expect("declare cursor");
+    let mut selected = Vec::new();
+    for _ in 0..9 {
+        let page: Vec<Uuid> = sqlx::query_scalar("FETCH FORWARD 256 FROM scrobble_artists")
+            .fetch_all(&mut *reader)
+            .await
+            .expect("fetch page");
+        selected.push(*page.first().expect("nine nonempty pages"));
+    }
+    reader.rollback().await.expect("close cursor");
+    let mut blockers = Vec::new();
+    for artist in selected {
+        let mut blocker = contention_pool.begin().await.expect("begin parent blocker");
+        sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+            .bind(artist)
+            .execute(&mut *blocker)
+            .await
+            .expect("lock parent");
+        blockers.push(blocker);
+    }
+    let user = insert_user(&db, "retry-exhaustion").await;
+    let mut probes = scrobble_probe_count();
+    let pool = contention_pool.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "retry-exhaustion",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    for blocker in blockers {
+        wait_for_scrobble_probe(probes).await;
+        assert!(!play.is_finished(), "locked parent must keep play pending");
+        blocker.commit().await.expect("release parent");
+        probes = scrobble_probe_count();
+    }
+    let result = tokio::time::timeout(std::time::Duration::from_secs(15), play)
+        .await
+        .expect("play exits")
+        .expect("join play")
+        .expect("play succeeds after contention");
+    assert_eq!(result, NativeScrobbleResult::Applied);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM native_track_plays WHERE user_id=$1")
+        .bind(user)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count plays");
+    assert_eq!(count, 1);
+    contention_pool.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn cancelled_scrobble_releases_parent_wait_and_reuses_connection() {
+    let db = common::TestDb::create("scrobble_cancel_wait").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7213,
+        CatalogFixturePresentation {
+            release_title: "Cancelled Play",
+            release_artist: "Cancelled Artist",
+            track_title: "Cancelled Track",
+            track_artist: "Cancelled Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (track,public,artist): (Uuid,Uuid,Uuid) = sqlx::query_as("SELECT t.id,t.public_api_id,a.artist_id FROM tracks t JOIN track_artists a ON a.track_id=t.id AND a.role='primary' WHERE t.release_id=$1")
+        .bind(fixture.release_id().into_uuid()).fetch_one(&db.pool).await.expect("read Track");
+    let user = insert_user(&db, "cancelled-parent-wait").await;
+    let mut blocker = db.pool.begin().await.expect("begin parent blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(artist)
+        .execute(&mut *blocker)
+        .await
+        .expect("hold parent");
+    let single_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open single-connection pool");
+    let probes = scrobble_probe_count();
+    let pool = single_pool.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "cancelled-parent-wait",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    wait_for_scrobble_probe(probes).await;
+    play.abort();
+    assert!(play.await.expect_err("play cancelled").is_cancelled());
+    sqlx::query("SELECT id FROM tracks WHERE id=$1 FOR UPDATE NOWAIT")
+        .bind(track)
+        .execute(&mut *blocker)
+        .await
+        .expect("cancelled play does not retain Track");
+    let value: i32 = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sqlx::query_scalar("SELECT 1").fetch_one(&single_pool),
+    )
+    .await
+    .expect("single connection returns to pool")
+    .expect("reuse connection");
+    assert_eq!(value, 1);
+    blocker.rollback().await.expect("release parent");
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM native_track_plays WHERE user_id=$1")
+        .bind(user)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count plays");
+    assert_eq!(count, 0);
+    single_pool.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn scrobble_succeeds_after_sustained_parent_contention() {
+    let db = common::TestDb::create("scrobble_long_parent").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7214,
+        CatalogFixturePresentation {
+            release_title: "Long Wait Play",
+            release_artist: "Long Wait Artist",
+            track_title: "Long Wait Track",
+            track_artist: "Long Wait Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (public,artist): (Uuid,Uuid) = sqlx::query_as("SELECT t.public_api_id,a.artist_id FROM tracks t JOIN track_artists a ON a.track_id=t.id AND a.role='primary' WHERE t.release_id=$1")
+        .bind(fixture.release_id().into_uuid()).fetch_one(&db.pool).await.expect("read Track");
+    let user = insert_user(&db, "long-parent-wait").await;
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(artist)
+        .execute(&mut *blocker)
+        .await
+        .expect("hold parent");
+    let probes = scrobble_probe_count();
+    let pool = db.pool.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "long-parent-wait",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    wait_for_scrobble_probe(probes).await;
+    tokio::time::sleep(std::time::Duration::from_millis(2300)).await;
+    assert!(!play.is_finished(), "contention must not fail the play");
+    blocker.rollback().await.expect("release parent");
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(15), play)
+            .await
+            .expect("play finishes")
+            .expect("join")
+            .expect("record play"),
+        NativeScrobbleResult::Applied
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn contended_scrobbles_leave_small_pools_available_for_heartbeat() {
+    for max_connections in [1, 2, 3] {
+        let db = common::TestDb::create("scrobble_probe_pool").await;
+        let fixture = phase5_common::seed_cataloged_release(
+            &db,
+            7215,
+            CatalogFixturePresentation {
+                release_title: "Probe Pool",
+                release_artist: "Probe Artist",
+                track_title: "Probe Track",
+                track_artist: "Probe Artist",
+                release_date: "2026-07-01",
+            },
+        )
+        .await;
+        let (public,artist): (Uuid,Uuid) = sqlx::query_as("SELECT t.public_api_id,a.artist_id FROM tracks t JOIN track_artists a ON a.track_id=t.id AND a.role='primary' WHERE t.release_id=$1")
+            .bind(fixture.release_id().into_uuid()).fetch_one(&db.pool).await.expect("read Track");
+        let user = insert_user(&db, &format!("probe-pool-{max_connections}")).await;
+        let worker = melodee_persistence::WorkerId::new();
+        let config = common::test_config();
+        let now = OffsetDateTime::now_utc();
+        melodee_persistence::PolicyStore
+            .claim_cataloged(&db.pool, &worker, &config, now)
+            .await
+            .expect("claim heartbeat fixture");
+        let mut blocker = db.pool.begin().await.expect("begin parent blocker");
+        sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+            .bind(artist)
+            .execute(&mut *blocker)
+            .await
+            .expect("hold parent");
+        let limited = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(max_connections)
+            .connect(&common::database_url(&db.name))
+            .await
+            .expect("open small pool");
+        let probes = scrobble_probe_count();
+        let mut plays = Vec::new();
+        for ordinal in 0..6 {
+            let pool = limited.clone();
+            plays.push(tokio::spawn(async move {
+                let now = OffsetDateTime::now_utc();
+                NativeUserStateStore::record_scrobble(
+                    &pool,
+                    user,
+                    public,
+                    &format!("probe-{ordinal}"),
+                    now,
+                    now,
+                    Some(30),
+                )
+                .await
+            }));
+        }
+        wait_for_scrobble_probe(probes).await;
+        let value: i32 = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            sqlx::query_scalar("SELECT 1").fetch_one(&limited),
+        )
+        .await
+        .expect("interactive query acquires pool")
+        .expect("interactive query");
+        assert_eq!(value, 1);
+        tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            melodee_persistence::PolicyStore.renew_lease(
+                &limited,
+                fixture.work_item_id(),
+                &worker,
+                time::Duration::seconds(300),
+                OffsetDateTime::now_utc(),
+            ),
+        )
+        .await
+        .expect("heartbeat acquires pool")
+        .expect("renew heartbeat");
+        for play in plays.iter().take(3) {
+            play.abort();
+        }
+        blocker.rollback().await.expect("release parent");
+        for (index, play) in plays.into_iter().enumerate() {
+            if index < 3 {
+                assert!(play.await.expect_err("cancelled").is_cancelled());
+            } else {
+                assert_eq!(
+                    tokio::time::timeout(std::time::Duration::from_secs(15), play)
+                        .await
+                        .expect("play completes")
+                        .expect("join")
+                        .expect("record play"),
+                    NativeScrobbleResult::Applied
+                );
+            }
+        }
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM native_track_plays WHERE user_id=$1")
+                .bind(user)
+                .fetch_one(&db.pool)
+                .await
+                .expect("count plays");
+        assert_eq!(count, 3);
+        limited.close().await;
+        db.drop().await;
+    }
+}
+
+#[tokio::test]
+async fn stalled_track_probes_allow_cancellation_and_eventual_play() {
+    let db = common::TestDb::create("scrobble_track_stall").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7217,
+        CatalogFixturePresentation {
+            release_title: "Stalled Track",
+            release_artist: "Stall Artist",
+            track_title: "Stall Track",
+            track_artist: "Stall Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (track, public): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks WHERE release_id=$1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read Track");
+    let user = insert_user(&db, "stalled-track").await;
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query("SELECT id FROM tracks WHERE id=$1 FOR UPDATE")
+        .bind(track)
+        .execute(&mut *blocker)
+        .await
+        .expect("hold Track");
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open small pool");
+    let probes = scrobble_probe_count();
+    let cancelled_pool = limited.clone();
+    let cancelled = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &cancelled_pool,
+            user,
+            public,
+            "cancelled-track",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    let eventual_pool = limited.clone();
+    let eventual = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &eventual_pool,
+            user,
+            public,
+            "eventual-track",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    wait_for_scrobble_probe(probes).await;
+    cancelled.abort();
+    assert!(cancelled.await.expect_err("cancelled").is_cancelled());
+    let value: i32 = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sqlx::query_scalar("SELECT 1").fetch_one(&limited),
+    )
+    .await
+    .expect("pool remains available")
+    .expect("query");
+    assert_eq!(value, 1);
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    assert!(
+        !eventual.is_finished(),
+        "held Track must leave play pending"
+    );
+    blocker.rollback().await.expect("release Track");
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(15), eventual)
+            .await
+            .expect("play finishes")
+            .expect("join")
+            .expect("record play"),
+        NativeScrobbleResult::Applied
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM native_track_plays WHERE user_id=$1")
+        .bind(user)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count plays");
+    assert_eq!(count, 1);
+    limited.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn cancelled_track_probe_never_publishes() {
+    let db = common::TestDb::create("fifo_track_cancel").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7220,
+        CatalogFixturePresentation {
+            release_title: "FIFO Cancel",
+            release_artist: "FIFO Artist",
+            track_title: "FIFO Track",
+            track_artist: "FIFO Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (track, public): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks WHERE release_id=$1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read Track");
+    let user = insert_user(&db, "fifo-cancel").await;
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query("SELECT id FROM tracks WHERE id=$1 FOR UPDATE")
+        .bind(track)
+        .execute(&mut *blocker)
+        .await
+        .expect("hold Track");
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(3)
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open pool");
+    let pool = limited.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "fifo-cancel",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(!play.is_finished(), "held Track must leave play pending");
+    play.abort();
+    assert!(play.await.expect_err("cancelled").is_cancelled());
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    blocker.rollback().await.expect("release Track");
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM native_track_plays WHERE user_id=$1")
+        .bind(user)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count plays");
+    assert_eq!(count, 0, "detached read-only waiter cannot publish");
+    limited.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn track_probe_preserves_session_timeout_for_counter_write() {
+    let db = common::TestDb::create("fifo_track_timeout").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7221,
+        CatalogFixturePresentation {
+            release_title: "FIFO Timeout",
+            release_artist: "FIFO Timeout Artist",
+            track_title: "FIFO Timeout Track",
+            track_artist: "FIFO Timeout Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (track, public): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks WHERE release_id=$1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read Track");
+    let user = insert_user(&db, "fifo-timeout").await;
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(3)
+        .after_connect(|connection, _| {
+            Box::pin(async move {
+                sqlx::query("SET lock_timeout='2s'")
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open pool");
+    let now = OffsetDateTime::now_utc();
+    NativeUserStateStore::record_scrobble(&limited, user, public, "fifo-first", now, now, Some(30))
+        .await
+        .expect("seed play");
+    let mut track_blocker = db.pool.begin().await.expect("Track blocker");
+    let mut state_blocker = db.pool.begin().await.expect("state blocker");
+    sqlx::query("SELECT id FROM tracks WHERE id=$1 FOR UPDATE")
+        .bind(track)
+        .execute(&mut *track_blocker)
+        .await
+        .expect("hold Track");
+    sqlx::query(
+        "SELECT user_id FROM native_track_user_states WHERE user_id=$1 AND track_id=$2 FOR UPDATE",
+    )
+    .bind(user)
+    .bind(track)
+    .execute(&mut *state_blocker)
+    .await
+    .expect("hold counter");
+    let pool = limited.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "fifo-second",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(!play.is_finished(), "held Track must leave play pending");
+    track_blocker.rollback().await.expect("release Track");
+    wait_for_lock_query(&db.pool, "INSERT INTO native_track_user_states").await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(
+        !play.is_finished(),
+        "probe timeout must not leak into counter writes"
+    );
+    state_blocker.rollback().await.expect("release counter");
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(10), play)
+            .await
+            .expect("play finishes")
+            .expect("join")
+            .expect("record play"),
+        NativeScrobbleResult::Applied
+    );
+    limited.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn reverse_submission_order_preserves_user_state_timestamps_and_replay() {
+    let db = common::TestDb::create("scrobble_reverse_time").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7216,
+        CatalogFixturePresentation {
+            release_title: "Reverse Time",
+            release_artist: "Reverse Artist",
+            track_title: "Reverse Track",
+            track_artist: "Reverse Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let public: Uuid = sqlx::query_scalar("SELECT public_api_id FROM tracks WHERE release_id=$1")
+        .bind(fixture.release_id().into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("read Track");
+    let user = insert_user(&db, "reverse-time").await;
+    let newer = OffsetDateTime::now_utc();
+    let older = newer - time::Duration::seconds(10);
+    for (event, when) in [("newer", newer), ("older", older)] {
+        assert_eq!(
+            NativeUserStateStore::record_scrobble(
+                &db.pool,
+                user,
+                public,
+                event,
+                when,
+                when,
+                Some(30)
+            )
+            .await
+            .expect("record play"),
+            NativeScrobbleResult::Applied
+        );
+    }
+    assert_eq!(
+        NativeUserStateStore::record_scrobble(
+            &db.pool,
+            user,
+            public,
+            "newer",
+            newer,
+            newer,
+            Some(30)
+        )
+        .await
+        .expect("replay play"),
+        NativeScrobbleResult::Adopted
+    );
+    for table in [
+        "native_track_user_states",
+        "native_release_user_states",
+        "native_artist_user_states",
+    ] {
+        let query = format!(
+            "SELECT play_count,last_played_at,created_at,updated_at FROM {table} WHERE user_id=$1"
+        );
+        let (count, last, created, updated): (i64, OffsetDateTime, OffsetDateTime, OffsetDateTime) =
+            sqlx::query_as(sqlx::AssertSqlSafe(query))
+                .bind(user)
+                .fetch_one(&db.pool)
+                .await
+                .expect("read state");
+        assert_eq!(count, 2);
+        assert!((last - newer).abs() < time::Duration::microseconds(1));
+        assert!(updated >= created);
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn scrobble_preserves_session_lock_timeout_for_counter_writes() {
+    let db = common::TestDb::create("scrobble_timeout_restore").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7218,
+        CatalogFixturePresentation {
+            release_title: "Timeout Restore",
+            release_artist: "Timeout Artist",
+            track_title: "Timeout Track",
+            track_artist: "Timeout Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let (track, public): (Uuid, Uuid) =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks WHERE release_id=$1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read Track");
+    let user = insert_user(&db, "timeout-restore").await;
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open single pool");
+    sqlx::query("SET lock_timeout='2s'")
+        .execute(&limited)
+        .await
+        .expect("set session timeout");
+    let now = OffsetDateTime::now_utc();
+    NativeUserStateStore::record_scrobble(
+        &limited,
+        user,
+        public,
+        "timeout-first",
+        now,
+        now,
+        Some(30),
+    )
+    .await
+    .expect("seed play");
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query(
+        "SELECT user_id FROM native_track_user_states WHERE user_id=$1 AND track_id=$2 FOR UPDATE",
+    )
+    .bind(user)
+    .bind(track)
+    .execute(&mut *blocker)
+    .await
+    .expect("lock counter");
+    let pool = limited.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "timeout-second",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    wait_for_lock_query(&db.pool, "INSERT INTO native_track_user_states").await;
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    assert!(
+        !play.is_finished(),
+        "binding must preserve the configured counter-write timeout"
+    );
+    blocker.commit().await.expect("release counter");
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(10), play)
+            .await
+            .expect("play finishes")
+            .expect("join")
+            .expect("record play"),
+        NativeScrobbleResult::Applied
+    );
+    let timeout: String = sqlx::query_scalar("SELECT current_setting('lock_timeout')")
+        .fetch_one(&limited)
+        .await
+        .expect("read session timeout");
+    assert_eq!(timeout, "2s");
+    limited.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn scrobble_table_lock_probes_preserve_small_pool_heartbeat_and_play() {
+    let db = common::TestDb::create("scrobble_table_lock").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7219,
+        CatalogFixturePresentation {
+            release_title: "Locked Credits",
+            release_artist: "Locked Artist",
+            track_title: "Locked Track",
+            track_artist: "Locked Artist",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let public: Uuid = sqlx::query_scalar("SELECT public_api_id FROM tracks WHERE release_id=$1")
+        .bind(fixture.release_id().into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("read Track");
+    let user = insert_user(&db, "binding-table-lock").await;
+    let worker = melodee_persistence::WorkerId::new();
+    let config = common::test_config();
+    melodee_persistence::PolicyStore
+        .claim_cataloged(&db.pool, &worker, &config, OffsetDateTime::now_utc())
+        .await
+        .expect("claim heartbeat fixture");
+    let mut blocker = db.pool.begin().await.expect("begin blocker");
+    sqlx::query("LOCK TABLE track_artists IN ACCESS EXCLUSIVE MODE")
+        .execute(&mut *blocker)
+        .await
+        .expect("hold credit table");
+    let limited = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&common::database_url(&db.name))
+        .await
+        .expect("open small pool");
+    let probes = scrobble_probe_count();
+    let pool = limited.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &pool,
+            user,
+            public,
+            "binding-table-lock",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    wait_for_scrobble_probe(probes).await;
+    let value: i32 = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sqlx::query_scalar("SELECT 1").fetch_one(&limited),
+    )
+    .await
+    .expect("interactive query acquires pool")
+    .expect("query");
+    assert_eq!(value, 1);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        melodee_persistence::PolicyStore.renew_lease(
+            &limited,
+            fixture.work_item_id(),
+            &worker,
+            time::Duration::seconds(300),
+            OffsetDateTime::now_utc(),
+        ),
+    )
+    .await
+    .expect("heartbeat acquires pool")
+    .expect("renew heartbeat");
+    tokio::time::sleep(std::time::Duration::from_millis(1300)).await;
+    assert!(
+        !play.is_finished(),
+        "table lock contention must not drop the play"
+    );
+    blocker.rollback().await.expect("release table lock");
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_secs(15), play)
+            .await
+            .expect("play finishes")
+            .expect("join")
+            .expect("record play"),
+        NativeScrobbleResult::Applied
+    );
+    limited.close().await;
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn forward_credit_cursor_preserves_snapshot_and_closes_on_rollback() {
     let db = common::TestDb::create("scroll_credit_snapshot").await;
     let first = phase5_common::seed_cataloged_release(
         &db,
@@ -863,28 +1711,22 @@ async fn phased_forward_cursor_preserves_one_credit_snapshot_and_closes_on_rollb
     let mut reader = sqlx::Acquire::begin(&mut *connection)
         .await
         .expect("begin cursor reader");
-    sqlx::query("DECLARE scrobble_artists_before NO SCROLL CURSOR FOR SELECT 1::int AS phase,artist_id FROM (SELECT DISTINCT artist_id FROM track_artists WHERE track_id=$1 AND role='primary' ORDER BY artist_id) first UNION ALL SELECT 2::int AS phase,artist_id FROM (SELECT DISTINCT artist_id FROM track_artists WHERE track_id=$1 AND role='primary' ORDER BY artist_id) second ORDER BY phase,artist_id")
+    sqlx::query("DECLARE scrobble_artists NO SCROLL CURSOR FOR SELECT artist_id FROM track_artists WHERE track_id=$1 AND role='primary'")
         .bind(track)
         .execute(&mut *reader)
         .await
-        .expect("declare phased cursor");
-    let before: Vec<(i32, Uuid)> = sqlx::query_as("FETCH FORWARD 1 FROM scrobble_artists_before")
-        .fetch_all(&mut *reader)
-        .await
-        .expect("fetch original cursor");
-    assert_eq!(before, vec![(1, old_artist)]);
+        .expect("declare cursor");
     sqlx::query("UPDATE track_artists SET artist_id=$2 WHERE track_id=$1 AND role='primary'")
         .bind(track)
         .bind(new_artist)
         .execute(&db.pool)
         .await
         .expect("commit different primary Artist");
-    let retained: Vec<(i32, Uuid)> =
-        sqlx::query_as("FETCH FORWARD 256 FROM scrobble_artists_before")
-            .fetch_all(&mut *reader)
-            .await
-            .expect("fetch second original cursor");
-    assert_eq!(retained, vec![(2, old_artist)]);
+    let retained: Vec<Uuid> = sqlx::query_scalar("FETCH FORWARD 256 FROM scrobble_artists")
+        .fetch_all(&mut *reader)
+        .await
+        .expect("fetch original cursor");
+    assert_eq!(retained, vec![old_artist]);
     sqlx::query("DECLARE current_test NO SCROLL CURSOR FOR SELECT DISTINCT artist_id FROM track_artists WHERE track_id=$1 AND role='primary' ORDER BY artist_id")
         .bind(track).execute(&mut *reader).await.expect("declare fresh cursor");
     let current: Vec<Uuid> = sqlx::query_scalar("FETCH FORWARD 256 FROM current_test")
@@ -894,13 +1736,95 @@ async fn phased_forward_cursor_preserves_one_credit_snapshot_and_closes_on_rollb
     assert_eq!(current, vec![new_artist]);
     reader.rollback().await.expect("close cursors");
     let remaining: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pg_cursors WHERE name IN ('scrobble_artists_before','current_test')",
+        "SELECT count(*) FROM pg_cursors WHERE name IN ('scrobble_artists','current_test')",
     )
     .fetch_one(&mut *connection)
     .await
     .expect("inspect cursor cleanup");
     assert_eq!(remaining, 0);
     drop(connection);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn scrobble_and_pending_credit_write_serialize_without_lost_popularity() {
+    let db = common::TestDb::create("scrobble_pending_credit").await;
+    let first = phase5_common::seed_cataloged_release(
+        &db,
+        7211,
+        CatalogFixturePresentation {
+            release_title: "Pending Credit One",
+            release_artist: "Pending Artist One",
+            track_title: "Pending Track One",
+            track_artist: "Pending Artist One",
+            release_date: "2026-07-01",
+        },
+    )
+    .await;
+    let second = phase5_common::seed_cataloged_release(
+        &db,
+        7212,
+        CatalogFixturePresentation {
+            release_title: "Pending Credit Two",
+            release_artist: "Pending Artist Two",
+            track_title: "Pending Track Two",
+            track_artist: "Pending Artist Two",
+            release_date: "2026-07-02",
+        },
+    )
+    .await;
+    let (track,public,old): (Uuid,Uuid,Uuid) = sqlx::query_as("SELECT t.id,t.public_api_id,a.artist_id FROM tracks t JOIN track_artists a ON a.track_id=t.id AND a.role='primary' WHERE t.release_id=$1")
+        .bind(first.release_id().into_uuid()).fetch_one(&db.pool).await.expect("read Track");
+    let new: Uuid = sqlx::query_scalar("SELECT a.artist_id FROM track_artists a JOIN tracks t ON t.id=a.track_id WHERE t.release_id=$1 AND a.role='primary'")
+        .bind(second.release_id().into_uuid()).fetch_one(&db.pool).await.expect("read new Artist");
+    let user = insert_user(&db, "pending-credit").await;
+    let mut holder = db.pool.begin().await.expect("begin Track blocker");
+    sqlx::query("SELECT id FROM tracks WHERE id=$1 FOR UPDATE")
+        .bind(track)
+        .execute(&mut *holder)
+        .await
+        .expect("hold Track");
+    let writer_pool = db.pool.clone();
+    let writer = tokio::spawn(async move {
+        let mut tx = writer_pool.begin().await?;
+        sqlx::query("UPDATE track_artists SET artist_id=$2 WHERE track_id=$1 AND role='primary'")
+            .bind(track)
+            .bind(new)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await
+    });
+    wait_for_lock_query(&db.pool, "UPDATE track_artists SET artist_id").await;
+    let probes = scrobble_probe_count();
+    let play_pool = db.pool.clone();
+    let play = tokio::spawn(async move {
+        let now = OffsetDateTime::now_utc();
+        NativeUserStateStore::record_scrobble(
+            &play_pool,
+            user,
+            public,
+            "pending-credit",
+            now,
+            now,
+            Some(30),
+        )
+        .await
+    });
+    wait_for_scrobble_probe(probes).await;
+    holder.commit().await.expect("release Track");
+    let (written, played) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        (
+            writer.await.expect("writer join"),
+            play.await.expect("play join"),
+        )
+    })
+    .await
+    .expect("both operations finish");
+    written.expect("commit credit change");
+    assert_eq!(played.expect("record play"), NativeScrobbleResult::Applied);
+    let counts: (i64,i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM native_track_plays WHERE track_id=$1),(SELECT popularity FROM native_recommendation_candidates WHERE entity_type='artist' AND entity_id=$2),(SELECT popularity FROM native_recommendation_candidates WHERE entity_type='artist' AND entity_id=$3)")
+        .bind(track).bind(old).bind(new).fetch_one(&db.pool).await.expect("read play and popularity");
+    assert_eq!(counts, (1, 0, 1));
     db.drop().await;
 }
 

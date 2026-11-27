@@ -29,6 +29,12 @@ pub(crate) async fn heavy_ingestion() -> Result<OwnedSemaphorePermit, AcquireErr
     semaphore().acquire_owned().await
 }
 
+/// Acquire a process-wide permit before preparing or spawning blocking ingestion work.
+#[doc(hidden)]
+pub async fn acquire_ingestion_admission() -> Result<OwnedSemaphorePermit, AcquireError> {
+    heavy_ingestion().await
+}
+
 /// Run filesystem work without occupying an async executor thread. The
 /// closure owns the admission permit even when its awaiting future is dropped.
 pub(crate) async fn run<T: Send + 'static>(

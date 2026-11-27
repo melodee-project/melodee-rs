@@ -278,7 +278,12 @@ async fn active_generation_reader(
         .ok_or_else(|| SearchError::NoActiveGeneration(root.path().display().to_string()))?;
     let path = validate_active_manifest(&root, &active)?;
     let manifest_hash = active.manifest_hash.clone().unwrap_or_default();
-    cached_reader(&root_text, active.generation_id, &manifest_hash, &path)
+    let reader = cached_reader(&root_text, active.generation_id, &manifest_hash, &path)?;
+    #[cfg(feature = "test-support")]
+    if let Some(barrier) = &config.rebuild_test_barrier {
+        barrier.pause_after_query_reader().await;
+    }
+    Ok(reader)
 }
 
 fn validate_active_manifest(

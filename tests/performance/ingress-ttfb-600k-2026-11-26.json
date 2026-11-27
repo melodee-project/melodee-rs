@@ -1,0 +1,1151 @@
+{
+  "binary_sha256": "9d7b9aafa85f0708b1eefd915c02a21dfb4dfd90686b8c0b087ddd2044bdbc13",
+  "binary_source_identity": "not independently established; compare binary hash with build record",
+  "database_before_ingestion": {
+    "artists": 35000,
+    "max_connections": "100",
+    "releases": 50000,
+    "shared_buffers": "128MB",
+    "tracks": 600000,
+    "version": "PostgreSQL 18.3 on x86_64-redhat-linux-gnu, compiled by gcc (GCC) 16.2.1 20260819 (Red Hat 16.2.1-2), 64-bit",
+    "work_mem": "4MB"
+  },
+  "fixture_seed_seconds": 178.1,
+  "host": {
+    "cpu_model": "AMD Ryzen 9 3900X 12-Core Processor",
+    "logical_cpus": 24,
+    "memory_total_kib": 65727588,
+    "platform": "Linux-7.3.4-300.fc45.x86_64-x86_64-with-glibc2.44"
+  },
+  "limitations": [
+    "single process and host, loopback HTTP/1 only",
+    "synthetic Track lock models contention rather than a catalog workload",
+    "one synthetic stream; aborts before end and does not measure audible underruns",
+    "no concurrent ingestion after fixture creation, rebuild or external proxy",
+    "generated media uses system temporary storage; cache uncontrolled",
+    "small client and sample counts; not a safe-default certification"
+  ],
+  "media": "one generated 480-second MP3 ingested by the server",
+  "repository_head_observed_at_end": "08de08d50cb1be6e76c66000232dae257c1a2d2f",
+  "results": [
+    {
+      "connection_limit": 0,
+      "elapsed_seconds": 3.653965,
+      "idle_keepalive_connections": 1,
+      "interactive_probes_completed_while_track_locked": 16,
+      "issues": [],
+      "jellyfin_statuses": [
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204
+      ],
+      "persisted_plays": {
+        "count": 16,
+        "distinct": 16
+      },
+      "play_latency_percentiles_seconds": {
+        "p50": 3.515414,
+        "p95": 3.653507,
+        "p99": 3.653507
+      },
+      "play_requests_completed_while_track_locked": 0,
+      "play_samples": [
+        {
+          "error": null,
+          "seconds": 3.459954,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.653507,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.484219,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.523055,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.550797,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.577324,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.030173,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.495864,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.600583,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.526183,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.635119,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.507885,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.515414,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.068099,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.039822,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.539434,
+          "status": 204
+        }
+      ],
+      "plays": 16,
+      "probe_latency_percentiles_seconds": {
+        "p50": 0.002123,
+        "p95": 0.004768,
+        "p99": 0.004768
+      },
+      "probe_samples": [
+        {
+          "error": null,
+          "seconds": 0.000861,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002534,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.0027,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.004768,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002218,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001705,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.00277,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.003457,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001656,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002341,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002521,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002123,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002092,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001886,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001874,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.000398,
+          "status": 200
+        }
+      ],
+      "probes": 16,
+      "server_resources": {
+        "cpu_seconds": 0.3,
+        "peak_rss_kib": 32972
+      },
+      "slow_stream": {
+        "bytes": 106497,
+        "status": 200,
+        "time_to_headers_seconds": 0.004377,
+        "ttfb_seconds": 0.004519
+      },
+      "success": true,
+      "track_lock_seconds": 3.0,
+      "track_recommendation_popularity": {
+        "plays": 16,
+        "track_popularity": 16
+      }
+    },
+    {
+      "connection_limit": 4,
+      "elapsed_seconds": 3.127251,
+      "idle_keepalive_connections": 1,
+      "interactive_probes_completed_while_track_locked": 0,
+      "issues": [],
+      "jellyfin_statuses": [
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204
+      ],
+      "persisted_plays": {
+        "count": 16,
+        "distinct": 16
+      },
+      "play_latency_percentiles_seconds": {
+        "p50": 3.078989,
+        "p95": 3.126812,
+        "p99": 3.126812
+      },
+      "play_requests_completed_while_track_locked": 0,
+      "play_samples": [
+        {
+          "error": null,
+          "seconds": 3.026164,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.126812,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.036743,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.048463,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.059216,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.063838,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.068552,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.073657,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.084105,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.078989,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.088993,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.097515,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.102237,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.10695,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.111779,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.117682,
+          "status": 204
+        }
+      ],
+      "plays": 16,
+      "probe_latency_percentiles_seconds": {
+        "p50": 3.11712,
+        "p95": 3.117635,
+        "p99": 3.117635
+      },
+      "probe_samples": [
+        {
+          "error": null,
+          "seconds": 3.117635,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117616,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117516,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117206,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117184,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117313,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117315,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117026,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.11712,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.117308,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.116737,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.11675,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.116691,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.116485,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.116459,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.116225,
+          "status": 200
+        }
+      ],
+      "probes": 16,
+      "server_resources": {
+        "cpu_seconds": 0.12,
+        "peak_rss_kib": 31276
+      },
+      "slow_stream": {
+        "bytes": 97281,
+        "status": 200,
+        "time_to_headers_seconds": 0.004457,
+        "ttfb_seconds": 0.004576
+      },
+      "success": true,
+      "track_lock_seconds": 3.0,
+      "track_recommendation_popularity": {
+        "plays": 32,
+        "track_popularity": 32
+      }
+    },
+    {
+      "connection_limit": 16,
+      "elapsed_seconds": 3.661743,
+      "idle_keepalive_connections": 1,
+      "interactive_probes_completed_while_track_locked": 0,
+      "issues": [],
+      "jellyfin_statuses": [
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204
+      ],
+      "persisted_plays": {
+        "count": 16,
+        "distinct": 16
+      },
+      "play_latency_percentiles_seconds": {
+        "p50": 3.441576,
+        "p95": 3.661334,
+        "p99": 3.661334
+      },
+      "play_requests_completed_while_track_locked": 0,
+      "play_samples": [
+        {
+          "error": null,
+          "seconds": 3.430599,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.661334,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.531156,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.339298,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.47878,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.455352,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.36303,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.386838,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.441576,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.583107,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.472048,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.495709,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.39659,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.542217,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.350115,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.412391,
+          "status": 204
+        }
+      ],
+      "plays": 16,
+      "probe_latency_percentiles_seconds": {
+        "p50": 3.359372,
+        "p95": 3.361548,
+        "p99": 3.361548
+      },
+      "probe_samples": [
+        {
+          "error": null,
+          "seconds": 3.360439,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.360418,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.361548,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.360348,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.359785,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.359485,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.359372,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.359595,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.359474,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.359076,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.358749,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.358356,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.358689,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.358515,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.357887,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 3.357353,
+          "status": 200
+        }
+      ],
+      "probes": 16,
+      "server_resources": {
+        "cpu_seconds": 0.28,
+        "peak_rss_kib": 32916
+      },
+      "slow_stream": {
+        "bytes": 106497,
+        "status": 200,
+        "time_to_headers_seconds": 0.004178,
+        "ttfb_seconds": 0.004297
+      },
+      "success": true,
+      "track_lock_seconds": 3.0,
+      "track_recommendation_popularity": {
+        "plays": 48,
+        "track_popularity": 48
+      }
+    },
+    {
+      "connection_limit": 32,
+      "elapsed_seconds": 3.629092,
+      "idle_keepalive_connections": 1,
+      "interactive_probes_completed_while_track_locked": 16,
+      "issues": [],
+      "jellyfin_statuses": [
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204
+      ],
+      "persisted_plays": {
+        "count": 16,
+        "distinct": 16
+      },
+      "play_latency_percentiles_seconds": {
+        "p50": 3.504533,
+        "p95": 3.626268,
+        "p99": 3.626268
+      },
+      "play_requests_completed_while_track_locked": 0,
+      "play_samples": [
+        {
+          "error": null,
+          "seconds": 3.024996,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.581682,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.036575,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.543367,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.529109,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.597924,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.557667,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.455881,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.570064,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.040831,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.513458,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.626268,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.057093,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.475866,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.504533,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.489329,
+          "status": 204
+        }
+      ],
+      "plays": 16,
+      "probe_latency_percentiles_seconds": {
+        "p50": 0.001973,
+        "p95": 0.003766,
+        "p99": 0.003766
+      },
+      "probe_samples": [
+        {
+          "error": null,
+          "seconds": 0.001194,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001208,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.003766,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002657,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.00206,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002356,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.00128,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002401,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002911,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001973,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001966,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002592,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002559,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001405,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001672,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.000942,
+          "status": 200
+        }
+      ],
+      "probes": 16,
+      "server_resources": {
+        "cpu_seconds": 0.3,
+        "peak_rss_kib": 33756
+      },
+      "slow_stream": {
+        "bytes": 106497,
+        "status": 200,
+        "time_to_headers_seconds": 0.004714,
+        "ttfb_seconds": 0.004842
+      },
+      "success": true,
+      "track_lock_seconds": 3.0,
+      "track_recommendation_popularity": {
+        "plays": 64,
+        "track_popularity": 64
+      }
+    },
+    {
+      "connection_limit": 64,
+      "elapsed_seconds": 3.226281,
+      "idle_keepalive_connections": 1,
+      "interactive_probes_completed_while_track_locked": 16,
+      "issues": [],
+      "jellyfin_statuses": [
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204,
+        204
+      ],
+      "persisted_plays": {
+        "count": 16,
+        "distinct": 16
+      },
+      "play_latency_percentiles_seconds": {
+        "p50": 3.126195,
+        "p95": 3.222981,
+        "p99": 3.222981
+      },
+      "play_requests_completed_while_track_locked": 0,
+      "play_samples": [
+        {
+          "error": null,
+          "seconds": 3.151009,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.141856,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.172616,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.208529,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.165171,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.115046,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.190777,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.077615,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.126195,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.0381,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.054869,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.093733,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.154369,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.059099,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.222981,
+          "status": 204
+        },
+        {
+          "error": null,
+          "seconds": 3.023727,
+          "status": 204
+        }
+      ],
+      "plays": 16,
+      "probe_latency_percentiles_seconds": {
+        "p50": 0.001957,
+        "p95": 0.004099,
+        "p99": 0.004099
+      },
+      "probe_samples": [
+        {
+          "error": null,
+          "seconds": 0.000956,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001683,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001611,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001477,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001563,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002125,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002638,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002558,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.004099,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.002934,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.00188,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.003604,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.001957,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.003055,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.0025,
+          "status": 200
+        },
+        {
+          "error": null,
+          "seconds": 0.00046,
+          "status": 200
+        }
+      ],
+      "probes": 16,
+      "server_resources": {
+        "cpu_seconds": 0.29,
+        "peak_rss_kib": 33044
+      },
+      "slow_stream": {
+        "bytes": 98305,
+        "status": 200,
+        "time_to_headers_seconds": 0.003911,
+        "ttfb_seconds": 0.004036
+      },
+      "success": true,
+      "track_lock_seconds": 3.0,
+      "track_recommendation_popularity": {
+        "plays": 80,
+        "track_popularity": 80
+      }
+    }
+  ],
+  "slow_client_receive_buffer_requested_bytes": 4096,
+  "source_media_bytes": 11521445,
+  "success": true,
+  "temporary_storage": {
+    "allocation_unit_bytes": 4096,
+    "filesystem": "tmpfs"
+  },
+  "timestamp_utc": "2026-11-26T22:33:49.076316+00:00",
+  "tracked_worktree_dirty_at_end": true
+}

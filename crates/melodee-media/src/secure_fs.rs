@@ -122,10 +122,23 @@ mod platform {
     /// Copy one source file into a newly-created destination. Both leaves are
     /// opened without following symlinks; the destination is never replaced.
     pub fn copy_new(source: &Path, destination: &Path) -> io::Result<u64> {
+        let mut operation = crate::operation_metrics::OperationGuard::start(
+            crate::operation_metrics::Operation::MediaCopy,
+        );
         let mut source = open_read(source)?;
         let mut destination = open_write_new(destination)?;
-        let copied = io::copy(&mut source, &mut destination)?;
+        let copied = match io::copy(&mut source, &mut destination) {
+            Ok(copied) => copied,
+            Err(error) => {
+                // std::io::copy does not report partial progress on error.
+                operation.mark_bytes_incomplete();
+                return Err(error);
+            }
+        };
+        operation.add_read(copied);
+        operation.add_written(copied);
         destination.sync_all()?;
+        operation.finish();
         Ok(copied)
     }
 

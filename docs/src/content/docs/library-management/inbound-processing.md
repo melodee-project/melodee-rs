@@ -35,6 +35,12 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
 Discovery and settling are source-correctness gates only in this processing stage. The candidate is not interpreted as
 media yet.
 
+Only one reconciliation pass owns a source at a time. A periodic pass skips a source that is
+already being scanned and retries it on a later pass; other configured sources can continue. The
+manual `melodee-cli ingest reconcile` command waits up to 30 seconds for a busy source and reports
+an error if it is still occupied. Candidate processing errors also leave the affected scan pending
+for retry. Retry the command after the active scan finishes or the underlying error is corrected.
+
 ## Observed states
 
 For each discovered candidate the queue uses these states:
@@ -84,6 +90,30 @@ extensions or names as identity by themselves.
 - If the signature changes, the candidate remains `Settling` and `stableSince` is reset.
 - If unchanged across the quiet period, the candidate becomes `Ready`.
 - If `.melodee-ready` is present, settling can use a shorter marker shortcut than the default quiet period.
+
+:::caution[Planned documentation]
+The in-development bounded snapshot path limits unfinished metadata across all inbound sources to
+4,096 captures, 1,000,000 entries, and 1 GiB of logical metadata by default. These limits do not
+represent PostgreSQL disk consumption. If a limit is reached, the candidate remains retryable;
+administrators can restore capacity or raise the corresponding limits in the singleton
+`ingestion_settling_capture_budget` database row after assessing available space. Interrupted
+captures are cleaned up in bounded background batches. This behavior remains under validation.
+
+The in-development occurrence-path change represents names that cannot be expressed as Unicode
+with a platform-specific encoded diagnostic path. Ordinary Unicode paths retain their current
+representation. Older lossy path records can be ambiguous; preserve their work history and inspect
+their staging receipts before deciding how to resolve them. The proposed `melodee-cli ingest
+legacy-paths` command lists affected historical items. A reviewed new occurrence can be checked with
+`melodee-cli ingest verify-staged <work-item-id>`, which rereads its staged files and reports the
+receipt tree hash. After independently comparing the source and receipt evidence, the proposed
+`melodee-cli ingest resolve-legacy-path` command records an operator-supplied actor, reason, reviewed
+item ID and hash; it retires only an unleased legacy duplicate and does not delete media. The actor
+is a local operator assertion. The commands, encoded representation and nested in-source
+acquisition remain under compatibility and security review.
+
+During this work, administrative pre-catalog purge refuses ambiguous or encoded occurrence paths
+before removing files. Keep the media and work history until an audited purge procedure is available.
+:::
 
 ## Safety constraints
 

@@ -108,7 +108,7 @@ exists, treat both roots as append-only when planning capacity.
 
 - Candidate roots are canonicalized and path containment is enforced against each inbound root.
 - Symlink targets that escape an inbound root are ignored.
-- Discovery uses sorted, bounded reads to avoid loading the entire disk tree into memory for large libraries.
+- Periodic inbound discovery reads source entries in bounded batches; candidate processing order can vary.
 - Inbound, staging, normalization-work, and canonical-storage roots cannot overlap, and configured roots
   cannot be symlinks.
 

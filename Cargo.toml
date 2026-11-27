@@ -23,6 +23,8 @@ license = "MIT"
 authors = ["Melodee Project contributors"]
 
 [workspace.dependencies]
+cap-std = "=4.0.3"
+cap-fs-ext = "=4.0.3"
 axum = { version = "=0.8.9", features = ["http1", "json", "multipart", "tokio"] }
 base64 = "=0.23.1"
 bcrypt = "=0.19.3"
@@ -84,6 +86,8 @@ image = { version = "=0.25.10", default-features = false, features = ["gif", "jp
 lofty = "=0.25.4"
 # ADR-0116: safe no-replace directory finalization for canonical publication
 # on Unix. Windows uses the platform's non-replacing rename behavior.
+nix = { version = "=0.31.4", default-features = false, features = ["event"] }
+process-wrap = { version = "=10.0.1", default-features = false, features = ["tokio1", "job-object", "kill-on-drop"] }
 rustix = { version = "=1.1.6", default-features = false, features = ["fs", "std"] }
 # ADR-0110: SQLx with explicit SQL against PostgreSQL. Runtime-checked queries
 # for now; compile-time/offline query metadata is a later hardening step.

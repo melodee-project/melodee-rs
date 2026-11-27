@@ -1,6 +1,6 @@
 # Performance Remediation — Upgrade, Repair, and Rollback Runbook
 
-Applies to the forward migrations `0060`–`0066` and the derived-state repair delivered with the
+Applies to the forward migrations `0060`–`0070` and the derived-state repair delivered with the
 PERF-001…PERF-015 / V001 / V002 remediation. This is an internal operator runbook; the public
 summary lives in `docs/src/content/docs/installation/upgrading.md`.
 
@@ -15,6 +15,10 @@ summary lives in `docs/src/content/docs/installation/upgrading.md`.
 | 0064 | `catalog_identity_reconciliation_seed`; `lock_artist_identity_names(text[])` | additive table + function |
 | 0065 | Adds a primary-credit ordering index; orders Track and recommendation candidate locks and replaces popularity maintenance triggers with statement-level grouped changes | ordinary transactional index + replacement functions and triggers |
 | 0066 | Makes reconciliation Artist and Observation UUIDs non-owning hints; removes their FK checks without deleting pending seeds | transactional constraint removal |
+| 0067 | Adds fenced inbound scan leases, scan markers, path-format versioning, exact-equality hash-assisted occurrence lookup and operator-review evidence; replaces the old full-path unique index with serialized exact identity checks | transactional DDL and ordinary index build under the maintenance fence |
+| 0068 | Adds incomplete-capture markers and exact-nanosecond metadata to settling evidence, plus indexes for per-scope recovery and ordered file pages | additive transactional DDL; ordinary index builds require the maintenance fence |
+| 0069 | Adds a Jellyfin Track-number/public-ID ordering index | ordinary transactional index build under the maintenance fence |
+| 0070 | Adds durable inbound custody intent/evidence rows for the proposed quarantine protocol, including source-root generation and distinct native-path and legacy-receipt digests | additive transactional DDL; filesystem handoff and recovery remain in progress |
 
 Identity hints are resolved by indexed joins during reconciliation; deleted identities can leave
 stale hints, which are ignored and removed when their seed is acknowledged. Hard deletion records
@@ -29,9 +33,9 @@ trigger counted that Artist once. Existing drift converges through scheduled,
 bounded discovery maintenance; the migration itself does not recount. User Artist
 play state still counts one play per distinct Artist.
 
-No column or constraint is removed. The three dropped indexes are exact
-duplicates of an existing constraint index; recreating them with their original `CREATE INDEX`
-text restores the prior shape if a forward fix is ever needed.
+No column is removed. Migration 0066 removes the two foreign-key constraints described above.
+The three dropped indexes are exact duplicates of an existing constraint index; recreating them
+with their original `CREATE INDEX` text restores the prior index shape if a forward fix is needed.
 
 ## Required sequence
 
@@ -104,8 +108,42 @@ melodee-cli work prune-lease-events --older-than-days 30 --apply    # bounded, r
 - **Rebuild interrupted:** the generation remains `building`/`validated`; the next claim resets a
   `building` generation or resumes catch-up for a `validated` one. Applied replay rows are durable,
   so resume does not re-apply them.
-- **Discovery interrupted:** the cursor is advanced in the same transaction as the batch effect; a
-  crash replays an idempotent batch at worst.
+- **Discovery interrupted:** discovery maintenance cursors advance with their batch effects. Inbound
+  source scans leave a temporary leased generation; after lease expiry the next scan rescans the
+  source and fences the prior owner. Recovery clears prior observation bits in bounded pages and
+  rescans the root; completed work markers are retained and revalidated. A one-shot scan reports a
+  busy error after 30 seconds if another owner remains active; retry it. Do not manually delete an
+  active scan. Work in progress: migration 0068 stages snapshot metadata directly in the evidence
+  tables and publishes it only after verification; interrupted captures are invisible to normal
+  snapshot readers. Recovery removes no more than 128 file rows per transaction in bounded cleanup turns;
+  expired, removed source scopes require the scheduler cleanup path. This remains subject to final
+  integration and recovery tests. Database disk-full errors roll back the affected page; restore
+  capacity and retry. Incomplete metadata is limited globally by the singleton
+  `ingestion_settling_capture_budget` row (default 4,096 captures, 1,000,000 entries and 1 GiB of
+  logical metadata, including fixed per-capture and per-row allowances). This is not a PostgreSQL heap, index, or WAL disk quota.
+  A Release that exceeds either limit remains invisible and retryable: after assessing available
+  PostgreSQL disk capacity, an operator can raise `max_captures`, `max_rows`, and/or `max_bytes` in that row and
+  retry the scan; raising limits does not discard or alter evidence. Completed authoritative
+  snapshot evidence is retained separately and may grow with the Release's file count. Limits,
+  counters, and cleanup accounting remain subject to final integration tests.
+- **Historical non-Unicode inbound paths:** work in progress under ADR-0220. Previous lossy text
+  can map multiple physical paths to one work item. Preserve existing rows, media, and receipts;
+  do not infer a raw path or delete history from the display value. `melodee-cli ingest legacy-paths`
+  lists up to 100 unresolved rows; pass `--after` with the last ID for another page. For a reviewed
+  version-1 occurrence, run `melodee-cli ingest verify-staged <work-item-id>` to reread its staged
+  tree and compare the printed BLAKE3 tree hash with independently reviewed original-media evidence.
+  After confirming the source, occurrence and receipt, run `melodee-cli ingest resolve-legacy-path
+  --legacy <old-id> --reviewed <new-id> --receipt-tree-hash <hash> --actor <operator> --reason
+  <evidence-summary>`. This local administrative command rechecks the receipt and records the
+  supplied actor and reason in durable audit evidence; the actor is an operator assertion, not an
+  authenticated identity. It retires only an unleased, un-staged legacy duplicate, and never
+  deletes media. A conflicting review is rejected and an identical retry is idempotent. Existing
+  legacy rows with verified staging receipts recover from that staging without deleting the
+  ambiguous inbound path. These changes remain under validation and security review.
+  Resolution audit retains non-owning historical work-item UUIDs after legitimate catalog
+  deletion. Until a dedicated audited path-purge protocol is implemented, the administrative
+  pre-catalog purge refuses both lossy and encoded occurrence paths before removing any files;
+  do not work around this by deleting storage or audit records manually.
 
 ## Rollback
 

@@ -60,6 +60,19 @@ class SearchCaseTests(unittest.TestCase):
             self.assertFalse(observed[0].exists())
             self.assertEqual(unrelated.read_text(), "preserve")
 
+    def test_concurrent_search_binary_is_allowed(self):
+        with tempfile.TemporaryDirectory() as outer:
+            binary = Path(outer) / "perf_outbox_concurrent-test"
+            binary.touch()
+            with mock.patch.object(sys, "argv", ["case", "--test-binary", str(binary)]), \
+                 mock.patch.dict(os.environ, {
+                     "MELODEE_PERF_OWNED_DATABASE": "melodee_template_0123456789abcdef0123456789abcdef",
+                     "MELODEE__DATABASE__URL": "fixture-only",
+                 }, clear=True), \
+                 mock.patch.object(MODULE.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+                self.assertEqual(MODULE.main(), 0)
+                run.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -737,7 +737,11 @@ impl AuthStore {
             return Err(AuthStoreError::InvalidRateLimitPolicy);
         }
         let expires_at = now + policy.window;
-        let mut tx = pool.begin().await?;
+        let acquisition = crate::metrics::HoldTimer::new(crate::metrics::Metric::RateLimitAcquire);
+        let transaction = pool.begin().await;
+        drop(acquisition);
+        let mut tx = transaction?;
+        let _hold = crate::metrics::HoldTimer::new(crate::metrics::Metric::RateLimitHold);
         sqlx::query("SELECT singleton FROM native_rate_limit_state WHERE singleton FOR UPDATE")
             .fetch_one(&mut *tx)
             .await?;

@@ -181,6 +181,45 @@ mod tests {
     }
 
     #[test]
+    fn legacy_path_review_commands_require_explicit_evidence() {
+        let legacy = Uuid::now_v7().to_string();
+        let reviewed = Uuid::now_v7().to_string();
+        let cli = Cli::try_parse_from([
+            "melodee",
+            "ingest",
+            "resolve-legacy-path",
+            "--legacy",
+            &legacy,
+            "--reviewed",
+            &reviewed,
+            "--receipt-tree-hash",
+            "0",
+            "--actor",
+            "operator",
+            "--reason",
+            "reviewed",
+        ])
+        .expect("valid review arguments");
+        assert!(matches!(
+            cli.command,
+            Commands::Ingest {
+                command: IngestCommands::ResolveLegacyPath { .. }
+            }
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "melodee",
+                "ingest",
+                "resolve-legacy-path",
+                "--legacy",
+                &legacy
+            ])
+            .is_err()
+        );
+        assert!(Cli::try_parse_from(["melodee", "ingest", "legacy-paths"]).is_ok());
+    }
+
+    #[test]
     fn validation_and_publication_batch_commands_are_exposed() {
         for (name, expected_validation) in [("validate", true), ("publish", false)] {
             let cli = Cli::try_parse_from(["melodee", "ingest", name])

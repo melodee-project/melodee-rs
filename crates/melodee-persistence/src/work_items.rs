@@ -590,6 +590,44 @@ impl TryFrom<EventRow> for ReleaseWorkItemEvent {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WorkItemStore;
 
+/// Paths that may participate in a legacy ambiguity decision must retain
+/// their work-item and filesystem history until an audited purge protocol exists.
+pub fn inbound_path_requires_review(path: &str) -> bool {
+    path.contains('\u{fffd}')
+        || path.starts_with("//melodee-unix-hex:")
+        || path.starts_with("//melodee-windows-u16:")
+}
+
+/// One ambiguous pre-upgrade path available for operator review.
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+pub struct LegacyInboundPath {
+    pub id: Uuid,
+    pub source_path: String,
+    pub state: String,
+    pub has_staging_receipt: bool,
+}
+
+/// Reviewed evidence for non-destructive retirement of one legacy duplicate.
+#[derive(Debug)]
+pub struct LegacyPathResolution<'a> {
+    pub legacy_id: Uuid,
+    pub reviewed_id: Uuid,
+    pub reviewed_lossy_path: &'a str,
+    pub receipt_tree_hash: &'a str,
+    pub actor: &'a str,
+    pub reason: &'a str,
+    pub now: OffsetDateTime,
+}
+
+pub(crate) async fn inbound_path_is_unambiguous(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<bool, WorkStoreError> {
+    Ok(sqlx::query_scalar(
+        "SELECT discovery_path_format<>0 OR strpos(source_path,chr(65533))=0 FROM release_work_items WHERE id=$1",
+    ).bind(id).fetch_one(&mut **tx).await?)
+}
+
 impl WorkItemStore {
     /// Persists a newly discovered work item plus its `created` event,
     /// atomically.
@@ -670,7 +708,34 @@ impl WorkItemStore {
         pool: &PgPool,
         item: &ReleaseWorkItem,
     ) -> Result<(ReleaseWorkItem, bool), WorkStoreError> {
+        self.create_or_get_fenced(pool, item, None).await
+    }
+
+    /// Creates or finds a work item while holding the active discovery fence.
+    pub async fn create_or_get_fenced(
+        &self,
+        pool: &PgPool,
+        item: &ReleaseWorkItem,
+        fence: Option<&crate::DiscoveryScanFence>,
+    ) -> Result<(ReleaseWorkItem, bool), WorkStoreError> {
         let mut tx = pool.begin().await?;
+        crate::discovery_scan::lock_fence(&mut tx, fence).await?;
+        // Serialize exact occurrence identity before INSERT. The hash index
+        // accelerates lookup but never substitutes for full path equality.
+        sqlx::query("SELECT lock_inbound_occurrence($1, $2)")
+            .bind(item.source_library_id)
+            .bind(&item.source_path)
+            .execute(&mut *tx)
+            .await?;
+        if let Some(existing) = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items WHERE source_library_id IS NOT DISTINCT FROM $1
+             AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2)
+             AND source_path=$2 AND inbound_active AND (strpos($2,chr(65533))=0 OR discovery_path_format=1)
+             ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE",
+        ).bind(item.source_library_id).bind(&item.source_path).fetch_optional(&mut *tx).await? {
+            tx.commit().await?;
+            return Ok((ReleaseWorkItem::try_from(existing)?, false));
+        }
         let inserted = sqlx::query_as::<_, WorkItemRow>(
             "INSERT INTO release_work_items (
                 id, api_key, source_library_id, target_library_id, source_path,
@@ -751,7 +816,8 @@ impl WorkItemStore {
                 let row = sqlx::query_as::<_, WorkItemRow>(
                     "SELECT * FROM release_work_items
                      WHERE source_library_id IS NOT DISTINCT FROM $1
-                       AND source_path = $2 AND inbound_active
+                       AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2)
+                       AND source_path = $2 AND inbound_active AND (strpos($2,chr(65533))=0 OR discovery_path_format=1)
                      ORDER BY created_at DESC, id DESC LIMIT 1",
                 )
                 .bind(item.source_library_id)
@@ -775,8 +841,9 @@ impl WorkItemStore {
     ) -> Result<Option<ReleaseWorkItem>, WorkStoreError> {
         let row = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items
-             WHERE source_library_id IS NOT DISTINCT FROM $1 AND source_path = $2
-             ORDER BY created_at DESC, id DESC LIMIT 1",
+             WHERE source_library_id IS NOT DISTINCT FROM $1
+               AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path = $2
+             ORDER BY (discovery_path_format=1) DESC, created_at DESC, id DESC LIMIT 1",
         )
         .bind(source_library_id)
         .bind(source_path)
@@ -815,6 +882,11 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        if !inbound_path_is_unambiguous(&mut tx, id).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "legacy inbound path is ambiguous and requires operator review",
+            ));
+        }
         let inserted = sqlx::query_as::<_, StagingHandoffRow>(
             "INSERT INTO release_work_item_staging_handoffs (
                 work_item_id, staging_relative_path, source_generation, status, intended_at
@@ -844,6 +916,119 @@ impl WorkItemStore {
         }
         tx.commit().await?;
         StagingHandoff::try_from(row)
+    }
+
+    /// Fence legacy lossy occurrence paths before reading or acquiring media.
+    pub async fn verify_inbound_path_identity(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        now: OffsetDateTime,
+    ) -> Result<bool, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        let safe = inbound_path_is_unambiguous(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(safe)
+    }
+
+    /// List a bounded page of historical lossy paths for operator review.
+    pub async fn list_legacy_inbound_paths(
+        &self,
+        pool: &PgPool,
+        after: Option<Uuid>,
+    ) -> Result<Vec<LegacyInboundPath>, WorkStoreError> {
+        Ok(sqlx::query_as::<_, LegacyInboundPath>(
+            "SELECT item.id,item.source_path,item.state,EXISTS(SELECT 1 FROM release_work_item_staging_handoffs h WHERE h.work_item_id=item.id AND h.status IN ('staged','inbound_removed')) AS has_staging_receipt
+             FROM release_work_items item WHERE item.discovery_path_format=0 AND strpos(item.source_path,chr(65533))>0
+               AND item.inbound_active AND ($1::uuid IS NULL OR item.id>$1) ORDER BY item.id LIMIT 100",
+        ).bind(after).fetch_all(pool).await?)
+    }
+
+    /// Record an explicit reviewed binding and retire the legacy duplicate.
+    /// The caller must independently verify the reviewed staging receipt.
+    pub async fn resolve_legacy_inbound_path(
+        &self,
+        pool: &PgPool,
+        request: &LegacyPathResolution<'_>,
+    ) -> Result<bool, WorkStoreError> {
+        if request.legacy_id == request.reviewed_id
+            || request.actor.trim().is_empty()
+            || request.actor.chars().count() > 256
+            || request.reason.trim().is_empty()
+            || request.reason.chars().count() > 4096
+            || request.receipt_tree_hash.len() != 64
+            || !request
+                .receipt_tree_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(WorkStoreError::InvalidRequest(
+                "invalid legacy path review evidence",
+            ));
+        }
+        let mut tx = pool.begin().await?;
+        let locked = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM release_work_items WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        )
+        .bind([request.legacy_id, request.reviewed_id].as_slice())
+        .fetch_all(&mut *tx)
+        .await?;
+        if locked.len() != 2 {
+            return Err(WorkStoreError::InvalidRequest(
+                "legacy or reviewed work item missing",
+            ));
+        }
+        if let Some((reviewed, hash, actor, reason)) = sqlx::query_as::<_, (Uuid,String,String,String)>(
+            "SELECT reviewed_work_item_id,receipt_tree_hash,actor,reason FROM ingest_legacy_path_resolutions WHERE legacy_work_item_id=$1",
+        ).bind(request.legacy_id).fetch_optional(&mut *tx).await? {
+            if reviewed==request.reviewed_id && hash==request.receipt_tree_hash && actor==request.actor && reason==request.reason {
+                tx.commit().await?;
+                return Ok(false);
+            }
+            return Err(WorkStoreError::InvalidRequest("legacy path already resolved with different evidence"));
+        }
+        let legacy = lock_for_update(&mut tx, request.legacy_id).await?;
+        let reviewed = lock_for_update(&mut tx, request.reviewed_id).await?;
+        let formats = sqlx::query_as::<_, (i16,i16,bool)>("SELECT (SELECT discovery_path_format FROM release_work_items WHERE id=$1),(SELECT discovery_path_format FROM release_work_items WHERE id=$2),(SELECT inbound_active FROM release_work_items WHERE id=$1)")
+            .bind(request.legacy_id).bind(request.reviewed_id).fetch_one(&mut *tx).await?;
+        if formats != (0, 1, true)
+            || legacy.source_library_id != reviewed.source_library_id
+            || legacy.source_path != request.reviewed_lossy_path
+            || !legacy.source_path.contains('\u{fffd}')
+            || legacy.lease_owner.is_some()
+        {
+            return Err(WorkStoreError::InvalidRequest(
+                "legacy occurrence binding is ambiguous or leased",
+            ));
+        }
+        legacy.state.ensure_transition(
+            IngestionState::Ignored,
+            TransitionKind::LegacyPathResolution,
+        )?;
+        let receipt_ok = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM release_work_item_staging_handoffs WHERE work_item_id=$1 AND status IN ('staged','inbound_removed') AND tree_hash=$2)")
+            .bind(reviewed.id).bind(request.receipt_tree_hash).fetch_one(&mut *tx).await?;
+        let legacy_has_handoff = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM release_work_item_staging_handoffs WHERE work_item_id=$1)",
+        )
+        .bind(legacy.id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !receipt_ok || legacy_has_handoff {
+            return Err(WorkStoreError::InvalidRequest(
+                "review requires a verified target receipt and no legacy handoff",
+            ));
+        }
+        sqlx::query("INSERT INTO ingest_legacy_path_resolutions (legacy_work_item_id,reviewed_work_item_id,receipt_tree_hash,actor,reason,resolved_at) VALUES ($1,$2,$3,$4,$5,$6)")
+            .bind(legacy.id).bind(reviewed.id).bind(request.receipt_tree_hash).bind(request.actor).bind(request.reason).bind(request.now).execute(&mut *tx).await?;
+        sqlx::query("UPDATE release_work_items SET state='ignored',state_reason='legacy-path-resolved',inbound_active=false,completed_at=$2,updated_at=$2 WHERE id=$1")
+            .bind(legacy.id).bind(request.now).execute(&mut *tx).await?;
+        insert_event(&mut tx, legacy.id, WorkEventType::Transitioned, Some(legacy.state), Some(IngestionState::Ignored), Some("legacy-path-resolved"), None, legacy.correlation_id, request.now,
+            Some(serde_json::json!({"reviewedWorkItemId": reviewed.id, "receiptTreeHash": request.receipt_tree_hash, "actor": request.actor, "reason": request.reason}))).await?;
+        tx.commit().await?;
+        Ok(true)
     }
 
     pub async fn staging_handoff(
@@ -959,14 +1144,37 @@ impl WorkItemStore {
         source_generation: &str,
         now: OffsetDateTime,
     ) -> Result<bool, WorkStoreError> {
+        self.inbound_occurrence_is_acquired_fenced(
+            pool,
+            source_library_id,
+            source_path,
+            source_generation,
+            now,
+            None,
+        )
+        .await
+    }
+
+    /// Checks inbound custody and updates its generation under the scan fence.
+    pub async fn inbound_occurrence_is_acquired_fenced(
+        &self,
+        pool: &PgPool,
+        source_library_id: Option<Uuid>,
+        source_path: &str,
+        source_generation: &str,
+        now: OffsetDateTime,
+        fence: Option<&crate::DiscoveryScanFence>,
+    ) -> Result<bool, WorkStoreError> {
         let mut tx = pool.begin().await?;
+        crate::discovery_scan::lock_fence(&mut tx, fence).await?;
         let row = sqlx::query_as::<_, (Uuid, String)>(
             "SELECT w.id, h.source_generation
              FROM release_work_items w
              JOIN release_work_item_staging_handoffs h ON h.work_item_id = w.id
              WHERE w.inbound_active
                AND w.source_library_id IS NOT DISTINCT FROM $1
-               AND w.source_path = $2
+               AND ingest_occurrence_hash(w.source_path)=ingest_occurrence_hash($2) AND w.source_path = $2
+               AND (strpos($2,chr(65533))=0 OR w.discovery_path_format=1)
                AND h.status IN ('staged', 'inbound_removed')
              ORDER BY w.created_at DESC, w.id DESC LIMIT 1 FOR UPDATE",
         )
@@ -1009,7 +1217,38 @@ impl WorkItemStore {
         observed_at: OffsetDateTime,
         files: &[SettlingSnapshotFile],
     ) -> Result<i64, WorkStoreError> {
+        self.persist_settling_snapshot_fenced(
+            pool,
+            work_item_id,
+            signature,
+            file_count,
+            total_bytes,
+            ready_marker_seen,
+            bypassed_settling,
+            observed_at,
+            files,
+            None,
+        )
+        .await
+    }
+
+    /// Persists snapshot evidence under a discovery scan fence.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn persist_settling_snapshot_fenced(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        signature: &str,
+        file_count: i32,
+        total_bytes: i64,
+        ready_marker_seen: bool,
+        bypassed_settling: bool,
+        observed_at: OffsetDateTime,
+        files: &[SettlingSnapshotFile],
+        fence: Option<&crate::DiscoveryScanFence>,
+    ) -> Result<i64, WorkStoreError> {
         let mut tx = pool.begin().await?;
+        crate::discovery_scan::lock_fence(&mut tx, fence).await?;
         let snapshot = sqlx::query_as::<_, (i64,)>(
             "INSERT INTO release_work_item_settling_snapshots (
                 work_item_id, observed_at, signature, file_count, total_bytes,
@@ -1055,7 +1294,7 @@ impl WorkItemStore {
     ) -> Result<Option<SettlingSnapshot>, WorkStoreError> {
         let row = sqlx::query_as::<_, SettlingSnapshotRow>(
             "SELECT * FROM release_work_item_settling_snapshots
-             WHERE work_item_id = $1
+             WHERE work_item_id = $1 AND capture_complete
              ORDER BY observed_at DESC, id DESC
              LIMIT 1",
         )
@@ -2125,16 +2364,21 @@ impl WorkItemStore {
             return Err(WorkStoreError::InvalidRequest("purge path evidence"));
         }
         let mut tx = pool.begin().await?;
-        let row = sqlx::query_as::<_, (String,)>(
-            "SELECT state FROM release_work_items WHERE id = $1 FOR UPDATE",
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT state, source_path FROM release_work_items WHERE id = $1 FOR UPDATE",
         )
         .bind(work_item_id)
         .fetch_optional(&mut *tx)
         .await?;
-        let Some((state,)) = row else {
+        let Some((state, source_path)) = row else {
             tx.rollback().await?;
             return Err(WorkStoreError::NotFound(work_item_id));
         };
+        if inbound_path_requires_review(&source_path) {
+            return Err(WorkStoreError::InvalidRequest(
+                "legacy or encoded inbound path history requires audited retention",
+            ));
+        }
         // ADR-0211: an operator may hard-delete a pre-catalog work item at any
         // lifecycle state. Parsing still fails closed on a corrupt state
         // value; the row lock above fences a concurrent transition, and the
@@ -2219,6 +2463,35 @@ impl WorkItemStore {
         last_observed_at: OffsetDateTime,
         state_reason: Option<&str>,
     ) -> Result<(), WorkStoreError> {
+        self.upsert_settling_progress_fenced(
+            pool,
+            work_item_id,
+            stable_since,
+            latest_snapshot_id,
+            last_observed_at,
+            state_reason,
+            None,
+        )
+        .await
+    }
+
+    /// Updates settling progress under a discovery scan fence.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn upsert_settling_progress_fenced(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        stable_since: Option<OffsetDateTime>,
+        latest_snapshot_id: Option<i64>,
+        last_observed_at: OffsetDateTime,
+        state_reason: Option<&str>,
+        fence: Option<&crate::DiscoveryScanFence>,
+    ) -> Result<(), WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        crate::discovery_scan::lock_fence(&mut tx, fence).await?;
+        if let Some(fence) = fence {
+            crate::settling_capture::lock_item(&mut tx, work_item_id, fence).await?;
+        }
         sqlx::query(
             "UPDATE release_work_items
              SET stable_since = $2,
@@ -2233,8 +2506,9 @@ impl WorkItemStore {
         .bind(latest_snapshot_id)
         .bind(last_observed_at)
         .bind(state_reason)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -2348,7 +2622,22 @@ impl WorkItemStore {
         reason: Option<&str>,
         now: OffsetDateTime,
     ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        self.system_transition_fenced(pool, id, to, reason, now, None)
+            .await
+    }
+
+    /// Applies a discovery transition only while its scan retains ownership.
+    pub async fn system_transition_fenced(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        to: IngestionState,
+        reason: Option<&str>,
+        now: OffsetDateTime,
+        fence: Option<&crate::DiscoveryScanFence>,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
         let mut tx = pool.begin().await?;
+        crate::discovery_scan::lock_fence(&mut tx, fence).await?;
         let item = lock_for_update(&mut tx, id).await?;
         if matches!(
             item.state,
@@ -2452,6 +2741,9 @@ impl WorkItemStore {
                 }
             }
             TransitionKind::System => {
+                return Err(WorkStoreError::InvalidState(id, item.state));
+            }
+            TransitionKind::LegacyPathResolution => {
                 return Err(WorkStoreError::InvalidState(id, item.state));
             }
         }

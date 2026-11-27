@@ -109,6 +109,7 @@ pub const DEFINITIONS: &[RuntimeDefinition] = &[
     ("MELODEE__SEARCH__ROOT", None, Host),
     ("MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE", Some("1000"), Number(1, u32::MAX as i64)),
     ("MELODEE__SERVER__BIND", Some("127.0.0.1:8080"), Host),
+    ("MELODEE__SERVER__MAX_CONNECTIONS", Some("0"), Number(0, 65536)),
     ("MELODEE__SERVER__TRUSTED_PROXIES", None, Host),
     ("MELODEE__SHUTDOWN__GRACE_SECONDS", Some("30"), Number(1, 600)),
     ("MELODEE__STORAGE__ASSET_ROOT", None, Host),

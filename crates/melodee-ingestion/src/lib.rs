@@ -8,7 +8,9 @@
 mod acquisition;
 mod admission;
 mod config;
+mod custody;
 mod deletion;
+mod discovery_scan;
 mod error;
 mod gate;
 mod inspect;
@@ -26,9 +28,12 @@ mod validate;
 #[doc(hidden)]
 pub use admission::saturate_for_test as saturate_ingestion_admission_for_test;
 
+#[doc(hidden)]
+pub use admission::acquire_ingestion_admission;
+
 pub use acquisition::{
-    AcquisitionError, OwnedSource, acquire_owned_source, owned_source_root, source_generation,
-    verify_owned_source,
+    AcquisitionError, LegacyPathReview, OwnedSource, acquire_owned_source, owned_source_root,
+    resolve_legacy_inbound_path, source_generation, verify_owned_source,
 };
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
@@ -63,6 +68,9 @@ pub use publication_worker::{
     PublicationStats, ValidationStats, publish_once, start_publication_loop, start_validation_loop,
     validate_once,
 };
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use reconcile::SnapshotStallTestHook;
 pub use reconcile::{
     ReconcileResult, ReconcileStats, Reconciler, reconcile_all_sources, reconcile_inbound_source,
 };
@@ -70,6 +78,9 @@ pub use scheduler::{SchedulerHandle, StopToken, start_reconciliation_loop};
 pub use snapshot::{
     CandidateSnapshot, SnapshotCaptureError, SnapshotFile, snapshot_release_directory,
 };
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use source::DiscoveryResolveTestHook;
 pub use source::{
     DiscoveredCandidate, InboundDiscoverySnapshot, SourceDiscoveryError, candidate_relative_path,
     discover_release_candidates,

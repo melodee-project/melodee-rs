@@ -121,6 +121,11 @@ async fn artist_merge_and_scrobble_wait_in_parent_order_and_preserve_popularity(
     };
     let merge_pool = db.pool.clone();
     let play_pool = db.pool.clone();
+    let probes = melodee_persistence::metrics::snapshot()
+        .into_iter()
+        .find(|metric| metric.name == "scrobble_wait_probe")
+        .expect("probe metric")
+        .count;
     let merge_task =
         tokio::spawn(async move { CatalogStore.merge_artist(&merge_pool, &merge, "race").await });
     let play_task = tokio::spawn(async move {
@@ -139,10 +144,12 @@ async fn artist_merge_and_scrobble_wait_in_parent_order_and_preserve_popularity(
         loop {
             let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'")
                 .fetch_one(&db.pool).await.expect("count waiters");
-            if waiting >= 2 { break; }
+            let observed = melodee_persistence::metrics::snapshot().into_iter()
+                .find(|metric| metric.name == "scrobble_wait_probe").expect("probe metric").count;
+            if waiting >= 1 && observed > probes { break; }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
-    }).await.expect("both operations wait on parent");
+    }).await.expect("merge waits and scrobble probes parent");
     holder.commit().await.expect("release parent");
     let (merged, played) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
         (

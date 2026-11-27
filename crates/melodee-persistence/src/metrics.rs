@@ -41,10 +41,14 @@ pub enum Metric {
     SearchSnapshotHold,
     AdminStatsHeadlineAcquire,
     AdminStatsHeadlineHold,
+    ScrobbleWaitProbe,
+    ScrobbleWaitAdmission,
+    RateLimitAcquire,
+    RateLimitHold,
 }
 
 impl Metric {
-    pub const ALL: [Metric; 20] = [
+    pub const ALL: [Metric; 24] = [
         Metric::SearchOutboxPass,
         Metric::SearchRebuildPage,
         Metric::SearchQuery,
@@ -65,6 +69,10 @@ impl Metric {
         Metric::SearchSnapshotHold,
         Metric::AdminStatsHeadlineAcquire,
         Metric::AdminStatsHeadlineHold,
+        Metric::ScrobbleWaitProbe,
+        Metric::ScrobbleWaitAdmission,
+        Metric::RateLimitAcquire,
+        Metric::RateLimitHold,
     ];
 
     const fn index(self) -> usize {
@@ -89,6 +97,10 @@ impl Metric {
             Metric::SearchSnapshotHold => 17,
             Metric::AdminStatsHeadlineAcquire => 18,
             Metric::AdminStatsHeadlineHold => 19,
+            Metric::ScrobbleWaitProbe => 20,
+            Metric::ScrobbleWaitAdmission => 21,
+            Metric::RateLimitAcquire => 22,
+            Metric::RateLimitHold => 23,
         }
     }
 
@@ -115,6 +127,10 @@ impl Metric {
             Metric::SearchSnapshotHold => "search_snapshot_hold",
             Metric::AdminStatsHeadlineAcquire => "admin_stats_headline_acquire",
             Metric::AdminStatsHeadlineHold => "admin_stats_headline_hold",
+            Metric::ScrobbleWaitProbe => "scrobble_wait_probe",
+            Metric::ScrobbleWaitAdmission => "scrobble_wait_admission",
+            Metric::RateLimitAcquire => "rate_limit_acquire",
+            Metric::RateLimitHold => "rate_limit_hold",
         }
     }
 }
@@ -337,6 +353,10 @@ mod tests {
                 "search_snapshot_hold",
                 "admin_stats_headline_acquire",
                 "admin_stats_headline_hold",
+                "scrobble_wait_probe",
+                "scrobble_wait_admission",
+                "rate_limit_acquire",
+                "rate_limit_hold",
             ]
         );
     }

@@ -37,16 +37,31 @@ Per-user Artist play count increments once per distinct Artist. This corrects
 the duplicate-credit inconsistency and changes the affected popularity result;
 it is not a behavior-identical rewrite.
 
-A scrobble additionally acquires Artist parent key-share locks in UUID order,
-then the Release parent key-share lock, before its Track lock. It revalidates
-the Release and exact primary-Artist set after taking the Track lock and retries
-a changed binding. One forward-only cursor emits two sorted passes over Artist
-IDs using one statement snapshot. The first acquires parent locks and the second
-is compared in bounded pages to a fresh cursor after the Track lock. A partial
-`(track_id, artist_id)` index supports the exact primary-credit predicate. The
-ordered index plan must be measured to confirm the database does not need an
-unbounded cursor materialization. This avoids a cycle with catalog corrections and
-hard deletion, which may already hold parent locks when requesting Track locks.
+A scrobble first takes `ACCESS SHARE NOWAIT` table locks for the four binding
+tables, then locks its Track and streams primary Artist IDs from a single
+unordered forward-only cursor in pages of at most 256. It attempts Artist and
+Release parent key-share locks with `NOWAIT`. If a parent is busy, it rolls
+back the entire attempt before waiting for that bounded set in a separate
+transaction, then retries with a fresh binding. It never waits for a parent
+while holding the Track. The Track lock fences committed Release and primary
+credit changes: the statement-level credit triggers also acquire the Track
+before their transactions can commit. Each successful play and its derived
+state still commit together. Repeated stale-binding retries are bounded and
+return the existing database-error class after eight attempts; no partial play
+is kept. Mere contention does not consume those attempts. Parent and Track
+availability are probed with `NOWAIT`; unsuccessful probes release their
+connection and retry with jitter. Process-wide admission limits read-only probes
+to two, and each task retains its permit until its database statement and
+rollback terminate even if its requester is cancelled. There is no total
+deadline: a request can remain pending while a
+correction holds a lock indefinitely, preserving existing play behavior. The
+number of request futures waiting for admission is not bounded by this design
+and remains an open resource-admission limitation.
+Probe transactions use a one-second `lock_timeout` as a fallback for relation
+locks; the active play transaction does not alter the session's setting.
+The cursor has neither an ordering nor a distinct operation that could force
+unbounded sort or rewind materialization. Actual plans remain a required
+representative measurement.
 
 Track mutations that may affect multiple existing rows must acquire their Track
 locks in UUID order before issuing the update. Hard deletion must use the same

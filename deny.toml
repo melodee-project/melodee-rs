@@ -32,6 +32,12 @@ allow = [
   "Zlib",
 ]
 
+# Windows capability traversal transitively requires winx. Its LLVM exception
+# relaxes Apache-2.0 redistribution terms; see ADR-0218. Keep this scoped.
+[[licenses.exceptions]]
+crate = "winx"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
 [bans]
 # Multiple major versions are expected in this graph: sqlx/rustls/rand pull
 # distinct major lines (e.g. base64 0.21+0.22, getrandom 0.2/0.3/0.4) that

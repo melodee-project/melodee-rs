@@ -88,6 +88,12 @@ pub struct IngestionConfig {
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub acquisition_test_hook: Option<crate::acquisition::AcquisitionTestHook>,
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub discovery_resolve_test_hook: Option<crate::source::DiscoveryResolveTestHook>,
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub snapshot_stall_test_hook: Option<crate::reconcile::SnapshotStallTestHook>,
 }
 
 impl IngestionConfig {
@@ -133,6 +139,10 @@ impl IngestionConfig {
             publication_copy_test_barrier: None,
             #[cfg(feature = "test-support")]
             acquisition_test_hook: None,
+            #[cfg(feature = "test-support")]
+            discovery_resolve_test_hook: None,
+            #[cfg(feature = "test-support")]
+            snapshot_stall_test_hook: None,
         }
     }
 
@@ -221,6 +231,10 @@ impl IngestionConfig {
             publication_copy_test_barrier: None,
             #[cfg(feature = "test-support")]
             acquisition_test_hook: None,
+            #[cfg(feature = "test-support")]
+            discovery_resolve_test_hook: None,
+            #[cfg(feature = "test-support")]
+            snapshot_stall_test_hook: None,
         })
     }
 

@@ -1,24 +1,63 @@
 //! Discovery and settling reconciliation.
 
-use std::collections::HashSet;
 use std::time::Instant;
 
 use melodee_domain::IngestionState;
-use melodee_persistence::{SettlingSnapshotFile, WorkItemStore};
+use melodee_persistence::{
+    SettlingObservation, SettlingSnapshotFile, StagedSnapshotCompletion, WorkItemStore,
+};
 use sqlx::PgPool;
 use time::{Duration, OffsetDateTime};
 use tracing::{debug, instrument, warn};
 use uuid::Uuid;
 
 use crate::{
-    acquisition::source_generation,
     candidate_relative_path,
     config::InboundSource,
     config::IngestionConfig,
+    discovery_scan,
     error::{IngestionError, Result},
-    snapshot::{CandidateSnapshot, snapshot_release_directory},
-    source::discover_release_candidates,
+    snapshot::CandidateSnapshot,
 };
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[derive(Debug, Clone, Default)]
+pub struct SnapshotStallTestHook {
+    state: std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+    started: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    finished: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(feature = "test-support")]
+impl SnapshotStallTestHook {
+    pub fn started(&self) -> bool {
+        self.started.load(std::sync::atomic::Ordering::Acquire)
+    }
+    pub fn finished(&self) -> bool {
+        self.finished.load(std::sync::atomic::Ordering::Acquire)
+    }
+    pub fn release(&self) {
+        let (lock, condition) = &*self.state;
+        *lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+        condition.notify_all();
+    }
+    fn pause(&self) {
+        self.started
+            .store(true, std::sync::atomic::Ordering::Release);
+        let (lock, condition) = &*self.state;
+        let mut released = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while !*released {
+            released = condition
+                .wait(released)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ReconcileStats {
@@ -102,297 +141,381 @@ pub async fn reconcile_inbound_source(
     source: &InboundSource,
     now: OffsetDateTime,
 ) -> Result<ReconcileResult> {
+    reconcile_inbound_source_with_wait(
+        config,
+        store,
+        pool,
+        source,
+        now,
+        std::time::Duration::from_secs(30),
+        false,
+    )
+    .await
+}
+
+pub(crate) async fn reconcile_inbound_source_with_wait(
+    config: &IngestionConfig,
+    store: &WorkItemStore,
+    pool: &PgPool,
+    source: &InboundSource,
+    now: OffsetDateTime,
+    wait: std::time::Duration,
+    bounded_turn: bool,
+) -> Result<ReconcileResult> {
+    loop {
+        match reconcile_inbound_source_turn(config, store, pool, source, now, wait, bounded_turn)
+            .await?
+        {
+            ScanTurnOutcome::Complete(result) => return Ok(result),
+            ScanTurnOutcome::Reobserve if bounded_turn => {
+                return Err(IngestionError::Persistence(
+                    melodee_persistence::WorkStoreError::DiscoveryScanIncomplete(
+                        source.name.clone(),
+                    ),
+                ));
+            }
+            ScanTurnOutcome::Reobserve => {}
+        }
+    }
+}
+
+enum ScanTurnOutcome {
+    Complete(ReconcileResult),
+    Reobserve,
+}
+
+async fn reconcile_inbound_source_turn(
+    config: &IngestionConfig,
+    store: &WorkItemStore,
+    pool: &PgPool,
+    source: &InboundSource,
+    now: OffsetDateTime,
+    wait: std::time::Duration,
+    bounded_turn: bool,
+) -> Result<ScanTurnOutcome> {
     let started = Instant::now();
     let mut stats = ReconcileStats::default();
-    let mut observed = HashSet::<String>::new();
 
     let task_source = source.clone();
-    let discovery = crate::admission::run(move || discover_release_candidates(&task_source))
+    let root = crate::admission::run(move || crate::source::GuardedRoot::open(task_source))
         .await
-        .map_err(IngestionError::InspectionTask)?;
-    let candidates = match discovery {
-        Ok(candidates) => candidates,
-        Err(error) => {
-            warn!(
-                source = %source.name,
-                source_root = %source.root.display(),
-                error = %error,
-                "source discovery failed"
-            );
-            return Err(IngestionError::Source(error));
-        }
+        .map_err(IngestionError::InspectionTask)??;
+    #[cfg(feature = "test-support")]
+    let root = {
+        let mut root = root;
+        root.set_test_hook(config.discovery_resolve_test_hook.clone());
+        root
     };
-
-    for candidate in candidates {
-        let relative = candidate_relative_path(&candidate.relative_path);
-        observed.insert(relative.clone());
-        stats.candidates_seen += 1;
-
-        let candidate_path = candidate.absolute_path.clone();
-        let generation = match crate::admission::run(move || source_generation(&candidate_path))
-            .await
-            .map_err(IngestionError::InspectionTask)?
-        {
-            Ok(generation) => generation,
-            Err(error) => {
-                stats.errors += 1;
-                warn!(source = %source.name, source_path = %relative, %error, "unable to identify inbound occurrence");
-                continue;
-            }
-        };
-        match store
-            .inbound_occurrence_is_acquired(pool, source.id, &relative, &generation, now)
-            .await
-        {
-            Ok(true) => continue,
-            Ok(false) => {}
-            Err(error) => {
-                stats.errors += 1;
-                warn!(source = %source.name, source_path = %relative, %error, "unable to resolve inbound occurrence");
-                continue;
-            }
-        }
-
-        let mut item = match get_or_create_work_item(store, pool, source.id, &relative, now).await {
-            Ok((item, created)) => {
-                if created {
-                    stats.new_work_items += 1;
-                } else {
-                    stats.existing_work_items += 1;
+    let fence = discovery_scan::acquire(pool, source, wait).await?;
+    while let Some((partition, replay)) =
+        discovery_scan::next_partition(pool, source, &fence, bounded_turn).await?
+    {
+        let partition_errors = stats.errors;
+        let reader_root = root.clone();
+        let mut reader =
+            crate::admission::run(move || crate::source::CandidateReader::open(reader_root))
+                .await
+                .map_err(IngestionError::InspectionTask)??;
+        loop {
+            discovery_scan::renew(pool, &fence).await?;
+            let verify_root = root.clone();
+            crate::admission::run(move || verify_root.verify_current())
+                .await
+                .map_err(IngestionError::InspectionTask)??;
+            let (next, candidates, finished) =
+                crate::admission::run(move || reader.next_batch(partition))
+                    .await
+                    .map_err(IngestionError::InspectionTask)??;
+            reader = next;
+            for name in candidates {
+                let verify_root = root.clone();
+                crate::admission::run(move || verify_root.verify_current())
+                    .await
+                    .map_err(IngestionError::InspectionTask)??;
+                let candidate_root = root.clone();
+                let Some(candidate) = crate::admission::run(move || candidate_root.resolve(&name))
+                    .await
+                    .map_err(IngestionError::InspectionTask)??
+                else {
+                    continue;
+                };
+                let relative = candidate_relative_path(&candidate.relative_path);
+                stats.candidates_seen += 1;
+                let legacy_relative =
+                    crate::source::legacy_candidate_relative_path(&candidate.relative_path);
+                if legacy_relative.contains('\u{fffd}') {
+                    // A pre-upgrade lossy row may represent one of several
+                    // byte-distinct paths. Preserve its observation until an
+                    // operator resolves the historical ambiguity.
+                    discovery_scan::mark_legacy_seen(
+                        pool,
+                        source,
+                        &fence,
+                        &legacy_relative,
+                        partition,
+                    )
+                    .await?;
                 }
-                item
-            }
-            Err(error) => {
-                stats.errors += 1;
-                warn!(
-                    source = %source.name,
-                    source_path = %relative,
-                    error = %error,
-                    "unable to create durable work item"
-                );
-                continue;
-            }
-        };
+                discovery_scan::mark_seen(pool, source, &fence, &relative, partition).await?;
+                let previous_errors = stats.errors;
+                'candidate: {
+                    let generation_root = root.clone();
+                    let generation_candidate = candidate.clone();
+                    let generation = match crate::admission::run(move || {
+                        generation_root.generation(&generation_candidate)
+                    })
+                    .await
+                    .map_err(IngestionError::InspectionTask)?
+                    {
+                        Ok(generation) => generation,
+                        Err(error) => {
+                            stats.errors += 1;
+                            warn!(source = %source.name, source_path = %relative, %error, "unable to identify inbound occurrence");
+                            break 'candidate;
+                        }
+                    };
+                    match store
+                        .inbound_occurrence_is_acquired_fenced(
+                            pool,
+                            source.id,
+                            &relative,
+                            &generation,
+                            now,
+                            Some(&fence),
+                        )
+                        .await
+                    {
+                        Ok(true) => break 'candidate,
+                        Ok(false) => {}
+                        Err(error) => {
+                            stats.errors += 1;
+                            warn!(source = %source.name, source_path = %relative, %error, "unable to resolve inbound occurrence");
+                            break 'candidate;
+                        }
+                    }
 
-        let candidate_path = candidate.absolute_path.clone();
-        let ready_marker = config.ready_marker_name.clone();
-        let snapshot = match crate::admission::run(move || {
-            snapshot_release_directory(&candidate_path, &ready_marker)
-        })
-        .await
-        .map_err(IngestionError::InspectionTask)?
-        {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                stats.errors += 1;
-                warn!(
-                    source = %source.name,
-                    source_path = %relative,
-                    error = %error,
-                    "snapshot capture failed"
-                );
-                let _ = store
-                    .upsert_settling_progress(
+                    let item = match get_or_create_work_item(
+                        store, pool, source.id, &relative, now, &fence,
+                    )
+                    .await
+                    {
+                        Ok((item, created)) => {
+                            if created {
+                                stats.new_work_items += 1;
+                            } else {
+                                stats.existing_work_items += 1;
+                            }
+                            item
+                        }
+                        Err(error) => {
+                            stats.errors += 1;
+                            warn!(
+                                source = %source.name,
+                                source_path = %relative,
+                                error = %error,
+                                "unable to create durable work item"
+                            );
+                            break 'candidate;
+                        }
+                    };
+
+                    // A newly created occurrence must be marked too; the first mark
+                    // above can only update an already-existing active work item.
+                    let done =
+                        discovery_scan::mark_seen(pool, source, &fence, &relative, partition)
+                            .await?;
+                    let (snapshot, sealed_snapshot) = match capture_staged_snapshot(
+                        store,
                         pool,
                         item.id,
-                        item.stable_since,
-                        item.latest_settling_snapshot_id,
                         now,
-                        Some("snapshot-error"),
+                        &fence,
+                        root.clone(),
+                        candidate.clone(),
+                        config.ready_marker_name.clone(),
+                        #[cfg(feature = "test-support")]
+                        config.snapshot_stall_test_hook.clone(),
                     )
-                    .await;
-                continue;
-            }
-        };
+                    .await
+                    {
+                        Ok(snapshot) => snapshot,
+                        Err(error) => {
+                            stats.errors += 1;
+                            warn!(
+                                source = %source.name,
+                                source_path = %relative,
+                                error = %error,
+                                "snapshot capture failed"
+                            );
+                            store
+                                .upsert_settling_progress_fenced(
+                                    pool,
+                                    item.id,
+                                    item.stable_since,
+                                    item.latest_settling_snapshot_id,
+                                    now,
+                                    Some("snapshot-error"),
+                                    Some(&fence),
+                                )
+                                .await
+                                .map_err(IngestionError::Persistence)?;
+                            break 'candidate;
+                        }
+                    };
+                    let staged_snapshot_id = sealed_snapshot.snapshot_id();
 
-        let latest_snapshot = match store.latest_snapshot(pool, item.id).await {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                stats.errors += 1;
-                warn!(
-                    source = %source.name,
-                    source_path = %relative,
-                    error = %error,
-                    "latest snapshot lookup failed"
-                );
-                continue;
-            }
-        };
+                    let verify_root = root.clone();
+                    let verify_candidate = candidate;
+                    crate::admission::run(move || {
+                        verify_root.verify_candidate(&verify_candidate)?;
+                        verify_root.verify_current()
+                    })
+                    .await
+                    .map_err(IngestionError::InspectionTask)??;
 
-        let signature_changed = latest_snapshot
-            .as_ref()
-            .is_none_or(|current| current.signature != snapshot.signature);
+                    let latest_snapshot = match store.latest_snapshot(pool, item.id).await {
+                        Ok(snapshot) => snapshot,
+                        Err(error) => {
+                            stats.errors += 1;
+                            warn!(
+                                source = %source.name,
+                                source_path = %relative,
+                                error = %error,
+                                "latest snapshot lookup failed"
+                            );
+                            break 'candidate;
+                        }
+                    };
 
-        let mut snapshot_id = latest_snapshot.as_ref().map(|current| current.id);
-        let mut bypassed_settling = latest_snapshot
-            .as_ref()
-            .is_none_or(|current| current.bypassed_settling);
+                    let signature_changed = latest_snapshot.as_ref().is_none_or(|current| {
+                        !crate::snapshot::signatures_equal(&current.signature, &snapshot.signature)
+                    });
+                    if replay
+                        && done
+                        && !signature_changed
+                        && item.state_reason.as_deref() != Some("source-missing")
+                    {
+                        store
+                            .mark_staged_snapshot_discarding(
+                                pool,
+                                staged_snapshot_id,
+                                item.id,
+                                &fence,
+                            )
+                            .await?;
+                        break 'candidate;
+                    }
 
-        if signature_changed {
-            stats.snapshot_changed += 1;
-            let files = snapshot_rows(&snapshot.files);
-            match persist_snapshot(&snapshot, pool, &item, now, files).await {
-                Ok(id) => {
-                    stats.settling_updated += 1;
-                    snapshot_id = Some(id);
-                    bypassed_settling = snapshot.ready_marker_seen
-                        && settling_period_for_snapshot(config, &snapshot) == Duration::ZERO;
-                }
-                Err(error) => {
-                    stats.errors += 1;
-                    warn!(
-                        source = %source.name,
-                        source_path = %relative,
-                        error = %error,
-                        "snapshot persistence failed"
+                    let decision = decide_settling_transition(
+                        item.state,
+                        signature_changed,
+                        now,
+                        item.stable_since,
+                        &snapshot,
+                        settling_period_for_snapshot(config, &snapshot),
                     );
-                    continue;
-                }
-            }
-        }
-
-        if !snapshot.ready_marker_seen && !bypassed_settling {
-            // Keep previous marker bypass choice unless we took a fresh snapshot.
-            bypassed_settling = latest_snapshot
-                .as_ref()
-                .map(|previous| previous.bypassed_settling)
-                .unwrap_or(bypassed_settling);
-        }
-
-        let decision = decide_settling_transition(
-            item.state,
-            signature_changed,
-            now,
-            item.stable_since,
-            &snapshot,
-            settling_period_for_snapshot(config, &snapshot),
-        );
-
-        if item.state == IngestionState::Ready && signature_changed {
-            stats.ready_reverted += 1;
-        }
-
-        if let Some(next_state) = decision.next_state
-            && item.state != next_state
-        {
-            match store
-                .system_transition(pool, item.id, next_state, Some(decision.reason), now)
-                .await
-            {
-                Ok(updated) => {
-                    item = updated;
-                    if item.state == IngestionState::Ready {
+                    let next_state = decision.next_state.filter(|state| *state != item.state);
+                    let resulting_state = next_state.unwrap_or(item.state);
+                    let state_reason = if signature_changed {
+                        if snapshot.ready_marker_seen {
+                            "ready-marker"
+                        } else {
+                            "snapshot-changed"
+                        }
+                    } else {
+                        match resulting_state {
+                            IngestionState::Discovered => "discovered-initial",
+                            IngestionState::Settling => "settling-observed",
+                            IngestionState::Ready => "already-ready",
+                            _ => decision.reason,
+                        }
+                    };
+                    let staged = if signature_changed {
+                        Some(StagedSnapshotCompletion {
+                            verified: &sealed_snapshot,
+                            ready_marker_seen: snapshot.ready_marker_seen,
+                            bypassed_settling: snapshot.bypassed_settling,
+                        })
+                    } else {
+                        store
+                            .mark_staged_snapshot_discarding(
+                                pool,
+                                staged_snapshot_id,
+                                item.id,
+                                &fence,
+                            )
+                            .await?;
+                        None
+                    };
+                    let observation = SettlingObservation {
+                        expected: &item,
+                        staged,
+                        next_state,
+                        transition_reason: decision.reason,
+                        state_reason,
+                        stable_since: if signature_changed {
+                            Some(now)
+                        } else {
+                            item.stable_since
+                        },
+                        latest_snapshot_id: if signature_changed {
+                            Some(staged_snapshot_id)
+                        } else {
+                            latest_snapshot.as_ref().map(|current| current.id)
+                        },
+                        observed_at: now,
+                    };
+                    if let Err(error) = store
+                        .apply_settling_observation_fenced(pool, &observation, &fence)
+                        .await
+                    {
+                        stats.errors += 1;
+                        warn!(source = %source.name, source_path = %relative, %error,
+                            "settling observation could not be committed");
+                        break 'candidate;
+                    }
+                    if signature_changed {
+                        stats.snapshot_changed += 1;
+                        stats.settling_updated += 1;
+                        if item.state == IngestionState::Ready {
+                            stats.ready_reverted += 1;
+                        }
+                    }
+                    if next_state == Some(IngestionState::Ready) {
                         stats.ready_promoted += 1;
                     }
                 }
-                Err(error) => {
-                    stats.errors += 1;
-                    warn!(
-                        work_item_id = %item.id,
-                        source = %source.name,
-                        source_path = %relative,
-                        from_state = %item.state.as_str(),
-                        to_state = %next_state.as_str(),
-                        error = %error,
-                        "settling transition race while reconciling"
-                    );
+                if stats.errors == previous_errors {
+                    discovery_scan::mark_done(pool, source, &fence, &relative, partition).await?;
                 }
             }
+            if finished {
+                break;
+            }
         }
-
-        if signature_changed {
-            let state_reason = if snapshot.ready_marker_seen {
-                "ready-marker"
-            } else {
-                "snapshot-changed"
-            };
-            let _ = store
-                .upsert_settling_progress(
-                    pool,
-                    item.id,
-                    Some(now),
-                    snapshot_id,
-                    now,
-                    Some(state_reason),
-                )
-                .await;
-        } else if item.state == IngestionState::Discovered {
-            let _ = store
-                .upsert_settling_progress(
-                    pool,
-                    item.id,
-                    item.stable_since,
-                    snapshot_id,
-                    now,
-                    Some("discovered-initial"),
-                )
-                .await;
-        } else if item.state == IngestionState::Settling {
-            let _ = store
-                .upsert_settling_progress(
-                    pool,
-                    item.id,
-                    item.stable_since,
-                    snapshot_id,
-                    now,
-                    Some("settling-observed"),
-                )
-                .await;
-        } else if item.state == IngestionState::Ready {
-            let _ = store
-                .upsert_settling_progress(
-                    pool,
-                    item.id,
-                    item.stable_since,
-                    snapshot_id,
-                    now,
-                    Some("already-ready"),
-                )
-                .await;
-        } else {
-            let _ = store
-                .upsert_settling_progress(
-                    pool,
-                    item.id,
-                    item.stable_since,
-                    snapshot_id,
-                    now,
-                    Some(decision.reason),
-                )
-                .await;
+        let deferred = discovery_scan::finish_partition(
+            pool,
+            &fence,
+            partition,
+            stats.errors != partition_errors,
+        )
+        .await?;
+        if deferred {
+            return Err(IngestionError::Persistence(
+                melodee_persistence::WorkStoreError::DiscoveryScanIncomplete(source.name.clone()),
+            ));
         }
     }
 
-    match store.list_active_for_reconciliation(pool).await {
-        Ok(items) => {
-            for item in items {
-                if !is_same_source(&item.source_library_id, source.id) {
-                    continue;
-                }
-                if !observed.contains(&item.source_path) {
-                    stats.missing_candidates += 1;
-                    let _ = store
-                        .upsert_settling_progress(
-                            pool,
-                            item.id,
-                            item.stable_since,
-                            item.latest_settling_snapshot_id,
-                            now,
-                            Some("source-missing"),
-                        )
-                        .await;
-                }
-            }
-        }
-        Err(error) => {
-            stats.errors += 1;
-            warn!(
-                source = %source.name,
-                error = %error,
-                "listing active reconciliation items failed"
-            );
-        }
+    let verify_root = root.clone();
+    crate::admission::run(move || verify_root.verify_current())
+        .await
+        .map_err(IngestionError::InspectionTask)??;
+    match discovery_scan::mark_missing(pool, source, &fence, &root, now, bounded_turn).await? {
+        discovery_scan::MissingOutcome::Complete(count) => stats.missing_candidates = count,
+        discovery_scan::MissingOutcome::Reobserve => return Ok(ScanTurnOutcome::Reobserve),
     }
+    discovery_scan::finish(pool, &fence).await?;
 
     stats.duration_ms = started.elapsed().as_millis().try_into().unwrap_or(i64::MAX);
 
@@ -406,10 +529,10 @@ pub async fn reconcile_inbound_source(
         duration_ms = %stats.duration_ms
     );
 
-    Ok(ReconcileResult {
+    Ok(ScanTurnOutcome::Complete(ReconcileResult {
         source: source.name.clone(),
         stats,
-    })
+    }))
 }
 
 fn decide_settling_transition(
@@ -466,24 +589,423 @@ fn decide_settling_transition(
     }
 }
 
-fn is_same_source(item_library_id: &Option<Uuid>, source_library_id: Option<Uuid>) -> bool {
-    match (item_library_id, source_library_id) {
-        (None, None) => true,
-        (Some(a), Some(b)) => *a == b,
-        _ => false,
+// Process-owned threads supervise cancelled producers independently of Tokio
+// runtime shutdown. Capacity is reserved before any producer is started.
+struct SnapshotReaperJob {
+    thread: std::thread::JoinHandle<Result<crate::snapshot::StreamSnapshotSummary>>,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+}
+struct SnapshotSupervisor {
+    capacity: std::sync::Arc<tokio::sync::Semaphore>,
+    sender: std::sync::mpsc::SyncSender<SnapshotReaperJob>,
+    pending: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    _threads: Vec<std::thread::JoinHandle<()>>,
+}
+static SNAPSHOT_SUPERVISOR: std::sync::OnceLock<std::result::Result<SnapshotSupervisor, String>> =
+    std::sync::OnceLock::new();
+// A failed supervisor is an internal fault. Retain ownership rather than
+// detaching the affected producer, even if its syscall never returns.
+static FAILED_REAPER_JOBS: std::sync::OnceLock<std::sync::Mutex<Vec<SnapshotReaperJob>>> =
+    std::sync::OnceLock::new();
+
+fn snapshot_supervisor() -> Result<&'static SnapshotSupervisor> {
+    SNAPSHOT_SUPERVISOR
+        .get_or_init(|| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel::<SnapshotReaperJob>(4);
+            let pending = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let receiver = std::sync::Arc::new(std::sync::Mutex::new(receiver));
+            let mut threads = Vec::with_capacity(4);
+            for index in 0..4 {
+                let thread_pending = pending.clone();
+                let receiver = receiver.clone();
+                let spawned = std::thread::Builder::new()
+                    .name(format!("melodee-snapshot-reaper-{index}"))
+                    .spawn(move || {
+                        loop {
+                            let job = receiver
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .recv();
+                            if let Ok(job) = job {
+                                let SnapshotReaperJob { thread, _permit } = job;
+                                let _ = thread.join();
+                                drop(_permit);
+                                thread_pending.fetch_sub(1, std::sync::atomic::Ordering::Release);
+                            } else {
+                                break;
+                            }
+                        }
+                    });
+                match spawned {
+                    Ok(thread) => threads.push(thread),
+                    Err(error) => {
+                        drop(sender);
+                        for thread in threads {
+                            let _ = thread.join();
+                        }
+                        return Err(error.to_string());
+                    }
+                }
+            }
+            Ok(SnapshotSupervisor {
+                capacity: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+                sender,
+                pending,
+                _threads: threads,
+            })
+        })
+        .as_ref()
+        .map_err(|error| IngestionError::InspectionTask(error.clone()))
+}
+
+struct SnapshotProducer {
+    receiver: Option<tokio::sync::mpsc::Receiver<SettlingSnapshotFile>>,
+    thread: Option<std::thread::JoinHandle<Result<crate::snapshot::StreamSnapshotSummary>>>,
+    reaper_permit: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
+impl SnapshotProducer {
+    fn join(mut self) -> Result<crate::snapshot::StreamSnapshotSummary> {
+        self.receiver.take();
+        self.thread
+            .take()
+            .ok_or_else(|| IngestionError::InspectionTask("snapshot producer missing".to_owned()))?
+            .join()
+            .map_err(|_| IngestionError::InspectionTask("snapshot producer panicked".to_owned()))?
     }
 }
 
-fn snapshot_rows(files: &[crate::snapshot::SnapshotFile]) -> Vec<SettlingSnapshotFile> {
-    files
-        .iter()
-        .map(|file| SettlingSnapshotFile {
-            relative_path: file.relative_path.clone(),
-            file_type: file.file_type.clone(),
-            file_size: file.file_size,
-            modified_at: file.modified_at,
+impl Drop for SnapshotProducer {
+    fn drop(&mut self) {
+        self.receiver.take();
+        if let (Some(thread), Some(permit)) = (self.thread.take(), self.reaper_permit.take()) {
+            let job = SnapshotReaperJob {
+                thread,
+                _permit: permit,
+            };
+            if let Ok(supervisor) = snapshot_supervisor() {
+                supervisor
+                    .pending
+                    .fetch_add(1, std::sync::atomic::Ordering::Release);
+                if let Err(error) = supervisor.sender.try_send(job) {
+                    supervisor
+                        .pending
+                        .fetch_sub(1, std::sync::atomic::Ordering::Release);
+                    tracing::error!("snapshot reaper unavailable; retaining producer ownership");
+                    let job = match error {
+                        std::sync::mpsc::TrySendError::Full(job)
+                        | std::sync::mpsc::TrySendError::Disconnected(job) => job,
+                    };
+                    FAILED_REAPER_JOBS
+                        .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(job);
+                }
+            } else {
+                tracing::error!("snapshot reaper unavailable; retaining producer ownership");
+                FAILED_REAPER_JOBS
+                    .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(job);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod producer_tests {
+    #![allow(clippy::expect_used)]
+    use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    #[tokio::test]
+    async fn cancellation_reaps_stalled_producer_without_blocking_executor() {
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(1));
+        let permit = semaphore.clone().acquire_owned().await.expect("permit");
+        let reaper_permit = snapshot_supervisor()
+            .expect("supervisor")
+            .capacity
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("reaper permit");
+        let (sender, receiver) = tokio::sync::mpsc::channel(1);
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let ended = Arc::new(AtomicBool::new(false));
+        let ended_by_thread = ended.clone();
+        let thread = std::thread::spawn(move || {
+            let _permit = permit;
+            ready_tx.send(()).expect("ready");
+            release_rx.recv().expect("release filesystem stall");
+            assert!(sender.is_closed(), "cancelled producer cannot publish");
+            ended_by_thread.store(true, Ordering::SeqCst);
+            Ok(crate::snapshot::StreamSnapshotSummary {
+                file_count: 0,
+                total_bytes: 0,
+                ready_marker_seen: false,
+            })
+        });
+        ready_rx.recv().expect("producer stalled");
+        let producer = SnapshotProducer {
+            receiver: Some(receiver),
+            thread: Some(thread),
+            reaper_permit: Some(reaper_permit),
+        };
+        let started = std::time::Instant::now();
+        drop(producer);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert!(!ended.load(Ordering::SeqCst));
+        assert_eq!(semaphore.available_permits(), 0);
+        assert!(
+            snapshot_supervisor()
+                .expect("supervisor")
+                .pending
+                .load(Ordering::Acquire)
+                > 0
+        );
+        let other_capacity = Arc::new(tokio::sync::Semaphore::new(1));
+        let other_permit = other_capacity
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("other permit");
+        let other_reaper = snapshot_supervisor()
+            .expect("supervisor")
+            .capacity
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("other reaper permit");
+        let (_other_sender, other_receiver) = tokio::sync::mpsc::channel(1);
+        let other_thread = std::thread::spawn(move || {
+            let _permit = other_permit;
+            Ok(crate::snapshot::StreamSnapshotSummary {
+                file_count: 0,
+                total_bytes: 0,
+                ready_marker_seen: false,
+            })
+        });
+        drop(SnapshotProducer {
+            receiver: Some(other_receiver),
+            thread: Some(other_thread),
+            reaper_permit: Some(other_reaper),
+        });
+        let other = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            other_capacity.acquire_owned(),
+        )
+        .await
+        .expect("other producer is not starved")
+        .expect("permit");
+        drop(other);
+        assert!(!ended.load(Ordering::SeqCst));
+        release_tx.send(()).expect("release");
+        let permit =
+            tokio::time::timeout(std::time::Duration::from_secs(5), semaphore.acquire_owned())
+                .await
+                .expect("reaped")
+                .expect("permit");
+        drop(permit);
+        assert!(ended.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn runtime_teardown_does_not_detach_a_stalled_producer() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        let permit = runtime
+            .block_on(
+                snapshot_supervisor()
+                    .expect("supervisor")
+                    .capacity
+                    .clone()
+                    .acquire_owned(),
+            )
+            .expect("permit");
+        let (sender, receiver) = tokio::sync::mpsc::channel(1);
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let ended = Arc::new(AtomicBool::new(false));
+        let thread_ended = ended.clone();
+        let thread = std::thread::spawn(move || {
+            ready_tx.send(()).expect("ready");
+            release_rx.recv().expect("release");
+            assert!(sender.is_closed());
+            thread_ended.store(true, Ordering::Release);
+            Ok(crate::snapshot::StreamSnapshotSummary {
+                file_count: 0,
+                total_bytes: 0,
+                ready_marker_seen: false,
+            })
+        });
+        ready_rx.recv().expect("started");
+        drop(SnapshotProducer {
+            receiver: Some(receiver),
+            thread: Some(thread),
+            reaper_permit: Some(permit),
+        });
+        let started = std::time::Instant::now();
+        drop(runtime);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert!(!ended.load(Ordering::Acquire));
+        assert!(
+            snapshot_supervisor()
+                .expect("supervisor")
+                .pending
+                .load(Ordering::Acquire)
+                > 0
+        );
+        release_tx.send(()).expect("release");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !ended.load(Ordering::Acquire) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(ended.load(Ordering::Acquire));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn capture_staged_snapshot(
+    store: &WorkItemStore,
+    pool: &PgPool,
+    item: Uuid,
+    now: OffsetDateTime,
+    fence: &melodee_persistence::DiscoveryScanFence,
+    root: crate::source::GuardedRoot,
+    candidate: crate::source::GuardedCandidate,
+    marker: String,
+    #[cfg(feature = "test-support")] test_hook: Option<SnapshotStallTestHook>,
+) -> Result<(
+    CandidateSnapshot,
+    melodee_persistence::VerifiedStagedSnapshot,
+)> {
+    let staged = loop {
+        let staged = store.begin_staged_snapshot(pool, item, now, fence).await?;
+        if staged.newly_created {
+            break staged;
+        }
+        store
+            .mark_staged_snapshot_discarding(pool, staged.snapshot_id, staged.work_item_id, fence)
+            .await?;
+    };
+    let reaper_permit = snapshot_supervisor()?
+        .capacity
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
+    let permit = crate::admission::heavy_ingestion()
+        .await
+        .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
+    let (sender, receiver) = tokio::sync::mpsc::channel::<SettlingSnapshotFile>(128);
+    let thread = std::thread::Builder::new()
+        .name("melodee-snapshot".to_owned())
+        .spawn(move || {
+            let _permit = permit;
+            #[cfg(feature = "test-support")]
+            if let Some(hook) = &test_hook {
+                hook.pause();
+            }
+            let marker_seen = root.ready_marker_seen(&candidate, &marker);
+            let directory = root
+                .cap_directory(&candidate)
+                .map_err(IngestionError::Source)?;
+            let cancellation = sender.clone();
+            let result = crate::snapshot::stream_release_snapshot(
+                &directory,
+                marker_seen,
+                || cancellation.is_closed(),
+                |file| {
+                    sender
+                        .blocking_send(SettlingSnapshotFile {
+                            relative_path: file.relative_path,
+                            file_type: file.file_type,
+                            file_size: file.file_size,
+                            modified_at: file.modified_at,
+                        })
+                        .map_err(|_| crate::snapshot::SnapshotCaptureError::Capture {
+                            path: std::path::PathBuf::new(),
+                            message: "snapshot consumer stopped".to_owned(),
+                        })
+                },
+            )
+            .map_err(IngestionError::Snapshot);
+            #[cfg(feature = "test-support")]
+            if let Some(hook) = &test_hook {
+                hook.finished
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+            result
         })
-        .collect()
+        .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
+    let mut producer = SnapshotProducer {
+        receiver: Some(receiver),
+        thread: Some(thread),
+        reaper_permit: Some(reaper_permit),
+    };
+    let mut batch = Vec::with_capacity(128);
+    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+    loop {
+        let receiver = producer.receiver.as_mut().ok_or_else(|| {
+            IngestionError::InspectionTask("snapshot receiver missing".to_owned())
+        })?;
+        let next = tokio::select! {
+            file = receiver.recv() => file,
+            _ = heartbeat.tick() => {
+                discovery_scan::renew(pool, fence).await?;
+                continue;
+            }
+        };
+        let Some(file) = next else {
+            break;
+        };
+        batch.push(file);
+        if batch.len() == 128 {
+            discovery_scan::renew(pool, fence).await?;
+            store
+                .append_staged_snapshot_files(pool, staged.snapshot_id, item, &batch, fence)
+                .await?;
+            batch.clear();
+        }
+    }
+    if !batch.is_empty() {
+        discovery_scan::renew(pool, fence).await?;
+        store
+            .append_staged_snapshot_files(pool, staged.snapshot_id, item, &batch, fence)
+            .await?;
+    }
+    let summary = producer.join()?;
+    let verified = store
+        .seal_staged_snapshot(pool, staged.snapshot_id, item, fence)
+        .await?;
+    if i64::from(verified.file_count()) != summary.file_count
+        || verified.total_bytes() != summary.total_bytes
+    {
+        return Err(IngestionError::Persistence(
+            melodee_persistence::WorkStoreError::InvalidRequest(
+                "settling capture differs from observed filesystem entries",
+            ),
+        ));
+    }
+    Ok((
+        CandidateSnapshot {
+            signature: verified.signature().to_owned(),
+            file_count: summary.file_count,
+            total_bytes: summary.total_bytes,
+            files: Vec::new(),
+            ready_marker_seen: summary.ready_marker_seen,
+            bypassed_settling: false,
+        },
+        verified,
+    ))
 }
 
 fn settling_period_for_snapshot(
@@ -503,42 +1025,13 @@ fn settling_period_for_snapshot(
     }
 }
 
-async fn persist_snapshot(
-    snapshot: &CandidateSnapshot,
-    pool: &PgPool,
-    item: &melodee_domain::ReleaseWorkItem,
-    now: OffsetDateTime,
-    files: Vec<SettlingSnapshotFile>,
-) -> Result<i64> {
-    let file_count = i32::try_from(snapshot.file_count).map_err(|_| {
-        IngestionError::Persistence(melodee_persistence::WorkStoreError::CorruptState(format!(
-            "candidate file_count too large for i32: {}",
-            snapshot.file_count,
-        )))
-    })?;
-
-    WorkItemStore
-        .persist_settling_snapshot(
-            pool,
-            item.id,
-            &snapshot.signature,
-            file_count,
-            snapshot.total_bytes,
-            snapshot.ready_marker_seen,
-            snapshot.bypassed_settling,
-            now,
-            &files,
-        )
-        .await
-        .map_err(IngestionError::Persistence)
-}
-
 async fn get_or_create_work_item(
     store: &WorkItemStore,
     pool: &PgPool,
     source_library_id: Option<Uuid>,
     source_path: &str,
     now: OffsetDateTime,
+    fence: &melodee_persistence::DiscoveryScanFence,
 ) -> Result<(melodee_domain::ReleaseWorkItem, bool)> {
     let discovered = melodee_domain::ReleaseWorkItem::discovered(
         source_path.to_owned(),
@@ -547,7 +1040,7 @@ async fn get_or_create_work_item(
         now,
     );
     let item = store
-        .create_or_get(pool, &discovered)
+        .create_or_get_fenced(pool, &discovered, Some(fence))
         .await
         .map_err(IngestionError::Persistence)?;
     Ok(item)

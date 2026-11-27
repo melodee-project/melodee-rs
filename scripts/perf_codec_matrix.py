@@ -137,14 +137,16 @@ def main() -> int:
         "description": "production media normalization stage only; single-track synthetic releases",
         "commit": command_output(["git", "rev-parse", "HEAD"]),
         "working_tree_dirty": bool(command_output(["git", "status", "--porcelain"])),
-        "build_profile": "release", "platform": platform.platform(),
+        "build_profile": "release", "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+        "platform": platform.platform(),
         "cpu_count": os.cpu_count(), "processor": cpu_description(),
         "ffmpeg_version": command_output(["ffmpeg", "-version"]).splitlines()[0],
         "ffprobe_version": command_output(["ffprobe", "-version"]).splitlines()[0],
         "fpcalc_version": command_output(["fpcalc", "-version"]).splitlines()[0],
         "source_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in [ROOT / "Cargo.lock", ROOT / "crates/melodee-media/src/lib.rs",
+            for path in [ROOT / "Cargo.lock", ROOT / "Cargo.toml", ROOT / "crates/melodee-media/Cargo.toml",
+                         ROOT / "scripts/perf_codec_matrix.py", ROOT / "crates/melodee-media/src/lib.rs",
                          ROOT / "crates/melodee-media/src/normalize.rs",
                          ROOT / "crates/melodee-media/src/secure_fs.rs",
                          ROOT / "crates/melodee-media/tests/perf_normalization_matrix.rs"]

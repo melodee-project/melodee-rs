@@ -963,6 +963,60 @@ fn source_change_and_disappearance_during_normalization_are_not_published() {
 
 #[cfg(unix)]
 #[test]
+fn normalization_probes_retained_mp3_without_unused_version_subprocess() {
+    if !tools_available() {
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    generate_audio(
+        &source.join("track.mp3"),
+        &["-c:a", "libmp3lame", "-q:a", "4"],
+        440,
+    );
+    let mut manifest = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "probe-count",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .unwrap()
+    .manifest;
+    assert!(
+        manifest
+            .inspection
+            .ffprobe_version
+            .as_deref()
+            .is_some_and(|version| version.starts_with("ffprobe version"))
+    );
+    let calls = temp.path().join("calls");
+    let wrapper = write_script(
+        temp.path(),
+        "count-ffprobe",
+        &format!(
+            "if [ \"$1\" = '-version' ]; then printf V >> '{}'; else printf P >> '{}'; fi\nexec '{}' \"$@\"",
+            calls.display(),
+            calls.display(),
+            tool_path("ffprobe").display()
+        ),
+    );
+    let mut options = normalization_options(&temp.path().join("work"), Uuid::now_v7());
+    options.ffprobe_path = wrapper;
+    let report = normalize_release(&mut manifest, &source, &options).unwrap();
+    assert!(report.manifest.normalization.as_ref().unwrap().outputs[0].retained);
+    assert_eq!(
+        fs::read(&calls).unwrap(),
+        b"PP",
+        "both independent media probes remain; no version probe is used"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn unprobeable_or_unhashable_ffmpeg_output_blocks_completion() {
     if !tools_available() {
         eprintln!("skipping real output-verification test: media tools unavailable");

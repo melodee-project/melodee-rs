@@ -17,7 +17,8 @@ use melodee_domain::{
     PUBLICATION_MANIFEST_VERSION, RetryPolicy, WorkErrorCode,
 };
 use melodee_persistence::{
-    ArtistReconciliationEvidence, CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId,
+    ArtistMetadataPatch, ArtistReconciliationEvidence, CatalogImportRequest, CatalogStore,
+    WorkItemStore, WorkerId,
 };
 use time::Duration;
 use uuid::Uuid;
@@ -1330,6 +1331,268 @@ async fn same_name_release_credits_reuse_one_artist_across_releases() {
             .expect("count merge events"),
         0,
         "reuse creates no merge history because nothing was merged"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn import_waiting_for_artist_merge_does_not_reuse_the_tombstone() {
+    let db = TestDb::create("catalog_import_artist_merge_fence").await;
+    let presentation = CatalogFixturePresentation {
+        release_title: "Concurrent Import",
+        release_artist: "Artist awaiting merge",
+        track_title: "Concurrent Track",
+        track_artist: "Artist awaiting merge",
+        release_date: "2002-02-02",
+    };
+    let first = seed_published_release(&db, 951, presentation.clone()).await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim first fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            first.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("concurrent-artist", "test"),
+            now,
+        )
+        .await
+        .expect("import first fixture");
+    let (source, source_public): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT artist.id, artist.public_api_id FROM artists artist
+         JOIN release_artists credit ON credit.artist_id=artist.id
+         WHERE credit.release_id=$1 AND credit.role='primary'",
+    )
+    .bind(first.release_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("find existing Artist");
+    let target = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO artists (id,public_api_id,canonical_name,normalized_name,sort_name,
+                              artist_type,status,created_at,updated_at)
+         VALUES ($1,$1,'Merge target','merge target','Merge target','unknown','active',$2,$2)",
+    )
+    .bind(target)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("insert merge target");
+    let second = seed_published_release(&db, 952, presentation).await;
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim second fixture");
+
+    // Hold the existing Release so the real merge has acquired its Artist
+    // parents before the importer attempts to resolve the same name.
+    let mut holder = db.pool.begin().await.expect("begin holder");
+    sqlx::query("SELECT id FROM releases WHERE id=$1 FOR UPDATE")
+        .bind(first.release_id.into_uuid())
+        .execute(&mut *holder)
+        .await
+        .expect("hold source Release");
+    let merge = ArtistMerge {
+        id: ArtistMergeId::new(),
+        source_artist_id: ArtistId::from_uuid(source),
+        source_public_api_id: ArtistPublicId::from_uuid(source_public),
+        target_artist_id: ArtistId::from_uuid(target),
+        actor: "test".into(),
+        reason: "concurrent import parent fence".into(),
+        occurred_at: now,
+    };
+    let merge_pool = db.pool.clone();
+    let merge_task = tokio::spawn(async move {
+        CatalogStore
+            .merge_artist(&merge_pool, &merge, "parent-fence-test")
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                 WHERE datname=current_database() AND wait_event_type='Lock'
+                   AND query LIKE '%SELECT id FROM releases WHERE id=ANY%FOR UPDATE%')",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .expect("inspect waiting merge");
+            if waiting {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("merge waits after locking Artists");
+    let import_pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let second_id = second.work_item_id;
+    let import_task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &import_pool,
+                second_id,
+                &import_worker,
+                &CatalogImportRequest::new("concurrent-artist", "test"),
+                now,
+            )
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                 WHERE datname=current_database() AND wait_event_type='Lock'
+                   AND (query LIKE 'SELECT lock_artist_identity_names%'
+                        OR query LIKE '%SELECT artist.id FROM artists artist%FOR UPDATE OF artist%'))",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .expect("inspect waiting importer");
+            if waiting { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    }).await.expect("import waits on Artist before creating Release");
+    holder.commit().await.expect("release held Release");
+    let (merge_result, import_result) =
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            (
+                merge_task.await.expect("merge task"),
+                import_task.await.expect("import task"),
+            )
+        })
+        .await
+        .expect("both operations complete");
+    merge_result.expect("merge succeeds");
+    import_result.expect("import resolves after merge");
+    let (artist_id, status): (Uuid, String) = sqlx::query_as(
+        "SELECT artist.id, artist.status FROM release_artists credit
+         JOIN artists artist ON artist.id=credit.artist_id
+         WHERE credit.release_id=$1 AND credit.role='primary'",
+    )
+    .bind(second.release_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("find imported credit");
+    assert_ne!(artist_id, source, "never reuse a merged Artist");
+    assert_eq!(status, "active");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn concurrent_artist_rename_is_counted_before_import_reuses_a_name() {
+    let db = TestDb::create("catalog_import_artist_name_fence").await;
+    let now = time::OffsetDateTime::now_utc();
+    let existing = Uuid::now_v7();
+    let renamed = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO artists (id,public_api_id,canonical_name,normalized_name,sort_name,
+                              artist_type,status,created_at,updated_at)
+         VALUES ($1,$1,'Shared name','shared name','Shared name','unknown','active',$3,$3),
+                ($2,$2,'Other name','other name','Other name','unknown','active',$3,$3)",
+    )
+    .bind(existing)
+    .bind(renamed)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("insert distinct Artists");
+    let fixture = seed_published_release(
+        &db,
+        953,
+        CatalogFixturePresentation {
+            release_title: "Phantom name group",
+            release_artist: "Shared name",
+            track_title: "Phantom Track",
+            track_artist: "Shared name",
+            release_date: "2002-02-02",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixture");
+    let mut holder = db.pool.begin().await.expect("begin holder");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind("shared name")
+        .execute(&mut *holder)
+        .await
+        .expect("hold destination name");
+    let rename_pool = db.pool.clone();
+    let rename_task = tokio::spawn(async move {
+        CatalogStore
+            .update_artist_metadata(
+                &rename_pool,
+                renamed,
+                &ArtistMetadataPatch {
+                    canonical_name: Some("Shared name".into()),
+                    ..Default::default()
+                },
+                "test",
+            )
+            .await
+    });
+    async fn wait_for_name_waiters(pool: &sqlx::PgPool, count: i64) {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let waiting: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
+                     AND wait_event_type='Lock' AND query LIKE 'SELECT lock_artist_identity_names%'",
+                ).fetch_one(pool).await.expect("count name waiters");
+                if waiting >= count { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        }).await.expect("name waiters arrive");
+    }
+    wait_for_name_waiters(&db.pool, 1).await;
+    let import_pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let item_id = fixture.work_item_id;
+    let import_task = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &import_pool,
+                item_id,
+                &import_worker,
+                &CatalogImportRequest::new("name-phantom", "test"),
+                now,
+            )
+            .await
+    });
+    wait_for_name_waiters(&db.pool, 2).await;
+    holder.commit().await.expect("release name lock");
+    let (rename_result, import_result) =
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            (
+                rename_task.await.expect("rename task"),
+                import_task.await.expect("import task"),
+            )
+        })
+        .await
+        .expect("both operations complete");
+    rename_result.expect("rename succeeds");
+    import_result.expect("import succeeds");
+    let credit: Uuid = sqlx::query_scalar(
+        "SELECT artist_id FROM release_artists WHERE release_id=$1 AND role='primary'",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("find imported Artist");
+    assert_ne!(
+        credit, existing,
+        "ambiguous name must not reuse original Artist"
+    );
+    assert_ne!(
+        credit, renamed,
+        "ambiguous name must not reuse renamed Artist"
     );
     db.drop().await;
 }

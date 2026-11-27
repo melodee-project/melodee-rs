@@ -293,6 +293,14 @@ pub async fn acquire_owned_source(
     now: OffsetDateTime,
 ) -> Result<OwnedSource, AcquisitionError> {
     let started = std::time::Instant::now();
+    if !store
+        .verify_inbound_path_identity(pool, item.id, worker, now)
+        .await?
+    {
+        // An existing receipt already binds owned staging bytes. Reverify that
+        // receipt without consulting or deleting the ambiguous inbound path.
+        return owned_source_root(config, store, pool, item).await;
+    }
     #[cfg(feature = "test-support")]
     let test_hook = config.acquisition_test_hook.clone();
     let source = find_source(config, item).ok_or(AcquisitionError::SourceNotConfigured)?;
@@ -392,10 +400,9 @@ pub async fn acquire_owned_source(
         }
         let snapshot = snapshot_release_directory(&inbound_for_task, &ready_marker)
             .map_err(|error| AcquisitionError::IncompleteReceipt(error.to_string()))?;
-        if expected_snapshot
-            .as_ref()
-            .is_some_and(|expected| *expected != snapshot.signature)
-        {
+        if expected_snapshot.as_ref().is_some_and(|expected| {
+            !crate::snapshot::signatures_equal(expected, &snapshot.signature)
+        }) {
             return Err(AcquisitionError::SourceChanged);
         }
         stage_source(
@@ -480,8 +487,69 @@ pub async fn owned_source_root(
         )
     })?;
     let root = staging_root.join(&handoff.staging_relative_path);
-    let tree_hash = verify_existing_receipt(&root, &handoff)?;
+    let verify_root = root.clone();
+    let tree_hash = crate::admission::run(move || verify_existing_receipt(&verify_root, &handoff))
+        .await
+        .map_err(AcquisitionError::Task)??;
     Ok(OwnedSource { root, tree_hash })
+}
+
+/// Operator-supplied evidence for binding an ambiguous historical path.
+pub struct LegacyPathReview<'a> {
+    pub legacy_id: uuid::Uuid,
+    pub reviewed_id: uuid::Uuid,
+    pub receipt_tree_hash: &'a str,
+    pub actor: &'a str,
+    pub reason: &'a str,
+    pub now: OffsetDateTime,
+}
+
+/// Independently verify staged evidence before recording a reviewed binding.
+pub async fn resolve_legacy_inbound_path(
+    config: &IngestionConfig,
+    store: &WorkItemStore,
+    pool: &PgPool,
+    review: &LegacyPathReview<'_>,
+) -> Result<bool, AcquisitionError> {
+    let legacy = store.get(pool, review.legacy_id).await?;
+    let reviewed = store.get(pool, review.reviewed_id).await?;
+    let relative = crate::source::decode_candidate_relative_path(&reviewed.source_path)
+        .map_err(|_| AcquisitionError::InvalidSourcePath(reviewed.source_path.clone()))?;
+    if relative.is_absolute()
+        || relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+        || crate::source::candidate_relative_path(&relative) != reviewed.source_path
+    {
+        return Err(AcquisitionError::InvalidSourcePath(reviewed.source_path));
+    }
+    let lossy = crate::source::legacy_candidate_relative_path(&relative);
+    if lossy != legacy.source_path {
+        return Err(AcquisitionError::IncompleteReceipt(
+            "reviewed path does not match the historical lossy spelling".to_owned(),
+        ));
+    }
+    let owned = owned_source_root(config, store, pool, &reviewed).await?;
+    if owned.tree_hash != review.receipt_tree_hash {
+        return Err(AcquisitionError::IncompleteReceipt(
+            "reviewed hash does not match the independently verified staged receipt".to_owned(),
+        ));
+    }
+    Ok(store
+        .resolve_legacy_inbound_path(
+            pool,
+            &melodee_persistence::LegacyPathResolution {
+                legacy_id: legacy.id,
+                reviewed_id: reviewed.id,
+                reviewed_lossy_path: &lossy,
+                receipt_tree_hash: review.receipt_tree_hash,
+                actor: review.actor,
+                reason: review.reason,
+                now: review.now,
+            },
+        )
+        .await?)
 }
 
 /// Detects an unexpected staged-source mutation before and after processing.
@@ -506,8 +574,16 @@ pub fn verify_owned_source(source: &OwnedSource) -> Result<(), AcquisitionError>
 /// must never touch. All platforms additionally compare the complete tree
 /// hash before removal, so the fences are independent and both must pass.
 pub fn source_generation(path: &Path) -> Result<String, AcquisitionError> {
-    let metadata = open_directory(path)
-        .and_then(|dir| dir.metadata())
+    let directory = open_directory(path).map_err(|error| io_error(path, error))?;
+    source_generation_from_directory(&directory, path)
+}
+
+pub(crate) fn source_generation_from_directory(
+    directory: &std::fs::File,
+    path: &Path,
+) -> Result<String, AcquisitionError> {
+    let metadata = directory
+        .metadata()
         .map_err(|error| io_error(path, error))?;
     if !metadata.is_dir() {
         return Err(AcquisitionError::InvalidSourcePath(format!(
@@ -552,7 +628,8 @@ fn recover_finalized_tree(
     let snapshot = snapshot_release_directory(proof_root, ready_marker)
         .map_err(|error| AcquisitionError::IncompleteReceipt(error.to_string()))?;
     if (renamed && expected_snapshot.is_none())
-        || expected_snapshot.is_some_and(|s| s != snapshot.signature)
+        || expected_snapshot
+            .is_some_and(|s| !crate::snapshot::signatures_equal(s, &snapshot.signature))
     {
         return Err(AcquisitionError::IncompleteReceipt(
             "final staging handoff conflicts with the settled source snapshot".to_owned(),
@@ -858,6 +935,9 @@ fn copy_regular_file(
     destination: &Path,
     #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
 ) -> Result<(), AcquisitionError> {
+    let mut operation = melodee_media::operation_metrics::OperationGuard::start(
+        melodee_media::operation_metrics::Operation::AcquisitionCopy,
+    );
     // The metadata check in copy_tree is only a snapshot. Re-open the source
     // through the descriptor-relative no-follow boundary so a concurrent
     // replacement cannot turn a regular source into an external symlink.
@@ -879,29 +959,39 @@ fn copy_regular_file(
     let mut writer = BufWriter::with_capacity(COPY_BUFFER_BYTES, output);
     let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
     loop {
-        let read = reader
-            .read(&mut buffer)
-            .map_err(|error| io_error(source, error))?;
+        let read = reader.read(&mut buffer).map_err(|error| {
+            operation.mark_bytes_incomplete();
+            io_error(source, error)
+        })?;
         if read == 0 {
             break;
         }
+        operation.add_read(read as u64);
         #[cfg(feature = "test-support")]
         if let Some(hook) = test_hook {
             hook.delay_write();
         }
-        writer
-            .write_all(&buffer[..read])
-            .map_err(|error| io_error(destination, error))?;
+        writer.write_all(&buffer[..read]).map_err(|error| {
+            operation.mark_bytes_incomplete();
+            io_error(destination, error)
+        })?;
+        operation.add_written(read as u64);
     }
-    let output = writer
-        .into_inner()
-        .map_err(|error| io_error(destination, error.into_error()))?;
+    let output = writer.into_inner().map_err(|error| {
+        operation.mark_bytes_incomplete();
+        io_error(destination, error.into_error())
+    })?;
     output
         .sync_all()
-        .map_err(|error| io_error(destination, error))
+        .map_err(|error| io_error(destination, error))?;
+    operation.finish();
+    Ok(())
 }
 
 fn tree_hash(root: &Path) -> Result<String, AcquisitionError> {
+    let mut operation = melodee_media::operation_metrics::OperationGuard::start(
+        melodee_media::operation_metrics::Operation::AcquisitionTreeHash,
+    );
     let metadata = fs::symlink_metadata(root).map_err(|error| io_error(root, error))?;
     if !metadata.is_dir() {
         return Err(AcquisitionError::InvalidSourcePath(format!(
@@ -932,12 +1022,14 @@ fn tree_hash(root: &Path) -> Result<String, AcquisitionError> {
                 let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
                 let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
                 loop {
-                    let read = reader
-                        .read(&mut buffer)
-                        .map_err(|error| io_error(&path, error))?;
+                    let read = reader.read(&mut buffer).map_err(|error| {
+                        operation.mark_bytes_incomplete();
+                        io_error(&path, error)
+                    })?;
                     if read == 0 {
                         break;
                     }
+                    operation.add_read(read as u64);
                     hasher.update(&buffer[..read]);
                 }
             } else {
@@ -949,18 +1041,176 @@ fn tree_hash(root: &Path) -> Result<String, AcquisitionError> {
             }
         }
     }
-    Ok(hasher.finalize().to_hex().to_string())
+    let digest = hasher.finalize().to_hex().to_string();
+    operation.finish();
+    Ok(digest)
 }
 
 fn hash_path(hasher: &mut blake3::Hasher, path: &Path, metadata: &fs::Metadata) {
-    hasher.update(if metadata.is_dir() { b"d" } else { b"f" });
+    hash_path_parts(hasher, path, metadata.is_dir(), metadata.len());
+}
+
+fn hash_path_parts(hasher: &mut blake3::Hasher, path: &Path, is_dir: bool, length: u64) {
+    hasher.update(if is_dir { b"d" } else { b"f" });
     for component in path.components() {
         if let Component::Normal(part) = component {
             hasher.update(part.to_string_lossy().as_bytes());
             hasher.update(&[0]);
         }
     }
-    hasher.update(&metadata.len().to_le_bytes());
+    hasher.update(&length.to_le_bytes());
+}
+
+/// Hash a custody tree using a versioned, native-path encoding. Existing
+/// staging receipts retain their legacy encoding; they are not custody proof.
+pub(crate) fn tree_hash_from_pinned_directory(
+    root: &std::fs::File,
+) -> Result<String, AcquisitionError> {
+    Ok(tree_hashes_from_pinned_directory(root)?.0)
+}
+
+/// Both digests describe the same traversal and byte reads. The legacy digest
+/// is only for comparing existing receipts, never by itself for custody.
+pub(crate) fn tree_hashes_from_pinned_directory(
+    root: &std::fs::File,
+) -> Result<(String, String), AcquisitionError> {
+    tree_hashes_from_pinned_directory_with_hook(root, |_| {})
+}
+
+fn tree_hashes_from_pinned_directory_with_hook(
+    root: &std::fs::File,
+    mut after_file: impl FnMut(&Path),
+) -> Result<(String, String), AcquisitionError> {
+    let mut operation = melodee_media::operation_metrics::OperationGuard::start(
+        melodee_media::operation_metrics::Operation::AcquisitionTreeHash,
+    );
+    use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
+    let directory = cap_std::fs::Dir::from_std_file(
+        root.try_clone()
+            .map_err(|error| io_error(Path::new("<pinned source>"), error))?,
+    );
+    let mut hasher = blake3::Hasher::new();
+    let mut legacy_hasher = blake3::Hasher::new();
+    hasher.update(b"melodee-inbound-custody-tree-v2\0");
+    #[cfg(unix)]
+    hasher.update(b"unix\0");
+    #[cfg(windows)]
+    hasher.update(b"windows\0");
+    let mut queue = vec![(directory, PathBuf::new())];
+    while let Some((directory, relative)) = queue.pop() {
+        let mut entries = directory
+            .entries()
+            .map_err(|error| io_error(&relative, error))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| io_error(&relative, error))?;
+        entries.sort_unstable_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let name = entry.file_name();
+            let path = relative.join(&name);
+            let metadata = directory
+                .symlink_metadata(&name)
+                .map_err(|error| io_error(&path, error))?;
+            if metadata.is_dir() {
+                hash_custody_path(&mut hasher, &path, true, metadata.len())?;
+                hash_path_parts(&mut legacy_hasher, &path, true, metadata.len());
+                let child = directory
+                    .open_dir_nofollow(&name)
+                    .map_err(|error| io_error(&path, error))?;
+                queue.push((child, path));
+            } else if metadata.is_file() {
+                let mut options = cap_std::fs::OpenOptions::new();
+                options.read(true).follow(FollowSymlinks::No);
+                let file = directory
+                    .open_with(&name, &options)
+                    .map_err(|error| io_error(&path, error))?;
+                let opened = file.metadata().map_err(|error| io_error(&path, error))?;
+                if !opened.is_file() || opened.len() != metadata.len() {
+                    return Err(AcquisitionError::SourceChanged);
+                }
+                hash_custody_path(&mut hasher, &path, false, metadata.len())?;
+                hash_path_parts(&mut legacy_hasher, &path, false, metadata.len());
+                let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file.into_std());
+                let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
+                let mut bytes_read = 0_u64;
+                loop {
+                    let read = reader.read(&mut buffer).map_err(|error| {
+                        operation.mark_bytes_incomplete();
+                        io_error(&path, error)
+                    })?;
+                    if read == 0 {
+                        break;
+                    }
+                    operation.add_read(read as u64);
+                    bytes_read = bytes_read
+                        .checked_add(read as u64)
+                        .ok_or(AcquisitionError::SourceChanged)?;
+                    hasher.update(&buffer[..read]);
+                    legacy_hasher.update(&buffer[..read]);
+                }
+                if bytes_read != metadata.len()
+                    || reader
+                        .get_ref()
+                        .metadata()
+                        .map_err(|error| io_error(&path, error))?
+                        .len()
+                        != metadata.len()
+                {
+                    return Err(AcquisitionError::SourceChanged);
+                }
+                after_file(&path);
+            }
+        }
+    }
+    let hashes = (
+        format!("v2:{}", hasher.finalize().to_hex()),
+        legacy_hasher.finalize().to_hex().to_string(),
+    );
+    operation.finish();
+    Ok(hashes)
+}
+
+fn hash_custody_path(
+    hasher: &mut blake3::Hasher,
+    path: &Path,
+    is_dir: bool,
+    length: u64,
+) -> Result<(), AcquisitionError> {
+    hasher.update(if is_dir { b"d" } else { b"f" });
+    let components = path.components().count() as u64;
+    hasher.update(&components.to_le_bytes());
+    for component in path.components() {
+        let Component::Normal(part) = component else {
+            return Err(AcquisitionError::InvalidSourcePath(
+                "non-relative custody path".to_owned(),
+            ));
+        };
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let bytes = part.as_bytes();
+            hasher.update(&(bytes.len() as u64).to_le_bytes());
+            hasher.update(bytes);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            hasher.update(&(part.encode_wide().count() as u64).to_le_bytes());
+            for unit in part.encode_wide() {
+                hasher.update(&unit.to_le_bytes());
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = part;
+            return Err(AcquisitionError::InvalidSourcePath(
+                "native custody path encoding unavailable".to_owned(),
+            ));
+        }
+    }
+    // Directory sizes are filesystem allocation metadata, not content, and
+    // need not survive cross-filesystem copies. File lengths delimit content.
+    hasher.update(&(if is_dir { 0 } else { length }).to_le_bytes());
+    Ok(())
 }
 
 fn remove_partial(partial: &Path, releases_root: &Path) -> Result<(), AcquisitionError> {
@@ -998,7 +1248,8 @@ fn resolve_candidate(
     source: &InboundSource,
     source_path: &str,
 ) -> Result<PathBuf, AcquisitionError> {
-    let relative = Path::new(source_path);
+    let relative = crate::source::decode_candidate_relative_path(source_path)
+        .map_err(|_| AcquisitionError::InvalidSourcePath(source_path.to_owned()))?;
     if relative.is_absolute()
         || relative.as_os_str().is_empty()
         || relative
@@ -1027,6 +1278,53 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn operation_counters_record_successful_acquisition_reads_and_copies() {
+        struct TraceSubscriber;
+        impl tracing::Subscriber for TraceSubscriber {
+            fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+                true
+            }
+            fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+                tracing::span::Id::from_u64(1)
+            }
+            fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+            fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+            fn event(&self, _: &tracing::Event<'_>) {}
+            fn enter(&self, _: &tracing::span::Id) {}
+            fn exit(&self, _: &tracing::span::Id) {}
+        }
+        fn counters(name: &str) -> melodee_media::operation_metrics::OperationSnapshot {
+            melodee_media::operation_metrics::snapshot()
+                .into_iter()
+                .find(|value| value.operation == name)
+                .unwrap()
+        }
+        tracing::subscriber::with_default(TraceSubscriber, || {
+            let root = temporary_root("operation-counts");
+            let source = root.join("source");
+            fs::create_dir(&source).unwrap();
+            fs::write(source.join("file"), b"abc").unwrap();
+            let hash_before = counters("acquisition_tree_hash");
+            let copy_before = counters("acquisition_copy");
+            tree_hash(&source).unwrap();
+            #[cfg(feature = "test-support")]
+            copy_regular_file(&source.join("file"), &root.join("copy"), None).unwrap();
+            #[cfg(not(feature = "test-support"))]
+            copy_regular_file(&source.join("file"), &root.join("copy")).unwrap();
+            let hash_after = counters("acquisition_tree_hash");
+            let copy_after = counters("acquisition_copy");
+            assert_eq!(hash_after.operations - hash_before.operations, 1);
+            assert_eq!(hash_after.succeeded - hash_before.succeeded, 1);
+            assert_eq!(hash_after.read_bytes - hash_before.read_bytes, 3);
+            assert_eq!(copy_after.operations - copy_before.operations, 1);
+            assert_eq!(copy_after.succeeded - copy_before.succeeded, 1);
+            assert_eq!(copy_after.read_bytes - copy_before.read_bytes, 3);
+            assert_eq!(copy_after.written_bytes - copy_before.written_bytes, 3);
+            fs::remove_dir_all(root).unwrap();
+        });
     }
 
     #[cfg(unix)]
@@ -1209,6 +1507,78 @@ mod tests {
         assert!(!destination.join("escape").exists());
         assert_eq!(tree_hash(&destination).unwrap(), expected);
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pinned_tree_hash_survives_path_replacement() {
+        let root = temporary_root("pinned-tree-hash");
+        let source = root.join("source");
+        fs::create_dir_all(source.join("disc")).unwrap();
+        fs::write(source.join("first.flac"), b"first").unwrap();
+        fs::write(source.join("disc/second.flac"), b"second").unwrap();
+        let pinned = open_directory(&source).unwrap();
+        let (expected, legacy) = tree_hashes_from_pinned_directory(&pinned).unwrap();
+        assert_eq!(legacy, tree_hash(&source).unwrap());
+        assert_eq!(tree_hash_from_pinned_directory(&pinned).unwrap(), expected);
+        fs::rename(&source, root.join("original")).unwrap();
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("different.flac"), b"replacement").unwrap();
+        assert_eq!(tree_hash_from_pinned_directory(&pinned).unwrap(), expected);
+        let replacement = open_directory(&source).unwrap();
+        assert_ne!(
+            tree_hash_from_pinned_directory(&replacement).unwrap(),
+            expected
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn custody_hash_distinguishes_invalid_utf8_from_literal_replacement_character() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let root = temporary_root("custody-raw-path-hash");
+        let raw = root.join("raw");
+        let unicode = root.join("unicode");
+        fs::create_dir_all(&raw).unwrap();
+        fs::create_dir_all(&unicode).unwrap();
+        fs::write(
+            raw.join(std::ffi::OsString::from_vec(b"a-\xff".to_vec())),
+            b"same",
+        )
+        .unwrap();
+        fs::write(unicode.join("a-\u{fffd}"), b"same").unwrap();
+        assert_eq!(tree_hash(&raw).unwrap(), tree_hash(&unicode).unwrap());
+        let (raw_hash, raw_legacy) =
+            tree_hashes_from_pinned_directory(&open_directory(&raw).unwrap()).unwrap();
+        let (unicode_hash, unicode_legacy) =
+            tree_hashes_from_pinned_directory(&open_directory(&unicode).unwrap()).unwrap();
+        assert_eq!(raw_legacy, unicode_legacy);
+        assert!(raw_hash.starts_with("v2:"));
+        assert_ne!(raw_hash, unicode_hash);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn custody_recheck_detects_same_size_mutation_after_file_was_read() {
+        let root = temporary_root("custody-mutation");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("first"), b"before").unwrap();
+        fs::write(root.join("second"), b"second").unwrap();
+        let pinned = open_directory(&root).unwrap();
+        let before = tree_hashes_from_pinned_directory_with_hook(&pinned, |path| {
+            if path == Path::new("first") {
+                fs::write(root.join("first"), b"change").unwrap();
+            }
+        })
+        .unwrap();
+        let after = tree_hashes_from_pinned_directory(&pinned).unwrap();
+        assert_ne!(before.0, after.0);
+        assert_ne!(before.1, after.1);
+        assert_eq!(after.1, tree_hash(&root).unwrap());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -10,6 +10,7 @@
 mod baseline;
 mod delta;
 mod freeze;
+mod identity_name_lock;
 mod import;
 mod import_avatars;
 mod import_catalog;

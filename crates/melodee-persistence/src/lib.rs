@@ -19,9 +19,13 @@ mod community;
 mod config;
 mod device_profiles;
 mod discovery;
+mod discovery_scan;
+pub use discovery_scan::DiscoveryScanFence;
 mod error;
 mod group_admin;
 mod identity_review;
+mod inbound_custody;
+pub use inbound_custody::{InboundCustodyClaim, InboundCustodyIntent};
 mod installation;
 mod job_history;
 pub mod manifest_evidence;
@@ -42,6 +46,11 @@ pub mod runtime_settings;
 mod scripts;
 mod search;
 mod search_retention;
+mod settling_capture;
+pub use settling_capture::{
+    SETTLING_CAPTURE_PAGE_SIZE, SettlingObservation, StagedSnapshot, StagedSnapshotCompletion,
+    VerifiedStagedSnapshot,
+};
 mod settings;
 mod user_admin;
 mod user_profile;
@@ -214,10 +223,11 @@ pub use user_profile::{
     RegistrationRequest, UserProfileError, UserProfileStore, valid_time_zone_id,
 };
 pub use work_items::{
-    ActiveLease, HourlyCompletionCount, PublicationJournalEntry, SettlingSnapshot,
-    SettlingSnapshotFile, StagingHandoff, StagingHandoffMethod, StagingHandoffStatus, StateCount,
-    StoredManifest, StoredPublication, WorkItemListRow, WorkItemSort, WorkItemStore,
-    WorkItemWindowCounts,
+    ActiveLease, HourlyCompletionCount, LegacyInboundPath, LegacyPathResolution,
+    PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StagingHandoff,
+    StagingHandoffMethod, StagingHandoffStatus, StateCount, StoredManifest, StoredPublication,
+    WorkItemListRow, WorkItemSort, WorkItemStore, WorkItemWindowCounts,
+    inbound_path_requires_review,
 };
 pub use worker::WorkerId;
 pub use worker_pool::{

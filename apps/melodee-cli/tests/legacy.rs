@@ -15,6 +15,55 @@ use legacy_support::{
 };
 use melodee_auth::{PasswordHashAlgorithm, hash_password, verify_password};
 
+async fn wait_for_artist_name_lock(pool: &sqlx::PgPool) {
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let blocked: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                 WHERE datname=current_database() AND wait_event_type='Lock'
+                   AND query LIKE 'SELECT lock_artist_identity_names%')",
+            )
+            .fetch_one(pool)
+            .await
+            .expect("inspect Artist name-lock waiters");
+            if blocked {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("legacy writer waits on Artist name");
+}
+
+#[tokio::test]
+async fn legacy_artist_import_respects_shared_name_lock() {
+    let source = create_source("artist_name_import", SEED_MIXED).await;
+    let target = create_target("artist_name_import").await;
+    let mut holder = target.pool.begin().await.expect("begin holder");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind("miles davis")
+        .execute(&mut *holder)
+        .await
+        .expect("hold Artist name");
+    let mut args = vec!["import".to_string()];
+    args.extend(source_args(&source.url));
+    args.push("--library-path-map".to_string());
+    args.push(map_arg());
+    let target_url = target.url.clone();
+    let task = tokio::task::spawn_blocking(move || run_legacy(&target_url, &args));
+    wait_for_artist_name_lock(&target.pool).await;
+    assert_eq!(count(&target.pool, "artists").await, 0);
+    holder.commit().await.expect("release Artist name");
+    tokio::time::timeout(std::time::Duration::from_secs(45), task)
+        .await
+        .expect("legacy import completes")
+        .expect("join legacy import");
+    assert_eq!(count(&target.pool, "artists").await, 2);
+    drop_db(&source.name).await;
+    drop_db(&target.name).await;
+}
+
 #[tokio::test]
 async fn inventory_reports_counts_anomalies_and_fingerprint() {
     let source = create_source("inventory", SEED_MIXED).await;
@@ -1045,7 +1094,31 @@ async fn verify_then_delta_is_convergent() {
     delta_args.extend(source_args(&source.url));
     delta_args.push("--library-path-map".to_string());
     delta_args.push(map_arg());
-    run_legacy(&target.url, &delta_args);
+    // A delta rename shares its old/new name locks with live catalog import.
+    // Keep its new name locked until the actual CLI waits, then verify the
+    // transaction has not exposed a partial rename.
+    let mut holder = target.pool.begin().await.expect("begin holder");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind("miles dewey davis")
+        .execute(&mut *holder)
+        .await
+        .expect("hold incoming Artist name");
+    let delta_target = target.url.clone();
+    let running_args = delta_args.clone();
+    let task = tokio::task::spawn_blocking(move || run_legacy(&delta_target, &running_args));
+    wait_for_artist_name_lock(&target.pool).await;
+    let before_name: String = sqlx::query_scalar(
+        "SELECT canonical_name FROM artists WHERE public_api_id = '11111111-1111-1111-1111-111111111111'",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("read pre-delta name");
+    assert_eq!(before_name, "Miles Davis");
+    holder.commit().await.expect("release incoming name");
+    tokio::time::timeout(std::time::Duration::from_secs(45), task)
+        .await
+        .expect("delta completes")
+        .expect("join delta");
 
     let name: String = sqlx::query_scalar(
         "SELECT canonical_name FROM artists WHERE public_api_id = '11111111-1111-1111-1111-111111111111'",

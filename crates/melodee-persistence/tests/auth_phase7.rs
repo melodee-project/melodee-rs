@@ -353,6 +353,15 @@ async fn logout_access_revision_and_migration_bindings_fail_closed() {
 #[tokio::test]
 async fn postgres_rate_limit_is_atomic_expiring_and_capacity_bounded() {
     let db = TestDb::create("phase7_auth_rate_limit").await;
+    let metric_count = |name: &str| {
+        melodee_persistence::metrics::snapshot()
+            .into_iter()
+            .find(|metric| metric.name == name)
+            .expect("bounded rate-limit metric")
+            .count
+    };
+    let acquisitions_before = metric_count("rate_limit_acquire");
+    let holds_before = metric_count("rate_limit_hold");
     let policy = RateLimitPolicy {
         scope: "native-login",
         max_attempts: 2,
@@ -424,6 +433,33 @@ async fn postgres_rate_limit_is_atomic_expiring_and_capacity_bounded() {
             .expect("expired key removed"),
         RateLimitOutcome::Allowed { remaining: 1 }
     );
+    assert!(metric_count("rate_limit_acquire") >= acquisitions_before + 5);
+    assert!(metric_count("rate_limit_hold") >= holds_before + 5);
+
+    let constrained_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(db.pool.connect_options().as_ref().clone())
+        .await
+        .expect("constrained test pool");
+    let held = constrained_pool.acquire().await.expect("hold pool slot");
+    let before_canceled_acquire = metric_count("rate_limit_acquire");
+    let before_canceled_hold = metric_count("rate_limit_hold");
+    let canceled = tokio::time::timeout(
+        std::time::Duration::from_millis(50),
+        store.record_rate_limit_attempt(&constrained_pool, &policy, &first_key, T0),
+    )
+    .await;
+    assert!(
+        canceled.is_err(),
+        "checkout should be blocked until canceled"
+    );
+    assert_eq!(
+        metric_count("rate_limit_acquire"),
+        before_canceled_acquire + 1
+    );
+    assert_eq!(metric_count("rate_limit_hold"), before_canceled_hold);
+    drop(held);
+    constrained_pool.close().await;
     db.drop().await;
 }
 

@@ -299,6 +299,12 @@ async fn purge_one(
             WorkStoreError::NotFound(_) => failure("not_found", "work item no longer exists"),
             other => failure("store_error", other.to_string()),
         })?;
+    if melodee_persistence::inbound_path_requires_review(&item.source_path) {
+        return Err(failure(
+            "path_review_required",
+            "legacy or encoded inbound path history requires audited retention",
+        ));
+    }
     let import = CatalogStore
         .get_import(&state.admin.pool, item.id)
         .await

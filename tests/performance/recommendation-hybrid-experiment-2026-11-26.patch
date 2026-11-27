@@ -1,0 +1,37 @@
+--- a/crates/melodee-persistence/src/native_user_state.rs
++++ b/crates/melodee-persistence/src/native_user_state.rs
+@@ -1155,6 +1155,7 @@
+         // for the contended parents separately, then retry the entire play.
+         let mut binding_retries = 0;
+         let mut handed_track = None;
++        let mut track_probe_attempted = false;
+         loop {
+             let (mut tx, prelocked_track) = match handed_track.take() {
+                 Some((tx, track)) => (tx, Some(track)),
+@@ -1200,7 +1201,25 @@
+                     tx.rollback().await?;
+                     let started = std::time::Instant::now();
+                     if pool.options().get_max_connections() >= 3 {
+-                        handed_track = Some(wait_for_scrobble_track(pool, track_public_id).await?);
++                        if !track_probe_attempted {
++                            track_probe_attempted = true;
++                            let probe = wait_for_scrobble_parent(
++                                pool,
++                                ScrobbleParent::Track(track_public_id),
++                            );
++                            match tokio::time::timeout(std::time::Duration::from_millis(25), probe)
++                                .await
++                            {
++                                Ok(result) => result?,
++                                Err(_) => {
++                                    handed_track = Some(
++                                        wait_for_scrobble_track(pool, track_public_id).await?,
++                                    );
++                                }
++                            }
++                        } else {
++                            handed_track = Some(wait_for_scrobble_track(pool, track_public_id).await?);
++                        }
+                     } else {
+                         wait_for_scrobble_parent(pool, ScrobbleParent::Track(track_public_id))
+                             .await?;

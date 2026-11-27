@@ -833,15 +833,32 @@ impl CatalogStore {
             .collect::<Vec<_>>();
         artists.push(target_artist_id.into_uuid());
         let tracks = artist_merge_scope_tracks(&mut tx, &release_ids, &artists).await?;
+        let prospective = artist_merge_prospective_performance(
+            &mut tx,
+            &tracks,
+            &source_artist_ids,
+            target_artist_id,
+        )
+        .await?;
         if !crate::catalog_mutations::lock_participation_closure(
             &mut tx,
             &release_ids,
             Some(&tracks),
             &artists,
+            &[],
+            &prospective,
         )
         .await?
             || affected_artist_release_ids(&mut tx, &source_artist_ids).await? != release_ids
             || artist_merge_scope_tracks(&mut tx, &release_ids, &artists).await? != tracks
+            || artist_merge_prospective_performance(
+                &mut tx,
+                &tracks,
+                &source_artist_ids,
+                target_artist_id,
+            )
+            .await?
+                != prospective
         {
             return Err(CatalogStoreError::MutationConflict);
         }
@@ -1152,17 +1169,6 @@ impl CatalogStore {
             return Err(CatalogStoreError::MutationConflict);
         }
         let mut tx = pool.begin().await?;
-        let source_status =
-            sqlx::query_scalar::<_, String>("SELECT status FROM artists WHERE id = $1 FOR UPDATE")
-                .bind(split.source_artist_id.into_uuid())
-                .fetch_optional(&mut *tx)
-                .await?
-                .ok_or(CatalogStoreError::MutationConflict)?;
-        if matches!(source_status.as_str(), "merged" | "deprecated") {
-            return Err(CatalogStoreError::MutationConflict);
-        }
-        insert_artist(&mut *tx, new_artist).await?;
-
         let release_artist_ids = assignment_ids(&split.assignments, AssignmentKind::ReleaseArtist);
         let track_artist_ids = assignment_ids(&split.assignments, AssignmentKind::TrackArtist);
         let contribution_ids = assignment_ids(&split.assignments, AssignmentKind::Contribution);
@@ -1180,6 +1186,28 @@ impl CatalogStore {
             CatalogCorrectionDimension::Releases,
             MAX_CATALOG_CORRECTION_RELEASES,
         )?;
+        if !crate::catalog_mutations::lock_participation_closure(
+            &mut tx,
+            &release_ids,
+            None,
+            &[split.source_artist_id.into_uuid()],
+            &[new_artist.normalized_name().to_owned()],
+            &[],
+        )
+        .await?
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let source_status =
+            sqlx::query_scalar::<_, String>("SELECT status FROM artists WHERE id=$1")
+                .bind(split.source_artist_id.into_uuid())
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(CatalogStoreError::MutationConflict)?;
+        if matches!(source_status.as_str(), "merged" | "deprecated") {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        insert_artist(&mut *tx, new_artist).await?;
         sqlx::query("SELECT id FROM releases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
             .bind(&release_ids)
             .fetch_all(&mut *tx)
@@ -1352,6 +1380,17 @@ async fn artist_merge_scope_tracks(
         MAX_CATALOG_CORRECTION_TRACKS,
     )?;
     Ok(tracks.into_iter().collect())
+}
+
+async fn artist_merge_prospective_performance(
+    tx: &mut Transaction<'_, Postgres>,
+    tracks: &[Uuid],
+    sources: &[ArtistId],
+    target: ArtistId,
+) -> Result<Vec<(Uuid, Uuid)>, CatalogStoreError> {
+    let source_ids = sources.iter().map(|id| id.into_uuid()).collect::<Vec<_>>();
+    Ok(sqlx::query_as::<_, (Uuid,Uuid)>("WITH selected AS (SELECT id,release_id FROM tracks WHERE id=ANY($1)) SELECT $3::uuid,a.track_id FROM track_artists a WHERE a.track_id=ANY($1) AND a.artist_id=ANY($2) AND a.role IN ('primary','featured','guest') UNION SELECT $3::uuid,t.id FROM release_artists a JOIN selected t ON t.release_id=a.release_id WHERE a.artist_id=ANY($2) AND a.role IN ('primary','featured','guest') UNION SELECT $3::uuid,t.id FROM contributions c JOIN selected t ON (c.track_id=t.id OR (c.track_id IS NULL AND c.release_id=t.release_id)) WHERE c.artist_id=ANY($2) AND c.is_performance ORDER BY 1,2")
+        .bind(tracks).bind(&source_ids).bind(target.into_uuid()).fetch_all(&mut **tx).await?)
 }
 
 /// Corrections expose new identity relationships. Record both endpoints in the

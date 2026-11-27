@@ -34,12 +34,27 @@ class IngestionWorkloadTests(unittest.TestCase):
                 perf.run(1, 2, 1, Path(sys.executable), env)
         popen.assert_not_called()
 
+    def test_missing_temporary_parent_is_rejected_before_database_access(self):
+        name = "melodee_template_" + "e" * 32
+        env = {"MELODEE_PERF_OWNED_DATABASE": name, "MELODEE__DATABASE__URL": "postgres://localhost/" + name}
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(perf, "query") as query:
+            with self.assertRaises(FileNotFoundError):
+                perf.run(1, 2, 1, Path(sys.executable), env, temp_parent=Path(directory) / "absent")
+        query.assert_not_called()
+
     def test_server_inherits_no_user_melodee_configuration(self):
         with mock.patch.dict(os.environ, {"MELODEE__INGEST__SOURCE_ROOT": "/unrelated", "MELODEE__PODCAST__WORKER__ENABLED": "true"}, clear=True):
             env = perf.server_environment(Path("/tmp/owned"), "postgres://localhost/example", 2)
         self.assertEqual(env["MELODEE__INGEST__SOURCE_ROOT"], "/tmp/owned/inbound")
         self.assertEqual(env["MELODEE__PODCAST__WORKER__ENABLED"], "false")
         self.assertEqual(env["MELODEE__DISCOVERY__WORKER__ENABLED"], "false")
+
+    def test_operation_metrics_are_explicit_and_use_structured_fixed_target(self):
+        with mock.patch.dict(os.environ, {"MELODEE__LOGGING__LEVEL": "debug", "RUST_LOG": "trace"}, clear=True):
+            env = perf.server_environment(Path("/tmp/owned"), "postgres://fixture", 2, True)
+        self.assertEqual(env["RUST_LOG"], "info,melodee::media_operations=trace")
+        self.assertEqual(env["MELODEE__LOGGING__FORMAT"], "json")
+        self.assertNotIn("MELODEE__LOGGING__LEVEL", env)
 
     def test_reimport_redrops_identical_bytes_from_owned_corpus(self):
         with tempfile.TemporaryDirectory() as directory:

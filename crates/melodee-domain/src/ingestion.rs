@@ -173,6 +173,8 @@ pub enum TransitionKind {
     Worker,
     /// An operator decision (review accept/quarantine/ignore/delete, reprocess).
     Operator,
+    /// Explicitly retire an ambiguous legacy occurrence after reviewed binding.
+    LegacyPathResolution,
 }
 
 /// Operator-facing phase: the coarse grouping of [`IngestionState`].
@@ -321,6 +323,13 @@ impl IngestionState {
                     | (Self::NeedsReview, Self::Deleted)
                     | (Self::Quarantined, Self::Ready) // operator reprocess
                     | (Self::Failed, Self::Ready) // operator retry/reprocess
+            ),
+            TransitionKind::LegacyPathResolution => matches!(
+                (self, next),
+                (
+                    Self::Discovered | Self::Settling | Self::Ready,
+                    Self::Ignored
+                )
             ),
         };
 

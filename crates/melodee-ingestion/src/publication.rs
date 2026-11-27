@@ -631,6 +631,10 @@ fn copy_verified_asset(
         return verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io);
     }
 
+    let mut operation = melodee_media::operation_metrics::OperationGuard::start(
+        melodee_media::operation_metrics::Operation::PublicationCopy,
+    );
+
     let file_name = destination
         .file_name()
         .and_then(|value| value.to_str())
@@ -677,14 +681,18 @@ fn copy_verified_asset(
         if count == 0 {
             break;
         }
+        operation.add_read(u64::try_from(count).unwrap_or(u64::MAX));
         asset_io.before_chunk(count)?;
-        output
-            .write_all(&buffer[..count])
-            .map_err(|source| PublicationError::Io {
+        if let Err(source) = output.write_all(&buffer[..count]) {
+            // write_all may have written an unknown prefix before failing.
+            operation.mark_bytes_incomplete();
+            return Err(PublicationError::Io {
                 operation: "copy normalized asset",
                 path: temporary.clone(),
                 source,
-            })?;
+            });
+        }
+        operation.add_written(u64::try_from(count).unwrap_or(u64::MAX));
         hasher.update(&buffer[..count]);
         size = size.saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
         #[cfg(feature = "test-support")]
@@ -719,6 +727,7 @@ fn copy_verified_asset(
             actual: observed_hash,
         });
     }
+    operation.finish();
     drop(output);
     if nfs.is_none() && path_exists(&destination)? {
         return verify_file(&destination, asset.size_bytes, &asset.byte_hash, asset_io);
@@ -965,6 +974,9 @@ fn verify_file(
     expected_hash: &str,
     asset_io: AssetIo<'_>,
 ) -> Result<(), PublicationError> {
+    let mut operation = melodee_media::operation_metrics::OperationGuard::start(
+        melodee_media::operation_metrics::Operation::PublicationHash,
+    );
     let mut file = open_regular_file(path)?;
     let metadata = file.metadata().map_err(|source| PublicationError::Io {
         operation: "inspect publication asset",
@@ -996,6 +1008,7 @@ fn verify_file(
         if count == 0 {
             break;
         }
+        operation.add_read(u64::try_from(count).unwrap_or(u64::MAX));
         if remaining == 0 {
             return Err(PublicationError::SizeMismatch {
                 path: path.to_owned(),
@@ -1021,6 +1034,7 @@ fn verify_file(
             actual,
         });
     }
+    operation.finish();
     Ok(())
 }
 

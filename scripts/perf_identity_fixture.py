@@ -22,7 +22,6 @@ DO $$ BEGIN
  IF (SELECT count(*) FROM observed_artists) <> 0
  OR (SELECT count(*) FROM artist_match_decisions) <> 0
  OR (SELECT count(*) FROM artist_match_current) <> 0
- OR (SELECT count(*) FROM track_artists) <> 0
  OR (SELECT count(*) FROM artist_external_identities) <> 0
  OR (SELECT count(*) FROM release_external_identities) <> 0 THEN
    RAISE EXCEPTION 'identity augmentation requires an untouched fixture';
@@ -30,6 +29,16 @@ DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM releases r WHERE NOT EXISTS
      (SELECT 1 FROM release_artists c WHERE c.release_id=r.id AND c.role='primary')) THEN
    RAISE EXCEPTION 'fixture requires a primary Artist for each Release';
+ END IF;
+ IF (SELECT count(*) FROM track_artists) <> (SELECT count(*) FROM tracks)
+ OR EXISTS (
+     SELECT 1 FROM tracks t
+     JOIN release_artists release_credit ON release_credit.release_id=t.release_id AND release_credit.role='primary'
+     LEFT JOIN track_artists credit ON credit.track_id=t.id AND credit.role='primary'
+     WHERE credit.id IS NULL OR credit.artist_id <> release_credit.artist_id
+        OR credit.observed_artist_id IS NOT NULL OR credit.presentation_order <> 1
+ ) THEN
+   RAISE EXCEPTION 'fixture requires one matching unobserved primary credit per Track';
  END IF;
 END $$;
 
@@ -70,9 +79,10 @@ SELECT observation_id,decision_id,now() FROM bench_identity_observations;
 UPDATE release_artists credit SET observed_artist_id=observation.observation_id
 FROM bench_identity_observations observation
 WHERE observation.scope='release' AND observation.release_id=credit.release_id AND credit.role='primary';
-INSERT INTO track_artists (id,track_id,artist_id,observed_artist_id,role,presentation_order,display_value,join_phrase,created_at)
-SELECT uuidv7(),track_id,artist_id,observation_id,'primary',1,display_name,'',now()
-FROM bench_identity_observations WHERE scope='track';
+UPDATE track_artists credit SET observed_artist_id=observation.observation_id,
+                                display_value=observation.display_name
+FROM bench_identity_observations observation
+WHERE observation.scope='track' AND observation.track_id=credit.track_id AND credit.role='primary';
 
 -- Deterministic unique provider keys. These are synthetic shape-compatible
 -- evidence, not claims about real provider identities.

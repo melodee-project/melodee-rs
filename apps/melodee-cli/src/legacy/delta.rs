@@ -141,6 +141,7 @@ async fn delta_artists(
         if !runs::is_fenced_in(&mut tx, run_id, owner).await? {
             return Err(format!("run {run_id}: lost lease during delta"));
         }
+        let mut updates = Vec::new();
         for row in &rows {
             let pk: i64 = i64::from(row.get::<i32, _>("Id"));
             let source_updated: Option<time::OffsetDateTime> = row.get("LastUpdatedAt");
@@ -158,6 +159,39 @@ async fn delta_artists(
                 .get::<Option<String>, _>("SortName")
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| name.clone());
+            updates.push((pk, *target_id, name, sort));
+        }
+        // Lock both the current and incoming normalized names for the entire
+        // bounded batch before taking any Artist row lock. Re-read after
+        // locking because a concurrent correction may have renamed a row
+        // while this transaction waited for a name key.
+        let target_ids: Vec<Uuid> = updates.iter().map(|(_, id, _, _)| *id).collect();
+        let previous: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, normalized_name FROM artists WHERE id=ANY($1) ORDER BY id")
+                .bind(&target_ids)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|e| format!("delta Artist name snapshot failed: {e}"))?;
+        let incoming: Vec<String> = updates.iter().map(|(_, _, name, _)| name.clone()).collect();
+        let mut names: Vec<String> =
+            sqlx::query_scalar("SELECT lower(btrim(name)) FROM unnest($1::text[]) AS name")
+                .bind(&incoming)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|e| format!("delta Artist name normalization failed: {e}"))?;
+        names.extend(previous.iter().map(|(_, name)| name.clone()));
+        super::identity_name_lock::lock_names(&mut tx, &names).await?;
+        let locked: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, normalized_name FROM artists WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        )
+        .bind(&target_ids)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| format!("delta Artist name revalidation failed: {e}"))?;
+        if locked != previous {
+            return Err("delta Artist names changed concurrently; retry the delta".to_owned());
+        }
+        for (pk, target_id, name, sort) in &updates {
             sqlx::query(
                 "UPDATE artists SET canonical_name = $2, sort_name = $3,
                     normalized_name = lower(btrim($2)), updated_at = now(),
@@ -165,8 +199,8 @@ async fn delta_artists(
                  WHERE id = $1",
             )
             .bind(target_id)
-            .bind(&name)
-            .bind(&sort)
+            .bind(name)
+            .bind(sort)
             .execute(&mut *tx)
             .await
             .map_err(|e| format!("delta artist update failed for {pk}: {e}"))?;

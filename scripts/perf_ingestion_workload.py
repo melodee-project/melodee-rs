@@ -23,6 +23,7 @@ import time
 from urllib.parse import urlsplit
 
 from run_perf_mutation_benchmarks import validate_fixture
+from summarize_media_operations import MAX_BYTES as MAX_MEDIA_LOG_BYTES, summarize as summarize_media_operations
 
 ROOT = Path(__file__).resolve().parents[1]
 SUCCESS = frozenset({"cataloged", "indexing", "indexed"})
@@ -60,7 +61,8 @@ def generate_corpus(inbound: Path, albums: int) -> int:
                    "-metadata", f"album_artist=Benchmark Artist {index}", "-metadata", f"artist=Benchmark Artist {index}",
                    "-metadata", "title=Benchmark Track", "-metadata", "track=1", "-c:a",
                    "libmp3lame" if codec == "mp3" else "flac", str(target)]
-        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                       timeout=60)
         total += target.stat().st_size
         (release / ".melodee-ready").touch()
     return total
@@ -74,7 +76,8 @@ def queue_reimport(root: Path) -> None:
         scratch.rename(root / "inbound" / original.name)
 
 
-def server_environment(root: Path, database_url: str, concurrency: int) -> dict[str, str]:
+def server_environment(root: Path, database_url: str, concurrency: int,
+                       operation_metrics: bool = False) -> dict[str, str]:
     # Never import the developer's server settings or unrelated storage roots.
     env = {key: value for key, value in os.environ.items() if not key.startswith("MELODEE__")}
     env.update({
@@ -104,6 +107,10 @@ def server_environment(root: Path, database_url: str, concurrency: int) -> dict[
         "MELODEE__DISCOVERY__WORKER__ENABLED": "false",
         "MELODEE__ENRICHMENT__WORKER__ENABLED": "false",
     })
+    if operation_metrics:
+        env.pop("MELODEE__LOGGING__LEVEL", None)
+        env["MELODEE__LOGGING__FORMAT"] = "json"
+        env["RUST_LOG"] = "info,melodee::media_operations=trace"
     return env
 
 
@@ -129,18 +136,27 @@ IDENTITIES_SQL = """SELECT json_build_object('rows', COALESCE(json_agg(
 
 
 def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str, str],
-        reimport: bool = False) -> int:
+        reimport: bool = False, temp_parent: Path | None = None,
+        retry_binary: Path | None = None, operation_metrics: bool = False) -> int:
     validate_fixture(env)
     if not 1 <= albums <= 200 or not 1 <= concurrency <= 16 or timeout < 1:
         raise ValueError("albums must be 1..200, concurrency 1..16, and timeout positive")
     server = server.resolve(strict=True)
     if not server.is_file():
         raise ValueError("server must be a prebuilt release executable")
+    if temp_parent is not None:
+        temp_parent = temp_parent.resolve(strict=True)
+        if not temp_parent.is_dir():
+            raise ValueError("temporary parent must be an existing directory")
+    if retry_binary is not None:
+        retry_binary = retry_binary.resolve(strict=True)
+        if not retry_binary.is_file():
+            raise ValueError("retry test binary must be a regular file")
     database_url = env["MELODEE__DATABASE__URL"]
     initial = query(database_url, STATUS_SQL)
     if initial["database"] != env["MELODEE_PERF_OWNED_DATABASE"] or initial["items"]:
         raise ValueError("fixture database must match its ownership marker and contain no work items")
-    with tempfile.TemporaryDirectory(prefix="melodee-perf-ingestion-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="melodee-perf-ingestion-", dir=temp_parent) as temporary:
         root = Path(temporary)
         for name in ("inbound", "staging", "work", "storage", "assets"):
             (root / name).mkdir()
@@ -155,13 +171,17 @@ def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str
         first_identities = None
         second_started = None
         phase = "initial"
+        media_log_limited = False
         with (root / "server.log").open("wb") as log:
-            process = subprocess.Popen([str(server)], cwd=root, env=server_environment(root, database_url, concurrency),
+            process = subprocess.Popen([str(server)], cwd=root, env=server_environment(root, database_url, concurrency, operation_metrics),
                                        stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=os.name == "posix")
             try:
                 deadline = started + timeout
                 while time.monotonic() < deadline:
+                    if operation_metrics and (root / "server.log").stat().st_size > MAX_MEDIA_LOG_BYTES:
+                        media_log_limited = True
+                        break
                     if process.poll() is not None:
                         server_exit_code = process.returncode
                         break
@@ -192,9 +212,27 @@ def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str
                         process.kill()
                     process.wait()
         elapsed = time.monotonic() - started
+        media_operations = None
+        if operation_metrics:
+            with (root / "server.log").open(encoding="utf-8", errors="replace") as source:
+                media_operations = summarize_media_operations(source)
+            required = ("acquisition_tree_hash", "media_file_hash", "validation_hash", "publication_copy",
+                        "publication_hash", "ffprobe", "ffmpeg", "fpcalc")
+            media_operations["required_labels_missing"] = [label for label in required
+                if not media_operations["operations"][label]["operations"]]
+            media_operations["complete"] = (media_operations["complete"] and not media_log_limited
+                                             and not media_operations["required_labels_missing"])
+            media_operations["byte_counts_complete"] &= media_operations["complete"]
+            media_operations["input_limited_or_truncated"] |= media_log_limited
+            media_operations["server_shutdown_exit_code"] = process.returncode
+            if process.returncode != 0:
+                media_operations["complete"] = False
+                media_operations["byte_counts_complete"] = False
+                media_operations["limitations"].append("server did not confirm graceful shutdown; final events may be absent")
         diagnostic = []
         if server_exit_code is not None:
-            log_text = (root / "server.log").read_text(errors="replace")
+            log_text = ((root / "server.log").read_text(errors="replace")
+                        if (root / "server.log").stat().st_size <= MAX_MEDIA_LOG_BYTES else "")
             parsed_url = urlsplit(database_url)
             secrets = (database_url, parsed_url.username, parsed_url.password,
                        "benchmark-only-signing-key-67a49e48f0162e773e12",
@@ -207,6 +245,20 @@ def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str
         succeeded = sum(states.get(state, 0) for state in SUCCESS)
         expected = albums * (2 if reimport else 1)
         final_identities = query(database_url, IDENTITIES_SQL) if second_started is not None else None
+        retry_result = None
+        if retry_binary is not None and succeeded == expected:
+            completed = subprocess.run(
+                [str(retry_binary), "--ignored", "--exact", "--nocapture", "measure_catalog_retry"],
+                cwd=root, env=env, capture_output=True, text=True, check=True, timeout=timeout,
+            )
+            for line in completed.stdout.splitlines():
+                if "PERF_RETRY_JSON=" in line:
+                    candidate = json.loads(line.split("PERF_RETRY_JSON=", 1)[1])
+                    if candidate.get("operation") == "same_work_item_catalog_retry":
+                        retry_result = candidate
+                        break
+            if retry_result is None:
+                raise RuntimeError("retry benchmark did not produce its result")
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                                 text=True, check=True).stdout.strip()
         dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
@@ -214,6 +266,7 @@ def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str
         result = {"profile": "release binary supplied by operator; not independently verified",
                   "binary_sha256": file_sha256(server), "repository_head": commit,
                   "tracked_worktree_dirty": dirty, "platform": platform.platform(),
+                  "media_temp_parent": "operator-selected" if temp_parent is not None else "system default",
                   "albums": albums, "tracks": albums,
                   "mix": "alternating generated retained MP3 and FLAC, one five-second tone per release",
                   "corpus_bytes": corpus_bytes, "concurrency_per_stage": concurrency,
@@ -226,6 +279,9 @@ def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str
                       len(first_identities["rows"]) == albums and first_identities == final_identities
                   ) if first_identities is not None and final_identities is not None else None,
                   "initial_identity_rows": len(first_identities["rows"]) if first_identities is not None else None,
+                  "same_item_catalog_retry": retry_result,
+                  "media_operation_metrics": media_operations,
+                  "retry_binary_sha256": file_sha256(retry_binary) if retry_binary is not None else None,
                   "initial_release_track_identifiers": first_identities["rows"] if first_identities is not None else None,
                   "final_release_track_identifiers": final_identities["rows"] if final_identities is not None else None,
                   "server_exit_code": server_exit_code,
@@ -235,7 +291,7 @@ def run(albums: int, concurrency: int, timeout: int, server: Path, env: dict[str
                   "limitations": ["one synthetic five-second track per release; no artwork or CUE",
                                   "same-filesystem acquisition only; no retry or fault injection",
                                   "search, policy, discovery, enrichment and podcast workers disabled",
-                                  "no interactive load, streaming, syscall or subprocess counts collected",
+                                  "no interactive load, streaming or complete syscall/physical I/O counts collected",
                                   "cache condition uncontrolled", "worker polling included in elapsed time",
                                   "redrop creates new work items; ADR-0116 reserves distinct Release IDs and this is not a same-item retry",
                                   "identifier comparison covers only release and track identifiers, not every catalog relationship"]}
@@ -251,10 +307,14 @@ def main() -> int:
     parser.add_argument("--redrop", "--reimport", dest="reimport", action="store_true",
                         help="redrop identical bytes as new work items; this is not a same-item retry")
     parser.add_argument("--server", type=Path, default=ROOT / "target/release/melodee-server")
+    parser.add_argument("--temp-parent", type=Path, help="existing parent for the unique disposable media directory")
+    parser.add_argument("--retry-binary", type=Path, help="prebuilt release perf_catalog_retry test binary")
+    parser.add_argument("--operation-metrics", action="store_true",
+                        help="capture opt-in bounded-label media operation counts; adds logging overhead")
     args = parser.parse_args()
     try:
-        return run(args.albums, args.concurrency, args.timeout, args.server, os.environ.copy(), args.reimport)
-    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+        return run(args.albums, args.concurrency, args.timeout, args.server, os.environ.copy(), args.reimport, args.temp_parent, args.retry_binary, args.operation_metrics)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
         print(f"Ingestion benchmark failed: {type(error).__name__}", file=sys.stderr)
         return 1
 

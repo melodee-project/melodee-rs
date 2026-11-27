@@ -875,6 +875,9 @@ fn failure_disposition(error: &CatalogStoreError) -> (&'static str, FailureClass
             "catalog.manifest_evidence_unavailable",
             FailureClass::Retryable,
         ),
+        CatalogStoreError::ImportIdentityChanged => {
+            ("catalog.identity_binding_changed", FailureClass::Retryable)
+        }
         CatalogStoreError::Serialization(_) => {
             ("catalog.manifest_invalid", FailureClass::Permanent)
         }
@@ -947,6 +950,18 @@ mod tests {
         assert_eq!(
             failure_disposition(&error),
             ("catalog.correction_scope_exceeded", FailureClass::Permanent)
+        );
+    }
+
+    #[test]
+    fn import_identity_binding_changes_are_retryable_without_relaxing_mutation_conflicts() {
+        assert_eq!(
+            failure_disposition(&CatalogStoreError::ImportIdentityChanged),
+            ("catalog.identity_binding_changed", FailureClass::Retryable)
+        );
+        assert_eq!(
+            failure_disposition(&CatalogStoreError::MutationConflict),
+            ("catalog.mutation_conflict", FailureClass::Permanent)
         );
     }
 }

@@ -12,13 +12,25 @@ blake3.workspace = true
 lofty.workspace = true
 melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
 quick-xml.workspace = true
-rustix.workspace = true
+rustix = { workspace = true, features = ["process"] }
 serde_json.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 time.workspace = true
+tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true
 uuid.workspace = true
+
+[target.'cfg(target_os = "openbsd")'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
+# Compile the same kqueue observer in macOS cross-target tests; the runtime
+# macOS implementation continues to use waitid.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+nix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+process-wrap.workspace = true
 
 [lints]
 workspace = true

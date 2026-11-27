@@ -415,6 +415,74 @@ async fn purge_removes_inbound_source_when_no_staging_handoff_exists() {
 }
 
 #[tokio::test]
+async fn purge_refuses_ambiguous_legacy_and_reviewed_paths_before_any_deletion() {
+    let db = TestDb::create("admin_purge_legacy_fence").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "purge-admin");
+    let root = tempfile::tempdir().expect("temp root");
+    let inbound = root.path().join("inbound");
+    let staging = root.path().join("staging");
+    let work = root.path().join("work");
+    std::fs::create_dir_all(inbound.join("bad-�")).expect("literal candidate");
+    std::fs::write(inbound.join("bad-�/track.flac"), b"new literal").expect("file");
+    let (legacy, _) = insert_failed_item(&db, "bad-�").await;
+    sqlx::query("UPDATE release_work_items SET discovery_path_format=0 WHERE id=$1")
+        .bind(legacy)
+        .execute(&db.pool)
+        .await
+        .expect("legacy version");
+    let (reviewed, _) = insert_failed_item(&db, "bad-�").await;
+    let staged_relative = format!("releases/{reviewed}/source");
+    std::fs::create_dir_all(staging.join(&staged_relative)).expect("staging");
+    std::fs::write(
+        staging.join(&staged_relative).join("track.flac"),
+        b"reviewed",
+    )
+    .expect("staged file");
+    std::fs::create_dir_all(work.join(legacy.simple().to_string())).expect("legacy work");
+    std::fs::create_dir_all(work.join(reviewed.simple().to_string())).expect("reviewed work");
+    sqlx::query("INSERT INTO release_work_item_staging_handoffs (work_item_id,staging_relative_path,source_generation,status,method,tree_hash,intended_at,staged_at) VALUES ($1,$2,'gen','staged','rename',$3,clock_timestamp(),clock_timestamp())")
+        .bind(reviewed).bind(&staged_relative).bind("a".repeat(64)).execute(&db.pool).await.expect("receipt");
+    sqlx::query("INSERT INTO ingest_legacy_path_resolutions (legacy_work_item_id,reviewed_work_item_id,receipt_tree_hash,actor,reason,resolved_at) VALUES ($1,$2,$3,'operator','reviewed',clock_timestamp())")
+        .bind(legacy).bind(reviewed).bind("a".repeat(64)).execute(&db.pool).await.expect("audit");
+    let (status, body) = call(
+        app(
+            db.pool.clone(),
+            inbound.clone(),
+            staging.clone(),
+            work.clone(),
+        ),
+        "POST",
+        "/api/admin/v1/ingest/work-items/purge",
+        Some(json!({"workItemIds": [legacy, reviewed], "reason":"reviewed", "confirm":true})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["deleted"], json!([]));
+    assert_eq!(body["failed"].as_array().expect("failures").len(), 2);
+    assert_eq!(
+        std::fs::read(inbound.join("bad-�/track.flac")).expect("inbound"),
+        b"new literal"
+    );
+    assert_eq!(
+        std::fs::read(staging.join(staged_relative).join("track.flac")).expect("staged"),
+        b"reviewed"
+    );
+    assert!(work.join(legacy.simple().to_string()).is_dir());
+    assert!(work.join(reviewed.simple().to_string()).is_dir());
+    let retained: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ingest_legacy_path_resolutions WHERE legacy_work_item_id=$1",
+    )
+    .bind(legacy)
+    .fetch_one(&db.pool)
+    .await
+    .expect("audit retained");
+    assert_eq!(retained, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn processing_queue_delete_hard_deletes_a_cataloged_release() {
     let db = TestDb::create("admin_delete_cataloged").await;
     let fixture = seed_users(&db).await;
@@ -434,6 +502,9 @@ async fn processing_queue_delete_hard_deletes_a_cataloged_release() {
     .await;
     let work_item_id = cataloged.work_item_id();
     let release_internal = cataloged.release_id().into_uuid();
+    let (legacy, _) = insert_failed_item(&db, "historical-�").await;
+    sqlx::query("INSERT INTO ingest_legacy_path_resolutions (legacy_work_item_id,reviewed_work_item_id,receipt_tree_hash,actor,reason,resolved_at) VALUES ($1,$2,$3,'operator','reviewed',clock_timestamp())")
+        .bind(legacy).bind(work_item_id).bind("a".repeat(64)).execute(&db.pool).await.expect("historical audit");
     let app = app_with_canonical(
         db.pool.clone(),
         root.path().join("inbound"),
@@ -474,6 +545,12 @@ async fn processing_queue_delete_hard_deletes_a_cataloged_release() {
         };
         assert_eq!(remaining, 0, "{table} must be hard-deleted");
     }
+    let retained: i64 = sqlx::query_scalar("SELECT count(*) FROM ingest_legacy_path_resolutions WHERE legacy_work_item_id=$1 AND reviewed_work_item_id=$2")
+        .bind(legacy).bind(work_item_id).fetch_one(&db.pool).await.expect("audit retained");
+    assert_eq!(
+        retained, 1,
+        "non-owning audit survives catalog hard deletion"
+    );
     db.drop().await;
 }
 

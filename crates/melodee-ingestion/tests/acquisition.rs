@@ -277,6 +277,378 @@ fn standard_files() -> Vec<FixtureFile> {
     ]
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn distinct_non_utf8_occurrences_are_discovered_and_acquired_separately() {
+    use std::os::unix::ffi::OsStringExt;
+    let scenario = Scenario::new("acq-non-utf8").await;
+    for (suffix, content) in [(0x80_u8, b"first".as_slice()), (0x81, b"second".as_slice())] {
+        let name = std::ffi::OsString::from_vec(vec![b'b', b'a', b'd', b'-', suffix]);
+        fs::create_dir(scenario.root.join(&name)).expect("candidate");
+        fs::write(scenario.root.join(name).join("track.flac"), content).expect("file");
+    }
+    reconcile_all_sources(&scenario.config, &WorkItemStore, &scenario.pool, T0)
+        .await
+        .expect("discover");
+    reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        T0 + Duration::seconds(1),
+    )
+    .await
+    .expect("settle");
+    let items = WorkItemStore
+        .list(&scenario.pool, None, 10, 0)
+        .await
+        .expect("items");
+    assert_eq!(items.len(), 2);
+    assert_ne!(items[0].source_path, items[1].source_path);
+    let mut contents = Vec::new();
+    for _ in 0..2 {
+        let worker = WorkerId::new();
+        let item = scenario.claim_one(&worker, T0 + Duration::seconds(2)).await;
+        let owned = scenario
+            .acquire(&worker, &item, T0 + Duration::seconds(2))
+            .await
+            .expect("acquire distinct occurrence");
+        verify_owned_source(&owned).expect("content verification");
+        contents.push(fs::read(owned.root.join("track.flac")).expect("staged content"));
+    }
+    contents.sort();
+    assert_eq!(contents, vec![b"first".to_vec(), b"second".to_vec()]);
+    scenario.database.drop().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ambiguous_legacy_row_cannot_claim_a_distinct_literal_unicode_occurrence() {
+    use std::os::unix::ffi::OsStringExt;
+    let scenario = Scenario::new("acq-legacy-ambiguous").await;
+    let legacy = ReleaseWorkItem::discovered("bad-�".to_owned(), None, Uuid::now_v7(), T0);
+    let (legacy, _) = WorkItemStore
+        .create_or_get(&scenario.pool, &legacy)
+        .await
+        .expect("legacy");
+    sqlx::query("UPDATE release_work_items SET discovery_path_format=0,state='ready' WHERE id=$1")
+        .bind(legacy.id)
+        .execute(&scenario.pool)
+        .await
+        .expect("pre-upgrade ambiguous item");
+    let raw_name = std::ffi::OsString::from_vec(vec![b'b', b'a', b'd', b'-', 0x80]);
+    fs::create_dir(scenario.root.join(&raw_name)).expect("raw candidate");
+    fs::write(scenario.root.join(raw_name).join("track.flac"), b"raw").expect("raw file");
+    fs::create_dir(scenario.root.join("bad-�")).expect("literal candidate");
+    fs::write(scenario.root.join("bad-�/track.flac"), b"literal").expect("literal file");
+    reconcile_all_sources(&scenario.config, &WorkItemStore, &scenario.pool, T0)
+        .await
+        .expect("discover");
+    reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        T0 + Duration::seconds(1),
+    )
+    .await
+    .expect("settle");
+    let worker = WorkerId::new();
+    let claimed = WorkItemStore
+        .claim(
+            &scenario.pool,
+            &worker,
+            &WorkEngineConfig {
+                claim_batch_size: 10,
+                ..WorkEngineConfig::default()
+            },
+            T0 + Duration::seconds(2),
+        )
+        .await
+        .expect("claim");
+    assert_eq!(claimed.len(), 2);
+    assert!(claimed.iter().all(|item| item.id != legacy.id));
+    let pending = WorkItemStore
+        .list_legacy_inbound_paths(&scenario.pool, None)
+        .await
+        .expect("review list");
+    assert!(
+        pending
+            .iter()
+            .any(|item| item.id == legacy.id && !item.has_staging_receipt)
+    );
+    let mut contents = Vec::new();
+    let mut reviewed = None;
+    for item in &claimed {
+        let owned = scenario
+            .acquire(&worker, item, T0 + Duration::seconds(2))
+            .await
+            .expect("acquire reviewed new occurrence");
+        contents.push(fs::read(owned.root.join("track.flac")).expect("file"));
+        if reviewed.is_none() {
+            reviewed = Some((item.id, owned.tree_hash));
+        }
+    }
+    contents.sort();
+    assert_eq!(contents, vec![b"literal".to_vec(), b"raw".to_vec()]);
+    let (reviewed_id, tree_hash) = reviewed.expect("reviewed receipt");
+    let wrong_hash = "0".repeat(64);
+    let wrong = melodee_ingestion::LegacyPathReview {
+        legacy_id: legacy.id,
+        reviewed_id,
+        receipt_tree_hash: &wrong_hash,
+        actor: "test-operator",
+        reason: "checked original media and receipt",
+        now: T0 + Duration::seconds(3),
+    };
+    assert!(
+        melodee_ingestion::resolve_legacy_inbound_path(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &wrong
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        WorkItemStore
+            .get(&scenario.pool, legacy.id)
+            .await
+            .expect("legacy")
+            .state,
+        IngestionState::Ready
+    );
+    let review = melodee_ingestion::LegacyPathReview {
+        legacy_id: legacy.id,
+        reviewed_id,
+        receipt_tree_hash: &tree_hash,
+        actor: "test-operator",
+        reason: "checked original media and receipt",
+        now: T0 + Duration::seconds(3),
+    };
+    assert!(
+        melodee_ingestion::resolve_legacy_inbound_path(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &review
+        )
+        .await
+        .expect("reviewed binding")
+    );
+    assert!(
+        !melodee_ingestion::resolve_legacy_inbound_path(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &review
+        )
+        .await
+        .expect("idempotent retry")
+    );
+    let conflict = melodee_ingestion::LegacyPathReview {
+        reason: "different review",
+        ..review
+    };
+    assert!(
+        melodee_ingestion::resolve_legacy_inbound_path(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &conflict
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        WorkItemStore
+            .get(&scenario.pool, legacy.id)
+            .await
+            .expect("legacy")
+            .state,
+        IngestionState::Ignored
+    );
+    assert!(
+        !WorkItemStore
+            .list_legacy_inbound_paths(&scenario.pool, None)
+            .await
+            .expect("review list")
+            .iter()
+            .any(|item| item.id == legacy.id)
+    );
+    let recorded: (Uuid, String, String) = sqlx::query_as("SELECT reviewed_work_item_id,actor,reason FROM ingest_legacy_path_resolutions WHERE legacy_work_item_id=$1")
+        .bind(legacy.id).fetch_one(&scenario.pool).await.expect("audit record");
+    assert_eq!(
+        recorded,
+        (
+            reviewed_id,
+            "test-operator".to_owned(),
+            "checked original media and receipt".to_owned()
+        )
+    );
+    scenario.database.drop().await;
+}
+
+#[tokio::test]
+async fn ambiguous_legacy_with_verified_receipt_recovers_without_touching_inbound() {
+    let scenario = Scenario::new("acq-legacy-receipt").await;
+    let item = scenario
+        .settle(
+            "bad-�",
+            &[FixtureFile {
+                relative: "track.flac",
+                bytes: b"owned",
+            }],
+        )
+        .await;
+    let worker = WorkerId::new();
+    let claimed = scenario.claim_one(&worker, T0 + Duration::seconds(2)).await;
+    let owned = scenario
+        .acquire(&worker, &claimed, T0 + Duration::seconds(2))
+        .await
+        .expect("initial receipt");
+    sqlx::query("UPDATE release_work_items SET discovery_path_format=0,state='ready',lease_owner=NULL,lease_acquired_at=NULL,lease_expires_at=NULL WHERE id=$1")
+        .bind(item.id).execute(&scenario.pool).await.expect("simulate old recovery item");
+    fs::create_dir(scenario.root.join("bad-�")).expect("new literal occurrence");
+    fs::write(scenario.root.join("bad-�/track.flac"), b"new literal").expect("new file");
+    let retry_worker = WorkerId::new();
+    let retry = scenario
+        .claim_one(&retry_worker, T0 + Duration::seconds(3))
+        .await;
+    assert_eq!(retry.id, item.id);
+    let recovered = scenario
+        .acquire(&retry_worker, &retry, T0 + Duration::seconds(3))
+        .await
+        .expect("verified staged recovery");
+    assert_eq!(recovered.tree_hash, owned.tree_hash);
+    assert_eq!(
+        fs::read(recovered.root.join("track.flac")).expect("staged"),
+        b"owned"
+    );
+    assert_eq!(
+        fs::read(scenario.root.join("bad-�/track.flac")).expect("inbound untouched"),
+        b"new literal"
+    );
+    scenario.database.drop().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn nested_in_root_alias_candidate_is_acquired() {
+    use std::os::unix::fs::symlink;
+    let scenario = Scenario::new("acq-nested-alias").await;
+    fs::create_dir_all(scenario.root.join("holder/release")).expect("nested candidate");
+    fs::write(scenario.root.join("holder/release/track.flac"), b"nested").expect("file");
+    symlink(
+        scenario.root.join("holder/release"),
+        scenario.root.join("alias"),
+    )
+    .expect("alias");
+    reconcile_all_sources(&scenario.config, &WorkItemStore, &scenario.pool, T0)
+        .await
+        .expect("discover");
+    reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        T0 + Duration::seconds(1),
+    )
+    .await
+    .expect("settle");
+    let worker = WorkerId::new();
+    let claimed = WorkItemStore
+        .claim(
+            &scenario.pool,
+            &worker,
+            &WorkEngineConfig {
+                claim_batch_size: 10,
+                ..WorkEngineConfig::default()
+            },
+            T0 + Duration::seconds(2),
+        )
+        .await
+        .expect("claim");
+    let nested = claimed
+        .iter()
+        .find(|item| item.source_path == "holder/release")
+        .expect("nested claim");
+    let owned = scenario
+        .acquire(&worker, nested, T0 + Duration::seconds(2))
+        .await
+        .expect("nested acquisition");
+    assert_eq!(
+        fs::read(owned.root.join("track.flac")).expect("staged file"),
+        b"nested"
+    );
+    verify_owned_source(&owned).expect("content verification");
+    assert!(!scenario.root.join("holder/release").exists());
+    scenario.database.drop().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn nested_acquisition_rejects_parent_replaced_by_symlink() {
+    use std::os::unix::fs::symlink;
+    let scenario = Scenario::new("acq-nested-parent-swap").await;
+    fs::create_dir_all(scenario.root.join("holder/release")).expect("nested candidate");
+    fs::write(scenario.root.join("holder/release/track.flac"), b"original").expect("file");
+    symlink(
+        scenario.root.join("holder/release"),
+        scenario.root.join("alias"),
+    )
+    .expect("alias");
+    reconcile_all_sources(&scenario.config, &WorkItemStore, &scenario.pool, T0)
+        .await
+        .expect("discover");
+    reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        T0 + Duration::seconds(1),
+    )
+    .await
+    .expect("settle");
+    let worker = WorkerId::new();
+    let claimed = WorkItemStore
+        .claim(
+            &scenario.pool,
+            &worker,
+            &WorkEngineConfig {
+                claim_batch_size: 10,
+                ..WorkEngineConfig::default()
+            },
+            T0 + Duration::seconds(2),
+        )
+        .await
+        .expect("claim");
+    let nested = claimed
+        .iter()
+        .find(|item| item.source_path == "holder/release")
+        .expect("nested claim");
+    let parked = scenario.root.with_extension("parked-holder");
+    let outside = scenario.root.with_extension("outside-holder");
+    fs::rename(scenario.root.join("holder"), &parked).expect("park original holder");
+    fs::create_dir_all(outside.join("release")).expect("outside candidate");
+    fs::write(outside.join("release/track.flac"), b"outside").expect("outside file");
+    symlink(&outside, scenario.root.join("holder")).expect("replacement parent");
+    assert!(
+        scenario
+            .acquire(&worker, nested, T0 + Duration::seconds(2))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        fs::read(outside.join("release/track.flac")).expect("outside preserved"),
+        b"outside"
+    );
+    assert_eq!(
+        fs::read(parked.join("release/track.flac")).expect("original preserved"),
+        b"original"
+    );
+    fs::remove_dir_all(outside).expect("outside cleanup");
+    fs::remove_dir_all(parked).expect("parked cleanup");
+    scenario.database.drop().await;
+}
+
 #[cfg(feature = "test-support")]
 fn arm_copy_hook(
     config: &mut IngestionConfig,
@@ -1309,4 +1681,125 @@ fn write_tagless_wav(path: &std::path::Path) {
     bytes.extend_from_slice(&data_size.to_le_bytes());
     bytes.extend(std::iter::repeat_n(0_u8, data_size as usize));
     fs::write(path, bytes).expect("wav");
+}
+
+#[tokio::test]
+async fn acquisition_accepts_legacy_settling_signature_without_rewriting_evidence() {
+    let scenario = Scenario::new("legacy_signature").await;
+    let item = scenario.settle("legacy-release", &standard_files()).await;
+    let observed = melodee_ingestion::snapshot_release_directory(
+        &scenario.root.join("legacy-release"),
+        ".melodee-ready",
+    )
+    .expect("snapshot");
+    let legacy: String = observed
+        .files
+        .iter()
+        .map(|file| {
+            format!(
+                "{}\u{001f}{}\u{001f}{}\u{001f}{}\n",
+                file.relative_path,
+                file.file_type,
+                file.file_size,
+                file.modified_at.unix_timestamp_nanos()
+            )
+        })
+        .collect();
+    sqlx::query("UPDATE release_work_item_settling_snapshots SET signature = $2 WHERE id = $1")
+        .bind(item.latest_settling_snapshot_id)
+        .bind(&legacy)
+        .execute(&scenario.pool)
+        .await
+        .expect("legacy evidence");
+    let worker = WorkerId::new();
+    let claimed = scenario.claim_one(&worker, T0 + Duration::seconds(2)).await;
+    let owned = scenario
+        .acquire(&worker, &claimed, T0 + Duration::seconds(2))
+        .await
+        .expect("legacy handoff");
+    assert!(owned.root.is_dir());
+    let stored: String = sqlx::query_scalar(
+        "SELECT signature FROM release_work_item_settling_snapshots WHERE id = $1",
+    )
+    .bind(item.latest_settling_snapshot_id)
+    .fetch_one(&scenario.pool)
+    .await
+    .expect("stored signature");
+    assert_eq!(stored, legacy);
+    fs::remove_dir_all(
+        scenario
+            .staging_root()
+            .join("releases")
+            .join(item.id.to_string()),
+    )
+    .expect("owned staged fixture");
+    fs::remove_dir_all(&scenario.root).expect("owned inbound fixture");
+    scenario.database.drop().await;
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn legacy_signature_survives_interrupted_finalized_handoff_recovery() {
+    let mut scenario = Scenario::new("legacy_signature_recovery").await;
+    let item = scenario.settle("legacy-release", &standard_files()).await;
+    let expected_tree = tree_fingerprint(&scenario.root.join("legacy-release"));
+    let snapshot = melodee_ingestion::snapshot_release_directory(
+        &scenario.root.join("legacy-release"),
+        ".melodee-ready",
+    )
+    .expect("snapshot");
+    let legacy: String = snapshot
+        .files
+        .iter()
+        .map(|file| {
+            format!(
+                "{}\u{001f}{}\u{001f}{}\u{001f}{}\n",
+                file.relative_path,
+                file.file_type,
+                file.file_size,
+                file.modified_at.unix_timestamp_nanos()
+            )
+        })
+        .collect();
+    sqlx::query("UPDATE release_work_item_settling_snapshots SET signature = $2 WHERE id = $1")
+        .bind(item.latest_settling_snapshot_id)
+        .bind(&legacy)
+        .execute(&scenario.pool)
+        .await
+        .expect("legacy evidence");
+    let worker = WorkerId::new();
+    let now = T0 + Duration::seconds(2);
+    let claimed = scenario.claim_one(&worker, now).await;
+    arm_copy_hook(
+        &mut scenario.config,
+        AcquisitionFaultPoint::AfterFinalizationBeforeReceipt,
+    );
+    scenario
+        .acquire(&worker, &claimed, now)
+        .await
+        .expect_err("injected interruption");
+    arm_copy_only(&mut scenario.config);
+    let owned = scenario
+        .acquire(&worker, &claimed, now)
+        .await
+        .expect("recover finalized tree");
+    verify_owned_source(&owned).expect("verified byte hash");
+    assert_eq!(tree_fingerprint(&owned.root), expected_tree);
+    let stored: String = sqlx::query_scalar(
+        "SELECT signature FROM release_work_item_settling_snapshots WHERE id = $1",
+    )
+    .bind(item.latest_settling_snapshot_id)
+    .fetch_one(&scenario.pool)
+    .await
+    .expect("stored signature");
+    assert_eq!(stored, legacy);
+    fs::remove_dir_all(
+        scenario
+            .staging_root()
+            .join("releases")
+            .join(item.id.to_string()),
+    )
+    .expect("owned staged fixture");
+    fs::remove_dir_all(&scenario.root).expect("owned inbound fixture");
+    scenario.database.drop().await;
 }

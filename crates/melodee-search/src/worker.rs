@@ -62,6 +62,17 @@ struct SearchRebuildTestBarrierState {
     paused_notify: Notify,
     released: AtomicBool,
     released_notify: Notify,
+    snapshot_pause_requested: AtomicBool,
+    snapshot_paused: AtomicBool,
+    snapshot_paused_notify: Notify,
+    snapshot_released: AtomicBool,
+    snapshot_released_notify: Notify,
+    activated_at: std::sync::Mutex<Option<std::time::Instant>>,
+    query_pause_requested: AtomicBool,
+    query_paused: AtomicBool,
+    query_paused_notify: Notify,
+    query_released: AtomicBool,
+    query_released_notify: Notify,
 }
 
 #[cfg(feature = "test-support")]
@@ -69,6 +80,118 @@ impl SearchRebuildTestBarrier {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Request an additional pause immediately after the snapshot starts.
+    pub fn request_snapshot_pause(&self) {
+        self.state
+            .snapshot_pause_requested
+            .store(true, Ordering::Release);
+    }
+
+    /// Wait until the rebuild owns its snapshot but has not yet read pages.
+    pub async fn wait_until_snapshot_paused(&self) {
+        loop {
+            if self.state.snapshot_paused.load(Ordering::Acquire) {
+                return;
+            }
+            let notified = self.state.snapshot_paused_notify.notified();
+            if self.state.snapshot_paused.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    /// Release the optional snapshot-start pause.
+    pub fn release_snapshot(&self) {
+        self.state.snapshot_released.store(true, Ordering::Release);
+        self.state.snapshot_released_notify.notify_waiters();
+    }
+
+    /// Test-only hook; unrequested pauses preserve the original behavior.
+    pub async fn pause_after_snapshot_started(&self) {
+        if !self.state.snapshot_pause_requested.load(Ordering::Acquire) {
+            return;
+        }
+        self.state.snapshot_paused.store(true, Ordering::Release);
+        self.state.snapshot_paused_notify.notify_waiters();
+        loop {
+            if self.state.snapshot_released.load(Ordering::Acquire) {
+                return;
+            }
+            let notified = self.state.snapshot_released_notify.notified();
+            if self.state.snapshot_released.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    /// Record when the activation transaction returns successfully.
+    pub fn mark_activated(&self) {
+        let mut activated_at = self
+            .state
+            .activated_at
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *activated_at = Some(std::time::Instant::now());
+    }
+
+    /// Return the observed activation time, if activation completed.
+    #[must_use]
+    pub fn activated_at(&self) -> Option<std::time::Instant> {
+        *self
+            .state
+            .activated_at
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Request a pause after a query has selected its generation reader.
+    pub fn request_query_pause(&self) {
+        self.state
+            .query_pause_requested
+            .store(true, Ordering::Release);
+    }
+
+    /// Wait for a query to select its reader and reach the optional pause.
+    pub async fn wait_until_query_paused(&self) {
+        loop {
+            if self.state.query_paused.load(Ordering::Acquire) {
+                return;
+            }
+            let notified = self.state.query_paused_notify.notified();
+            if self.state.query_paused.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    /// Resume queries paused after their generation reader was selected.
+    pub fn release_query(&self) {
+        self.state.query_released.store(true, Ordering::Release);
+        self.state.query_released_notify.notify_waiters();
+    }
+
+    /// Test-only query hook; unrequested pauses preserve normal behavior.
+    pub async fn pause_after_query_reader(&self) {
+        if !self.state.query_pause_requested.load(Ordering::Acquire) {
+            return;
+        }
+        self.state.query_paused.store(true, Ordering::Release);
+        self.state.query_paused_notify.notify_waiters();
+        loop {
+            if self.state.query_released.load(Ordering::Acquire) {
+                return;
+            }
+            let notified = self.state.query_released_notify.notified();
+            if self.state.query_released.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
     }
 
     /// Waits until a rebuild reaches the pause point after snapshot validation
@@ -118,6 +241,17 @@ impl Default for SearchRebuildTestBarrierState {
             paused_notify: Notify::new(),
             released: AtomicBool::new(false),
             released_notify: Notify::new(),
+            snapshot_pause_requested: AtomicBool::new(false),
+            snapshot_paused: AtomicBool::new(false),
+            snapshot_paused_notify: Notify::new(),
+            snapshot_released: AtomicBool::new(false),
+            snapshot_released_notify: Notify::new(),
+            activated_at: std::sync::Mutex::new(None),
+            query_pause_requested: AtomicBool::new(false),
+            query_paused: AtomicBool::new(false),
+            query_paused_notify: Notify::new(),
+            query_released: AtomicBool::new(false),
+            query_released_notify: Notify::new(),
         }
     }
 }

@@ -46,6 +46,30 @@ pub(crate) enum IngestCommands {
     },
     /// Print a concise ingest queue and publication-configuration summary.
     Status,
+    /// List up to 100 ambiguous pre-upgrade inbound paths for operator review.
+    LegacyPaths {
+        /// Continue after the last work-item id from the prior page.
+        #[arg(long)]
+        after: Option<Uuid>,
+    },
+    /// Re-read an owned staging tree and verify its durable receipt.
+    VerifyStaged { id: Uuid },
+    /// Bind an ambiguous historical item to explicitly reviewed staged evidence.
+    ResolveLegacyPath {
+        #[arg(long)]
+        legacy: Uuid,
+        #[arg(long)]
+        reviewed: Uuid,
+        /// Independently reviewed BLAKE3 tree hash from the staged receipt.
+        #[arg(long)]
+        receipt_tree_hash: String,
+        /// Operator identity recorded in the audit event.
+        #[arg(long)]
+        actor: String,
+        /// Evidence and reason for the reviewed binding.
+        #[arg(long)]
+        reason: String,
+    },
 }
 
 pub(crate) async fn run(command: IngestCommands) {
@@ -60,6 +84,64 @@ pub(crate) async fn run(command: IngestCommands) {
     let store = WorkItemStore;
 
     match command {
+        IngestCommands::LegacyPaths { after } => {
+            match store.list_legacy_inbound_paths(&pool, after).await {
+                Ok(rows) => match serde_json::to_string_pretty(&rows) {
+                    Ok(output) => println!("{output}"),
+                    Err(error) => {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                },
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        IngestCommands::VerifyStaged { id } => {
+            let result = async {
+                let item = store.get(&pool, id).await?;
+                let owned =
+                    melodee_ingestion::owned_source_root(&config, &store, &pool, &item).await?;
+                Ok::<_, Box<dyn std::error::Error>>(serde_json::json!({"workItemId": item.id,
+                    "stagingPath": owned.root, "receiptTreeHash": owned.tree_hash}))
+            }
+            .await;
+            match result {
+                Ok(value) => println!("{value:#}"),
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        IngestCommands::ResolveLegacyPath {
+            legacy,
+            reviewed,
+            receipt_tree_hash,
+            actor,
+            reason,
+        } => {
+            let review = melodee_ingestion::LegacyPathReview {
+                legacy_id: legacy,
+                reviewed_id: reviewed,
+                receipt_tree_hash: &receipt_tree_hash,
+                actor: &actor,
+                reason: &reason,
+                now: OffsetDateTime::now_utc(),
+            };
+            match melodee_ingestion::resolve_legacy_inbound_path(&config, &store, &pool, &review)
+                .await
+            {
+                Ok(true) => println!("legacy path binding recorded"),
+                Ok(false) => println!("legacy path binding already recorded"),
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
         IngestCommands::RegisterBulk {
             manifest,
             source_id,

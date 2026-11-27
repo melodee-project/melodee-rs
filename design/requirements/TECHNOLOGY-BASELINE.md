@@ -20,6 +20,7 @@ remain fully FOSS.
 | Domain errors | thiserror | 2.0.21 | MIT/Apache-2.0 | Scaffolded |
 | IDs | uuid | 1.27.0 | MIT/Apache-2.0 | Scaffolded |
 | Filesystem primitives | rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | Accepted — ADR-0116; safe Unix no-follow/no-replace publication boundary |
+| Filesystem capabilities | cap-std / cap-fs-ext | 4.0.3 (proposed) | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT; transitive winx: Apache-2.0 WITH LLVM-exception | Proposed — ADR-0218; cross-platform snapshot integration and native Windows verification pending; scoped winx license exception |
 | Tracing | tracing / tracing-subscriber | 0.1.44 / 0.3.23 | MIT | Scaffolded |
 | Database | PostgreSQL | 18.4; 17 supported target | PostgreSQL License | Accepted concept |
 | Data access | SQLx | 0.9.0 stable line | MIT/Apache-2.0 | Proposed ADR-0110 |
@@ -27,6 +28,8 @@ remain fully FOSS.
 | Metadata | Lofty | 0.25.4 | MIT/Apache-2.0 | Proposed |
 | Media tools | FFmpeg/ffprobe | 8.1 stable line at PRD audit | LGPL/GPL | Proposed ADR-0108 |
 | Fingerprint | Chromaprint/fpcalc | 1.6.1 at PRD audit | MIT library | Proposed ADR-0108 |
+| Windows media child-tree containment | process-wrap | 10.0.1 | Apache-2.0 OR MIT | Accepted — ADR-0219; Windows Job Object wrapper, native-runtime qualification pending |
+| OpenBSD media process-exit observation | nix | 0.31.4 | MIT | Accepted — ADR-0219; target-scoped safe kqueue interface; native qualification pending |
 | Admin UI | React + Carbon | Carbon v11 / `@carbon/react` 1.x | MIT + Apache-2.0 | Proposed ADR-0109 |
 | Dependency audit | cargo-deny | 0.20.2 at audit | MIT/Apache-2.0 | Required tooling |
 | Documentation site | Astro + Starlight | astro 7.4.7, @astrojs/starlight 0.42.10 | MIT | Proposed ADR-0112 |

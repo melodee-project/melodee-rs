@@ -1,4 +1,5 @@
 //! Verified immutable files for catalog artwork, avatars, playlists and themes (ADR-0210).
+#[cfg(unix)]
 use rustix::fs::{Mode, OFlags, open};
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
@@ -43,8 +44,26 @@ fn root() -> io::Result<PathBuf> {
     Ok(path)
 }
 
+#[cfg(not(windows))]
 fn sync_dir(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
+}
+
+#[cfg(windows)]
+fn sync_dir(path: &Path) -> io::Result<()> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_SHARE_READ: u32 = 1;
+    const FILE_SHARE_WRITE: u32 = 2;
+    // If the filesystem cannot flush a directory, propagate the error rather
+    // than claiming a durable publication.
+    fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?
+        .sync_all()
 }
 
 // Hard-link publication is atomic and never replaces a concurrent writer.
@@ -101,6 +120,7 @@ fn object_path(root: &Path, key: &str) -> io::Result<(PathBuf, usize)> {
     Ok((root.join(&digest[..2]).join(key), size))
 }
 
+#[cfg(unix)]
 fn open_file(path: &Path) -> io::Result<File> {
     let flags = OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK;
     let file = File::from(open(path, flags, Mode::empty())?);
@@ -108,6 +128,32 @@ fn open_file(path: &Path) -> io::Result<File> {
         return Err(invalid("expected a regular asset file"));
     }
     Ok(file)
+}
+
+#[cfg(windows)]
+fn open_file(path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_SHARE_READ: u32 = 1;
+    const FILE_SHARE_WRITE: u32 = 2;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(invalid("expected a regular asset file"));
+    }
+    Ok(file)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_file(_path: &Path) -> io::Result<File> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "safe asset access is unsupported on this platform",
+    ))
 }
 
 fn read_verified(root: &Path, key: &str) -> io::Result<Vec<u8>> {
@@ -554,6 +600,21 @@ pub(crate) async fn check_binding(conn: &mut PgConnection) -> Result<(), sqlx::E
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
+
+    #[test]
+    fn asset_open_accepts_regular_file_and_rejects_directory() {
+        let dir = tempfile::tempdir().expect("temp directory");
+        let path = dir.path().join("asset");
+        fs::write(&path, b"asset").expect("write file");
+        assert!(
+            open_file(&path)
+                .expect("regular file")
+                .metadata()
+                .expect("metadata")
+                .is_file()
+        );
+        assert!(open_file(dir.path()).is_err());
+    }
 
     #[test]
     fn corrupt_file_and_unsafe_keys_are_rejected_and_existing_objects_cannot_be_replaced() {

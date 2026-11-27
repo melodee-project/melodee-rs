@@ -79,6 +79,13 @@ pub async fn import_artists(
                 original_release_date: None,
             });
         }
+        // Acquire the whole transaction's name set before inserting any page;
+        // otherwise another importer can see a partial same-name group.
+        let names = pending
+            .iter()
+            .map(|row| row.normalized.clone())
+            .collect::<Vec<_>>();
+        super::identity_name_lock::lock_names(&mut tx, &names).await?;
         for page in pending.chunks(500) {
             let (written, reported) = insert_catalog_page(&mut tx, run_id, "artist", page).await?;
             inserted += written;

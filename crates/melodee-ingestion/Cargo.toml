@@ -12,6 +12,8 @@ test-support = []
 
 [dependencies]
 blake3.workspace = true
+cap-std.workspace = true
+cap-fs-ext.workspace = true
 futures-util.workspace = true
 melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
 melodee-persistence = { path = "../melodee-persistence", version = "0.3.0" }
@@ -26,7 +28,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
-rustix = { workspace = true, features = ["std"] }
+rustix = { workspace = true, features = ["process", "std"] }
 
 [dev-dependencies]
 tempfile.workspace = true

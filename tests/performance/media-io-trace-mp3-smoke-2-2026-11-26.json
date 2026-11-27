@@ -1,0 +1,96 @@
+{
+  "audio_seconds": 5,
+  "binary_sha256": "807bb86e8ecbd6b9a0a21b9f17dd75c930e5dbe55006d0e78d14787590869e63",
+  "build_profile": "release expected; binary profile not independently verified",
+  "codec": "mp3",
+  "elapsed_seconds": 1.103821,
+  "input_bytes": 21044,
+  "limitations": [
+    "inspection and normalization combined, not full ingestion",
+    "strace changes timing; one generated track and uncontrolled cache",
+    "counts logical syscall return bytes, not physical I/O or hash counts; kernel copies are separate from read/write",
+    "mmap page faults, untraced syscall variants and unparsed calls are not byte-attributed",
+    "process attribution starts at observed execve; compare unparsed calls before use",
+    "sampled source hashes do not prove the binary was built from that source"
+  ],
+  "platform": "Linux-7.3.4-300.fc45.x86_64-x86_64-with-glibc2.44",
+  "repository_head": "08de08d50cb1be6e76c66000232dae257c1a2d2f",
+  "script_sha256": "54694bc0f81935d7091429673926bc53ed043c6ae7b85fb720e103f2418c39b0",
+  "source_sha256": {
+    "Cargo.lock": "c47c4d8798c9da4a477770687e8e8fc67356f9541c17e8e992fcf795b13ae9c3",
+    "crates/melodee-media/src/lib.rs": "11ff4cbf073db49ad890205c86e5a8368b439efcb255ecb3e6855ca1083e9b87",
+    "crates/melodee-media/src/normalize.rs": "5f104fa6c58fef4cae7c8376104a71679d9892953dc74466145c06c5fcc71b21",
+    "crates/melodee-media/src/secure_fs.rs": "943dc956e3c731889e6193abb766a6daa2a73c9cbfedf4c6e177df9aadefe4df",
+    "crates/melodee-media/tests/perf_normalization_matrix.rs": "8f79f3e6466a2bd5ab3b7f5e2f1dae4b22d179b0329c907793937cefe0d1a9fa"
+  },
+  "syscalls": {
+    "attributed_mmaps": 0,
+    "executions": {
+      "ffmpeg:other": 1,
+      "ffprobe:other": 3,
+      "fpcalc:other": 1
+    },
+    "file_calls": {
+      "benchmark_or_other:source:kernel_read": {
+        "bytes": 21044,
+        "calls": 2,
+        "errors": 0
+      },
+      "benchmark_or_other:source:read": {
+        "bytes": 153419,
+        "calls": 22,
+        "errors": 0
+      },
+      "benchmark_or_other:work:kernel_write": {
+        "bytes": 21044,
+        "calls": 2,
+        "errors": 0
+      },
+      "benchmark_or_other:work:read": {
+        "bytes": 21044,
+        "calls": 2,
+        "errors": 0
+      },
+      "ffmpeg:source:read": {
+        "bytes": 21044,
+        "calls": 1,
+        "errors": 0
+      },
+      "ffprobe:source:read": {
+        "bytes": 42088,
+        "calls": 2,
+        "errors": 0
+      },
+      "ffprobe:work:read": {
+        "bytes": 21044,
+        "calls": 1,
+        "errors": 0
+      },
+      "fpcalc:source:read": {
+        "bytes": 21044,
+        "calls": 3,
+        "errors": 0
+      }
+    },
+    "trace_files": 33,
+    "unparsed_file_calls": 11
+  },
+  "timestamp_utc": "2026-11-27T03:06:40.770418+00:00",
+  "tool_versions": {
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobe": "ffprobe version 9.0.2 Copyright (c) 2007-2026 the FFmpeg developers",
+    "fpcalc": "fpcalc version 1.6.1 (FFmpeg Lavc63.1.101 Lavf63.1.101 SwR7.1.101)",
+    "strace": "strace -- version 7.3"
+  },
+  "working_tree_dirty": true,
+  "workload": {
+    "elapsed_seconds": 0.836127185,
+    "latency_microseconds": [
+      835707
+    ],
+    "releases": 1,
+    "releases_per_second": 1.195990296619766,
+    "source_bytes_processed": 21044,
+    "workers": 1
+  }
+}

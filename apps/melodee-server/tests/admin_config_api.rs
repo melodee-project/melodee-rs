@@ -410,6 +410,64 @@ async fn administrator_gate_rejects_anonymous_and_non_admin() {
 }
 
 #[tokio::test]
+async fn administrator_configures_connection_admission_for_next_restart() {
+    use melodee_persistence::runtime_settings as runtime;
+    let db = common::TestDb::create("admin_connection_admission").await;
+    let fixture = seed(&db).await;
+    let app = app(db.pool.clone());
+    let entries = "/api/admin/v1/config/entries";
+    let key = "MELODEE__SERVER__MAX_CONNECTIONS";
+    let path = format!("{entries}/{key}");
+    let admin = Some(fixture.admin_token.as_str());
+    for value in [json!(-1), json!(65_537)] {
+        assert_eq!(
+            call(
+                app.clone(),
+                "PUT",
+                &path,
+                Some(json!({"action":"set","value":value})),
+                admin
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for value in [0, 19, 65_536] {
+        assert_eq!(
+            call(
+                app.clone(),
+                "PUT",
+                &path,
+                Some(json!({"action":"set","value":value})),
+                admin
+            )
+            .await
+            .0,
+            StatusCode::NO_CONTENT
+        );
+        let saved = runtime::load(&db.pool).await.unwrap();
+        assert_eq!(saved.get(key), Some(&value.to_string()));
+        assert_eq!(
+            runtime::preview(saved, || runtime::var(key).unwrap()),
+            value.to_string()
+        );
+    }
+    let (status, rows) = call(app, "GET", entries, None, admin).await;
+    assert_eq!(status, StatusCode::OK);
+    let entry = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["key"] == key)
+        .unwrap();
+    assert_eq!(entry["editable"], true);
+    assert_eq!(entry["savedValue"], "65536");
+    assert_eq!(entry["savedSource"], "database");
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn administrator_tunes_workers_and_host_settings_cannot_be_changed() {
     use melodee_persistence::runtime_settings as runtime;
     let db = common::TestDb::create("admin_worker_edit").await;

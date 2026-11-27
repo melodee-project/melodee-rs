@@ -480,6 +480,9 @@ fn verify_asset(
     expected_hash: &str,
     cancellation: &AtomicBool,
 ) -> Result<u64, StructuralValidationError> {
+    let mut operation = melodee_media::operation_metrics::OperationGuard::start(
+        melodee_media::operation_metrics::Operation::ValidationHash,
+    );
     validate_hash(expected_hash)?;
     let path = work_root.join(relative_path);
     reject_symlink_components(work_root, &path)?;
@@ -510,7 +513,7 @@ fn verify_asset(
     if !metadata.is_file() {
         return Err(StructuralValidationError::NotRegularFile(path));
     }
-    let (actual_hash, actual_size) = hash_reader(&mut file, &path, cancellation)?;
+    let (actual_hash, actual_size) = hash_reader(&mut file, &path, cancellation, &mut operation)?;
     if actual_size != metadata.len() {
         return Err(StructuralValidationError::SizeMismatch {
             path,
@@ -525,6 +528,7 @@ fn verify_asset(
             actual: actual_hash,
         });
     }
+    operation.finish();
     Ok(actual_size)
 }
 
@@ -532,6 +536,7 @@ fn hash_reader(
     reader: &mut File,
     path: &Path,
     cancellation: &AtomicBool,
+    operation: &mut melodee_media::operation_metrics::OperationGuard,
 ) -> Result<(String, u64), StructuralValidationError> {
     let mut hasher = blake3::Hasher::new();
     let mut buffer = [0_u8; 64 * 1024];
@@ -550,6 +555,7 @@ fn hash_reader(
         if count == 0 {
             break;
         }
+        operation.add_read(u64::try_from(count).unwrap_or(u64::MAX));
         hasher.update(&buffer[..count]);
         size = size.saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
     }

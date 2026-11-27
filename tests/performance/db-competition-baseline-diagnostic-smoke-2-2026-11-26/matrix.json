@@ -1,0 +1,40 @@
+{
+  "binary_sha256": "98e48029c573ce369adace7cba474bfe37200abb50fa7023ea16b1cfb614f530",
+  "build_record_sha256": "7c155efc50871639c2d01d62da29ad105782eae647574594fb2a0f38ce602c67",
+  "cases": [
+    {
+      "clone_seconds": 0.281446,
+      "exit_code": 0,
+      "metrics_complete": false,
+      "mode": "mixed",
+      "pool_size": 8,
+      "result": "pool-8-mixed.json"
+    }
+  ],
+  "cases_succeeded": true,
+  "commit": "a0979cde1fd2aeff5b8027d9d59336b678f1aa12",
+  "fixture": {
+    "artists": 200,
+    "releases": 300,
+    "seed_timeout_seconds": "120",
+    "tracks": 3600
+  },
+  "limitations": [
+    "each case uses a clone of the same fixture and uncontrolled operating-system cache",
+    "source fingerprints do not prove reproducible compilation or prevent transient edits",
+    "refer to each case for overlap, sampling and metric-coverage limitations"
+  ],
+  "metrics_complete": false,
+  "migration_cli_sha256": "ccdf74f9fd833fb2e89c3f3050d48d6ff580fa8be8e0d131d75ef5c7b42c59e4",
+  "migration_cli_source_identity": "not independently established",
+  "workload_sha256": {
+    "scripts/perf_db_competition.py": "df30c4ccbbd2aa9c42e2268bd887e600c8b0981a8d9ac7986cfb4f407994ac6e",
+    "scripts/perf_ingestion_workload.py": "8875d106228b0466a77200661510257fcb05828e194107a527de024cdcd642b4",
+    "scripts/perf_ingress_workload.py": "be59065633456f1238097e515c4a8e40bc3da92df6ffee7d2b208acf1e984fdd",
+    "scripts/perf_representative.py": "33fd769ad39cd2478406aa0017e0d804953c2a4a8c4f9f7239144c259b63abb4",
+    "scripts/run_db_competition_matrix.py": "82c242b4d0ad499512cbff266c97e420a382027f7b78c4a739a5abf3a448672a",
+    "scripts/run_perf_mutation_benchmarks.py": "81789b1d2f6df3fba3cde14cd94c95d508e5e6c468cfd3035463dc428f09bb8c",
+    "scripts/summarize_perf_metrics.py": "64a3604974d281b90f251f9b7fe0eacc7b46afb357dd35002a3d3d27bcee841d",
+    "scripts/test_database.py": "4a4c43f6cb4552954eca6f5c84b35a0ba026242da14b56d10b1b8d5eb462e518"
+  }
+}

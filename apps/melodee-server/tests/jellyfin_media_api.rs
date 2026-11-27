@@ -397,6 +397,74 @@ async fn artist_child_count_uses_primary_releases_not_featured_credits() {
 }
 
 #[tokio::test]
+async fn artist_page_counts_only_active_primary_releases() {
+    let (db, fixture, _ids) = seeded_fixture("jf_media_artist_page_counts").await;
+    phase5_common::seed_cataloged_release(
+        &db,
+        2,
+        CatalogFixturePresentation {
+            release_title: "Second Primary Release",
+            release_artist: "Aurora Fields",
+            track_title: "Second Track",
+            track_artist: "Aurora Fields",
+            release_date: "2002-03-04",
+        },
+    )
+    .await;
+    let deprecated = phase5_common::seed_cataloged_release(
+        &db,
+        3,
+        CatalogFixturePresentation {
+            release_title: "Deprecated Primary Release",
+            release_artist: "Aurora Fields",
+            track_title: "Third Track",
+            track_artist: "Aurora Fields",
+            release_date: "2003-03-04",
+        },
+    )
+    .await;
+    sqlx::query("UPDATE releases SET status = 'deprecated' WHERE id = $1")
+        .bind(deprecated.release_id().into_uuid())
+        .execute(&db.pool)
+        .await
+        .expect("deprecate release");
+    phase5_common::seed_cataloged_release(
+        &db,
+        4,
+        CatalogFixturePresentation {
+            release_title: "Other Artist Release",
+            release_artist: "Harbour Guest",
+            track_title: "Guest Track",
+            track_artist: "Harbour Guest",
+            release_date: "2004-03-04",
+        },
+    )
+    .await;
+
+    for (path, expected_name, expected_count) in [
+        ("/Artists?limit=1&startIndex=0", "Aurora Fields", 2),
+        ("/Artists?limit=1&startIndex=1", "Harbour Guest", 1),
+        ("/Artists?searchTerm=aurora&limit=1", "Aurora Fields", 2),
+    ] {
+        let (status, _, bytes) = respond(&fixture.state, get(path, &fixture.token)).await;
+        assert_eq!(status, StatusCode::OK);
+        let json = json_body(&bytes);
+        assert_eq!(json["Items"].as_array().expect("items").len(), 1);
+        assert_eq!(json["Items"][0]["Name"], expected_name);
+        assert_eq!(json["Items"][0]["ChildCount"], expected_count);
+    }
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        get("/Artists?limit=1&startIndex=2", &fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let json = json_body(&bytes);
+    assert_eq!(json["TotalRecordCount"], 2);
+    assert_eq!(json["Items"].as_array().expect("items").len(), 0);
+}
+
+#[tokio::test]
 async fn artist_detail_and_search_term_folding() {
     let (_db, fixture, ids) = seeded_fixture("jf_media_artist_detail").await;
     let (status, headers, bytes) = respond(
@@ -441,6 +509,54 @@ async fn artist_detail_and_search_term_folding() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json_body(&bytes)["TotalRecordCount"], 0);
+}
+
+#[tokio::test]
+async fn audio_pagination_preserves_track_number_ties_and_null_order() {
+    let (db, fixture, first) = seeded_fixture("jf_media_audio_number_order").await;
+    let mut tracks = vec![first.track];
+    for (sequence, title, track_title) in [
+        (2, "Second Ordering Release", "Second Ordering Track"),
+        (3, "Third Ordering Release", "Third Ordering Track"),
+    ] {
+        let seeded = phase5_common::seed_cataloged_release(
+            &db,
+            sequence,
+            CatalogFixturePresentation {
+                release_title: title,
+                release_artist: "Aurora Fields",
+                track_title,
+                track_artist: "Aurora Fields",
+                release_date: "2002-03-04",
+            },
+        )
+        .await;
+        let public_id: Uuid =
+            sqlx::query_scalar("SELECT public_api_id FROM tracks WHERE release_id = $1")
+                .bind(seeded.release_id().into_uuid())
+                .fetch_one(&db.pool)
+                .await
+                .expect("track public id");
+        tracks.push(public_id);
+    }
+    sqlx::query("UPDATE tracks SET track_number = CASE WHEN public_api_id = $1 THEN NULL ELSE 7 END WHERE public_api_id = ANY($2)")
+        .bind(tracks[2])
+        .bind(&tracks)
+        .execute(&db.pool)
+        .await
+        .expect("set tie and null track numbers");
+    let mut tied = [tracks[0], tracks[1]];
+    tied.sort();
+    let expected = [tied[0], tied[1], tracks[2]];
+    for (offset, id) in expected.iter().enumerate() {
+        let path = format!("/Items?includeItemTypes=Audio&limit=1&startIndex={offset}");
+        let (status, _, bytes) = respond(&fixture.state, get(&path, &fixture.token)).await;
+        assert_eq!(status, StatusCode::OK);
+        let json = json_body(&bytes);
+        assert_eq!(json["TotalRecordCount"], 3);
+        assert_eq!(json["Items"].as_array().expect("items").len(), 1);
+        assert_eq!(json["Items"][0]["Id"], nf(*id));
+    }
 }
 
 #[tokio::test]

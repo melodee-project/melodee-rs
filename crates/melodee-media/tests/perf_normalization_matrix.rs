@@ -9,10 +9,9 @@ use uuid::Uuid;
 #[test]
 #[ignore = "requires generated audio fixtures and external media tools"]
 fn codec_worker_matrix() {
-    assert!(
-        !cfg!(debug_assertions),
-        "run this benchmark in release mode"
-    );
+    if cfg!(debug_assertions) {
+        panic!("run this benchmark in release mode");
+    }
     let source = PathBuf::from(std::env::var_os("MELODEE_PERF_SOURCE").expect("fixture source"));
     let work = PathBuf::from(std::env::var_os("MELODEE_PERF_WORK").expect("owned work area"));
     let workers: usize = std::env::var("MELODEE_PERF_WORKERS")

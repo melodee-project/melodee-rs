@@ -1833,7 +1833,7 @@ fn uuidv7() -> uuid::Uuid {
 ///
 /// Upgrades a populated pre-remediation database (schema through 0059) with
 /// representative data and deliberately inconsistent derived state, applying the
-/// full chain (0060-0066), and verifies existing rows survive, the new indexes
+/// full remediation chain, and verifies existing rows survive, the new indexes
 /// are valid, and the operator repair converges the corrupted aggregate.
 #[tokio::test]
 async fn perf_remediation_upgrade_from_0059_preserves_data_and_repairs_derived_state() {
@@ -1977,6 +1977,28 @@ async fn perf_remediation_upgrade_from_0059_preserves_data_and_repairs_derived_s
     .await
     .expect("validate new indexes");
     assert_eq!(invalid, 0, "all remediation indexes must be valid");
+
+    // Verify existence as well as validity and the exact ascending/default
+    // NULLS LAST keys used by Jellyfin's stable paginated Audio ordering.
+    let (definition, valid, ready): (String, bool, bool) = sqlx::query_as(
+        "SELECT pg_get_indexdef(index.indexrelid), index.indisvalid, index.indisready \
+           FROM pg_index index \
+           JOIN pg_class relation ON relation.oid = index.indexrelid \
+           JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace \
+          WHERE namespace.nspname = 'public' \
+            AND relation.relname = 'tracks_jellyfin_number_public_idx'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("Jellyfin Audio index exists after populated upgrade");
+    assert!(
+        valid && ready,
+        "Jellyfin Audio index must be valid and ready"
+    );
+    assert_eq!(
+        definition,
+        "CREATE INDEX tracks_jellyfin_number_public_idx ON public.tracks USING btree (track_number, public_api_id)"
+    );
 
     // New state tables exist.
     for table in [
@@ -2158,5 +2180,116 @@ async fn recommendation_lock_upgrade_preserves_popularity_and_accepts_new_plays(
     let after_play: Vec<i64> = sqlx::query_scalar("SELECT popularity FROM native_recommendation_candidates WHERE entity_id=ANY($1) ORDER BY entity_type,entity_id")
         .bind(ids).fetch_all(&db.pool).await.expect("read updated popularity");
     assert_eq!(after_play, vec![2, 2, 2]);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn migration_0067_preserves_populated_work_items() {
+    use melodee_domain::ReleaseWorkItem;
+    use melodee_persistence::WorkItemStore;
+    use uuid::Uuid;
+
+    let db = TestDb::create_unmigrated("migration_0067_populated").await;
+    let prior: Vec<_> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|m| m.version <= 66)
+        .cloned()
+        .collect();
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("pre-0067 migrations");
+    let item =
+        ReleaseWorkItem::discovered("kept/source".to_owned(), None, Uuid::now_v7(), common::T0);
+    WorkItemStore
+        .create(&db.pool, &item)
+        .await
+        .expect("seed work item");
+    let created = item;
+    migrate(&db.pool).await.expect("upgrade through 0067");
+    let persisted = WorkItemStore
+        .get_by_source_identity(&db.pool, None, "kept/source")
+        .await
+        .expect("read work item")
+        .expect("preserved");
+    assert_eq!(persisted.id, created.id);
+    assert_eq!(persisted.state, created.state);
+    let fast_default: bool = sqlx::query_scalar("SELECT atthasmissing FROM pg_attribute WHERE attrelid='release_work_items'::regclass AND attname='discovery_birth_at'")
+        .fetch_one(&db.pool).await.expect("fast default metadata");
+    assert!(
+        fast_default,
+        "populated upgrade must avoid rewriting work items"
+    );
+    let mut tx = db.pool.begin().await.expect("begin long transaction");
+    let cutoff: time::OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&mut *tx)
+        .await
+        .expect("cutoff");
+    sqlx::query("SELECT pg_sleep(0.01)")
+        .execute(&mut *tx)
+        .await
+        .expect("advance clock");
+    let inserted_at: time::OffsetDateTime = sqlx::query_scalar("INSERT INTO release_work_items (id,api_key,source_path,current_path,state,correlation_id,discovered_at,updated_at,created_at) VALUES (gen_random_uuid(),gen_random_uuid(),'later/source','later/source','discovered',gen_random_uuid(),clock_timestamp(),clock_timestamp(),clock_timestamp()) RETURNING discovery_birth_at")
+        .fetch_one(&mut *tx).await.expect("insert after cutoff");
+    assert!(
+        inserted_at > cutoff,
+        "new rows need insertion-time birth within long transactions"
+    );
+    tx.rollback().await.expect("rollback probe");
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM ingestion_discovery_scan")
+        .fetch_one(&db.pool)
+        .await
+        .expect("new scan table");
+    assert_eq!(rows, 0);
+    migrate(&db.pool).await.expect("repeat migration");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn migration_0070_preserves_existing_inbound_state() {
+    use melodee_domain::ReleaseWorkItem;
+    use melodee_persistence::WorkItemStore;
+    use uuid::Uuid;
+    let db = TestDb::create_unmigrated("migration_0070_populated").await;
+    let prior: Vec<_> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|m| m.version <= 69)
+        .cloned()
+        .collect();
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("pre-0070 migrations");
+    let item = ReleaseWorkItem::discovered(
+        "inbound/retained".to_owned(),
+        None,
+        Uuid::now_v7(),
+        common::T0,
+    );
+    WorkItemStore
+        .create(&db.pool, &item)
+        .await
+        .expect("existing item");
+    migrate(&db.pool).await.expect("upgrade through 0070");
+    let retained = WorkItemStore
+        .get(&db.pool, item.id)
+        .await
+        .expect("retained item");
+    assert_eq!(retained.source_path, item.source_path);
+    assert_eq!(retained.state, item.state);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM inbound_custody_claims")
+        .fetch_one(&db.pool)
+        .await
+        .expect("custody table");
+    assert_eq!(count, 0);
+    migrate(&db.pool).await.expect("repeat upgrade");
     db.drop().await;
 }

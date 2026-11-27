@@ -182,6 +182,58 @@ mod platform {
         .map_err(io_error)
     }
 
+    /// Rename one child between already pinned directories without replacement.
+    pub fn rename_child_noreplace(
+        source_parent: &File,
+        source_name: &OsStr,
+        destination_parent: &File,
+        destination_name: &OsStr,
+    ) -> io::Result<()> {
+        validate_child_name(source_name)?;
+        validate_child_name(destination_name)?;
+        renameat_with(
+            source_parent,
+            source_name.as_bytes(),
+            destination_parent,
+            destination_name.as_bytes(),
+            RenameFlags::NOREPLACE,
+        )
+        .map_err(io_error)
+    }
+
+    pub fn open_child_directory(parent: &File, name: &OsStr) -> io::Result<File> {
+        validate_child_name(name)?;
+        openat(
+            parent,
+            name.as_bytes(),
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map(File::from)
+        .map_err(io_error)
+    }
+
+    pub fn mkdir_private_child(parent: &File, name: &OsStr) -> io::Result<()> {
+        validate_child_name(name)?;
+        mkdirat(
+            parent,
+            name.as_bytes(),
+            Mode::RUSR | Mode::WUSR | Mode::XUSR,
+        )
+        .map_err(io_error)
+    }
+
+    fn validate_child_name(name: &OsStr) -> io::Result<()> {
+        let mut parts = Path::new(name).components();
+        if !matches!(parts.next(), Some(Component::Normal(_))) || parts.next().is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "expected one directory entry name",
+            ));
+        }
+        Ok(())
+    }
+
     fn remove_contents(directory: &OwnedFd, display_path: &Path) -> io::Result<()> {
         let mut entries = Dir::read_from(directory)?;
         for entry in &mut entries {
@@ -291,12 +343,112 @@ mod platform {
         Err(unsupported())
     }
 
+    pub fn rename_child_noreplace(
+        _source_parent: &File,
+        _source_name: &OsStr,
+        _destination_parent: &File,
+        _destination_name: &OsStr,
+    ) -> io::Result<()> {
+        Err(unsupported())
+    }
+    pub fn open_child_directory(_parent: &File, _name: &OsStr) -> io::Result<File> {
+        Err(unsupported())
+    }
+    pub fn mkdir_private_child(_parent: &File, _name: &OsStr) -> io::Result<()> {
+        Err(unsupported())
+    }
+
     pub fn remove_directory_tree(_path: &Path) -> io::Result<()> {
         Err(unsupported())
     }
 }
 
 pub(crate) use platform::{
-    create_directory_tree, link_new, mkdir_new, open_directory, open_lock, open_read, open_write,
-    open_write_new, remove_directory_tree, rename_noreplace, unlink_file,
+    create_directory_tree, link_new, mkdir_new, mkdir_private_child, open_child_directory,
+    open_directory, open_lock, open_read, open_write, open_write_new, remove_directory_tree,
+    rename_child_noreplace, rename_noreplace, unlink_file,
 };
+
+#[cfg(all(
+    test,
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+mod custody_tests {
+    #![allow(clippy::expect_used)]
+    use super::*;
+    use std::{fs, os::unix::fs::MetadataExt, path::PathBuf};
+
+    #[test]
+    fn pinned_parent_noreplace_preserves_replacement_for_verification() {
+        let root = std::env::temp_dir().join(format!(
+            "melodee-custody-primitives-{}",
+            uuid::Uuid::now_v7()
+        ));
+        fs::create_dir_all(root.join("inbound/candidate")).expect("candidate");
+        fs::create_dir_all(root.join("private")).expect("private");
+        fs::write(root.join("inbound/candidate/file"), b"original").expect("original");
+        let inbound = open_directory(&root.join("inbound")).expect("pinned parent");
+        let private = open_directory(&root.join("private")).expect("private parent");
+        let original =
+            open_child_directory(&inbound, OsStr::new("candidate")).expect("pinned original");
+        fs::rename(
+            root.join("inbound/candidate"),
+            root.join("inbound/original"),
+        )
+        .expect("park original");
+        fs::create_dir(root.join("inbound/candidate")).expect("replacement");
+        fs::write(root.join("inbound/candidate/file"), b"replacement").expect("replacement file");
+        rename_child_noreplace(
+            &inbound,
+            OsStr::new("candidate"),
+            &private,
+            OsStr::new("held"),
+        )
+        .expect("atomic move");
+        let moved = open_child_directory(&private, OsStr::new("held")).expect("moved");
+        assert_ne!(
+            original.metadata().expect("original stat").ino(),
+            moved.metadata().expect("moved stat").ino()
+        );
+        rename_child_noreplace(
+            &private,
+            OsStr::new("held"),
+            &inbound,
+            OsStr::new("candidate"),
+        )
+        .expect("restore replacement");
+        assert_eq!(
+            fs::read(root.join("inbound/candidate/file")).expect("replacement"),
+            b"replacement"
+        );
+        assert_eq!(
+            fs::read(root.join("inbound/original/file")).expect("original"),
+            b"original"
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn pinned_parent_operations_reject_traversal_and_existing_destinations() {
+        let root: PathBuf = std::env::temp_dir().join(format!(
+            "melodee-custody-noreplace-{}",
+            uuid::Uuid::now_v7()
+        ));
+        fs::create_dir_all(root.join("source")).expect("source");
+        fs::create_dir(root.join("existing")).expect("existing");
+        let parent = open_directory(&root).expect("parent");
+        assert!(
+            rename_child_noreplace(
+                &parent,
+                OsStr::new("source"),
+                &parent,
+                OsStr::new("existing")
+            )
+            .is_err()
+        );
+        assert!(open_child_directory(&parent, OsStr::new("../outside")).is_err());
+        assert!(mkdir_private_child(&parent, OsStr::new("nested/path")).is_err());
+        assert!(root.join("source").is_dir() && root.join("existing").is_dir());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+}

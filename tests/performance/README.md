@@ -56,7 +56,7 @@ identity distributions and transitive relationships. The test does not
 establish complete oracle equivalence, crash recovery, or representative import
 performance. The pre-remediation revision lacks these scoped candidate methods;
 its baseline needs a separate compatible harness and cannot run this target.
-The benchmark also extracts the SELECT body of the phased scrobble Artist
+The benchmark also extracts the SELECT body of the scrobble Artist
 cursor from the production source and reports plans for an ordinary Track and
 one with up to 1,000 additional primary credits. Those plans execute the full
 SELECT and do not measure incremental cursor fetching or lock duration.
@@ -145,6 +145,24 @@ publication, browser responsiveness, realistic music compression ratios, or an
 FFmpeg thread-count matrix. Do not use it alone to claim end-to-end throughput
 or to tune global defaults.
 
+### Bounded missing-path recovery
+
+After building the migration CLI and a release server with
+`scripts/build_perf_server.py`, run the current source against the invocation-owned
+35K/50K/600K fixture:
+
+```text
+python3 scripts/perf_representative.py -- python3 scripts/perf_missing_recovery.py --server target/release/melodee-server --provenance PATH_TO_NEW_BUILD_RECORD.json
+```
+
+The workload inserts 35,000 synthetic missing work items into the disposable
+database, runs the production scheduler, and records elapsed time, sampled
+scan state, lock waiters, host/storage details, and server identity. It refuses
+an unowned database, a non-representative or previously used fixture, and a
+binary that does not match the build provenance. A timeout is reported as
+censored. The empty inbound root and absence of interactive or media activity
+make this a focused recovery measurement, not an end-to-end import benchmark.
+
 ### PostgreSQL-backed search rebuild
 
 Build the migration CLI and the release-mode `perf_rebuild` integration test,
@@ -186,3 +204,226 @@ The wrapper returns 124 and labels the result censored if the test exceeds the
 limit. It kills and reaps the test before removing the private temporary tree;
 the outer fixture then removes its own database. The timeout excludes fixture
 construction.
+
+### Real HTTP ingress contention (experimental)
+
+After building the release server and the debug migration CLI, run this from
+the repository root:
+
+```text
+python3 scripts/perf_representative.py -- python3 scripts/perf_ingress_workload.py --connection-limit 0 --connection-limit 4 --connection-limit 16 --connection-limit 32 --connection-limit 64
+```
+
+The invocation-owned fixture creates a synthetic MP3 and imports it through
+the server. For each cap, a fresh loopback HTTP/1 server holds one idle
+keep-alive connection and one deliberately slow direct stream while concurrent
+Jellyfin stopped requests and unrelated system-info requests run against an
+intentionally locked Track. The workload
+checks each 204 against persisted unique play events, reports raw latency and
+time to first byte, and closes the slow stream early. A small preparatory smoke
+can use `perf_representative.py --artists 10 --releases 20
+--tracks-per-release 2` and `--media-seconds 30 --plays 2 --probes 2` on the
+workload command. The workload refuses databases not owned by its parent
+fixture and creates/removes only its own temporary media tree and processes.
+
+This is a diagnostic, not a concurrency default recommendation: it uses a
+synthetic lock rather than real catalog work, one idle connection, one local
+stream, loopback HTTP, no reverse proxy, no concurrent ingestion or rebuild after
+setup, and temporary
+storage. A short or fully buffered stream may not exercise actual socket
+backpressure; track the generated media size, consumed bytes and client receive
+buffer when interpreting it. It does not measure audible playback underruns.
+The [600K-fixture diagnostic](./ingress-600k-2026-11-26.md) records raw samples
+and demonstrates that small caps delayed unrelated requests in one scenario;
+it does not establish a generally safe default.
+
+### HTTP during real ingestion (experimental)
+
+```text
+python3 scripts/perf_representative.py -- python3 scripts/perf_ingestion_stream_workload.py --albums 200 --media-parent .
+```
+
+This separately imports a generated, playable long MP3, starts a deliberately
+slow direct stream, then atomically exposes 200 prepared Releases to the real
+server workers. Each Release contains one short generated MP3 or FLAC Track.
+The bounded client repeatedly measures first media byte and a 64 KiB read, and
+an authenticated system-info request; only samples wholly inside the observed
+window bounded by polls showing unfinished work items enter the reported percentiles;
+this window may contain quiet gaps between polls. The program
+retains every sample up to its explicit limit and fails on errors, incomplete
+ingestion, timeout, absent overlapping samples, or an exhausted sample budget.
+The source media, server processes, and migrated fixture database are private to
+the invocation. The media parent must be an existing known disk-backed filesystem;
+the command does not flush filesystem caches. Search and several background
+workers are disabled, there is one slow synthetic stream and no audible-underrun
+measurement. The current runner requires the release server's bound-address
+startup log and thus does not itself measure the older baseline executable.
+
+### Policy snapshot and dry-run diagnostic
+
+`crates/melodee-policy/tests/perf_catalog_policy.rs` creates eight cataloged
+Releases through the existing manifest/publication/catalog test helpers within
+an invocation-owned fixture. It measures the production `PolicyStore` normal
+snapshot and dry-run context loaders followed by the production policy engine.
+The test does not invoke the CLI or persist its test-run summary.
+It checks the same cross-Release acoustic match and compares dispositions.
+SQLx query events report returned database **rows** (not network bytes), while
+retained fingerprint counts/bytes, Track facts and process RSS provide separate
+bounded-result and memory indicators. Normal and dry-run results are separate;
+8 one-Track Releases are not a maximum-size dry run. The diagnostic also runs
+explicit `EXPLAIN (ANALYZE, BUFFERS)` for the old global and scoped acoustic
+queries; those plans supplement the production-path measurements.
+
+Compile with `CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test --release -p
+melodee-policy --test perf_catalog_policy --no-run` and use the printed
+executable with `python3 scripts/perf_representative.py -- python3
+scripts/run_perf_policy_case.py --test-binary PATH_TO_EXECUTABLE`. The wrapper
+returns 124 with a censored lower bound if its explicit 600-second deadline is
+reached. `--baseline-worktree` permits a prebuilt test only from the verified
+original revision. Stage the test with `python3 scripts/prepare_perf_policy_baseline.py
+--worktree PATH_TO_BASELINE_WORKTREE`, then build it in that worktree. Use that
+revision's migration CLI with the fixture wrapper for a comparable schema. Run full-size fixture and report source/build identity,
+conditions and bypasses; seeding requires actual publication evidence files in
+the wrapper's private asset root. This test does not measure production worker
+scheduling, media ingestion, TCP, exact wire bytes or mixed interactive traffic.
+
+### Concurrent genre imports and scheduler samples
+
+```text
+python3 scripts/perf_representative.py -- python3 scripts/perf_genre_scheduler.py --releases 200 --temp-parent .local-dev
+```
+
+Build the release server and migration CLI first. The runner verifies the
+fixture-owned database, generates one valid five-second MP3 or FLAC per Release
+with the same new genre, and drives the production ingestion and catalog worker
+loops with two configured workers per stage. It verifies exact authoritative and
+stored Track/distinct-Release counts on both genre surfaces, observes PostgreSQL
+lock/advisory waiters and lease states at 250 ms intervals, and summarizes real
+batch logs and Ready-to-first-claim event latency. It stops and reaps only its
+owned server process group and temporary media directory. Use an existing
+owned disk-backed temporary parent when storage characteristics matter.
+
+Sampling can miss short waits and does not directly measure active CPU, precise
+lock duration, or guarantee fairness. State/lease observations include waiting.
+Log pass counts include a three-second idle observation after completion. The
+workload does not establish the source-code result-ring bound, exercise a broad
+multi-Track corpus, or include interactive, search, policy or enrichment load.
+A dirty binary without captured source identity is diagnostic evidence only.
+The paired original/current policy samples and all limitations are recorded in
+[policy-catalog-2026-11-26.md](policy-catalog-2026-11-26.md).
+
+The ignored `perf_outbox` test first rebuilds the owned PostgreSQL catalog,
+then executes three bounded mixed Artist/Release/Track revision and outbox
+trials through the production worker. Build it with the following command and pass the printed executable to
+`run_perf_search_case.py` inside the same fixture wrapper:
+
+```text
+cargo test --release -p melodee-search --test perf_outbox --no-run
+```
+
+The [mixed outbox diagnostic](search-outbox-mixed-2026-11-26.md) records actual
+runs and their limitations; SQLx event counts are statement counts rather than
+network round trips. The test does not simulate concurrent workloads.
+
+The ignored `perf_outbox_concurrent` test adds four bounded in-process search
+clients while the mixed outbox drains during a second rebuild. A `test-support`
+barrier fixes the snapshot before the test commits the revisions; a separate
+held-reader check crosses activation deliberately. See the
+[concurrent search diagnostic](search-concurrent-2026-11-26.md) for commands,
+raw samples and limitations; it includes no HTTP traffic or competing writer
+process. Its activation call timing is not a direct measurement of exclusive
+lock duration.
+
+### Database competition workload (experimental)
+
+`scripts/perf_db_competition.py` is designed to run as the child of the owned
+fixture harness with a prebuilt release server. The `mixed` mode uses the server-started initial search rebuild when it is still active,
+or submits an actual admin rebuild request otherwise. It exposes generated
+Releases to the normal ingestion workers before startup, and continuously issues
+authenticated admin-statistics and native Artist browse requests after login. All server activity shares the configured
+PostgreSQL pool. `ingestion`, `rebuild`, and `idle` modes provide isolated
+comparison runs; each requires a fresh disposable fixture. The pool size and
+measurement deadline are explicit. Example:
+
+```text
+python3 scripts/perf_representative.py -- python3 scripts/perf_db_competition.py --mode mixed --albums 200 --seconds 900 --pool-size 8 --output PATH_TO_NEW_RESULT.json
+```
+
+`--output` creates a new sanitized JSON file and refuses to overwrite an
+existing path. The JSON includes sampled PostgreSQL wait classes, lock waiters and heartbeat
+counts, raw HTTP latency/error samples and overlap-only percentile summaries,
+plus the available per-process bounded checkout/hold histograms. A mixed run
+is successful only if ingestion and rebuild overlap and each HTTP probe has at
+least one complete observation within that overlap. `--allow-missing-metrics`
+permits an older baseline without these diagnostic events to run; the report
+still explicitly names the missing measurements. A report does not establish
+comparable before/after results by itself. Database samples can miss short
+waits, metric snapshots cover a wider period than the overlap window, and
+checkout/hold times cannot independently identify database CPU, I/O, locks, or
+async scheduling. The short generated media and one Track per Release are not
+a realistic music corpus. Record binary provenance, cache conditions and
+unmeasured subsystems before interpreting results.
+
+For controlled comparisons within one revision, first record a release build
+and then run the cases serially against separate fixture databases:
+
+```text
+python3 scripts/build_perf_server.py --output PATH_TO_NEW_BUILD_RECORD.json
+python3 scripts/perf_representative.py --seed-timeout 1200 -- python3 scripts/run_db_competition_matrix.py --provenance PATH_TO_NEW_BUILD_RECORD.json --output-dir PATH_TO_NEW_RESULT_DIRECTORY
+```
+
+The default matrix runs idle, ingestion-only, rebuild-only and mixed workloads
+at pool limits 8 and 32. The fixture is seeded once, then each case uses a
+sequential invocation-owned database clone that is removed after the case. The
+parent fixture is never mutated and is removed by the outer harness. Repeat
+`--mode` and `--pool-size` to select a smaller subset. The matrix stops on the
+first nonzero result. Its fixture dimensions must match those passed to the
+outer harness. The build record contains per-file
+workspace hashes before and after compilation and a binary hash; the matrix
+verifies these before each case and fingerprints the workload scripts and
+migration CLI. Source equality at the two checkpoints cannot exclude a
+transient edit during compilation; migration CLI provenance is not established
+by this record. The clones share synthetic UUIDs and use uncontrolled caches.
+For a baseline, build and record the detached baseline worktree separately,
+then provide the matching `--migration-cli` to both the outer fixture and
+matrix, and pass `--source-repo`, `--server` and its provenance record to the
+matrix. `--allow-missing-metrics` retains results when the old binary lacks
+telemetry. Verify the shared fixture SQL against the older schema first; matching
+inputs, cache conditions and binary provenance are required for comparison.
+
+For SIGINT or SIGTERM, the outer fixture signals and reaps only the child
+session it created after checking its process-group/session identity. The
+matrix and workload attempt to stop their registered server and clean registered
+clone databases while unwinding; topology drift is a failure, not a license to
+signal an unknown process. SIGKILL, host loss, or a child that exceeds the
+45-second graceful shutdown window can prevent its own separate server session
+or clone from being cleaned. A surviving process or UUID-named disposable
+fixture must be inspected and handled by the operator; the harness does not
+claim crash-proof cleanup.
+
+If a clone creation loses its PostgreSQL acknowledgement, the matrix prints the
+candidate UUID name as `uncertain_clone_create` and refuses to delete that
+unregistered database. An operator must verify its ownership and state before
+any cleanup. The fixture's own database creation has the same general limitation
+if its client loses the creation acknowledgement.
+
+The optional POSIX lifecycle regression can be run with
+`python3 scripts/verify_perf_outer_interrupt.py --signal SIGTERM` and again
+with `--signal SIGINT`. It creates a tiny owned fixture, validates the exact
+fixture parent/session before signalling it, checks that the server and clone
+were cleaned, and checks the outer fixture database is gone. Build provenance is
+mocked for this cleanup test; it is not benchmark evidence.
+
+The opt-in rate-limit contention workload exercises the production
+`AuthStore::record_rate_limit_attempt` against an invocation-owned fixture:
+
+```text
+python3 scripts/perf_representative.py --seed-timeout 1200 -- cargo test --release -p melodee-persistence --test perf_rate_limit -- --ignored --nocapture
+```
+
+It checks exact counter values for shared and separate actor keys, reporting
+three sequential rounds at one, eight and 32 concurrent workers. The 5 ms
+PostgreSQL lock samples are approximate. HTTP, password hashing, mixed
+interactive activity and production authentication rates are excluded; the
+result alone cannot justify changing security or capacity semantics. Record the
+binary/source identity, environment, settings and cache conditions separately.

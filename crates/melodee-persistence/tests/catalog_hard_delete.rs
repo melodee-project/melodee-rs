@@ -362,6 +362,232 @@ async fn wait_for_release_lock_waiters(db: &TestDb, minimum: i64) {
     .expect("Release lock waiters");
 }
 
+#[tokio::test]
+async fn artist_hard_delete_and_catalog_import_serialize_on_name_before_rows() {
+    let db = TestDb::create("hard_artist_import_name_order").await;
+    let store = CatalogStore;
+    let existing = seed_release(&db, &store, 225, "Existing", "Same Name").await;
+    let (artist_public, normalized_name): (Uuid, String) = sqlx::query_as(
+        "SELECT artist.public_api_id,artist.normalized_name FROM release_artists credit
+         JOIN artists artist ON artist.id=credit.artist_id
+         WHERE credit.release_id=$1 AND credit.role='primary'",
+    )
+    .bind(existing.internal_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("existing Artist");
+    let incoming = seed_published_release(
+        &db,
+        226,
+        CatalogFixturePresentation {
+            release_title: "Incoming",
+            release_artist: "Same Name",
+            ..CatalogFixturePresentation::default()
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let claimed = store
+        .claim_cataloging(&db.pool, &worker, &test_config(), OffsetDateTime::now_utc())
+        .await
+        .expect("claim incoming Release");
+    assert_eq!(claimed.len(), 1);
+
+    let mut holder = db.pool.begin().await.expect("advisory holder");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(&normalized_name)
+        .execute(&mut *holder)
+        .await
+        .expect("hold Artist name");
+    let delete_pool = db.pool.clone();
+    let deletion = tokio::spawn(async move {
+        CatalogStore
+            .hard_delete_artists(
+                &delete_pool,
+                &[artist_public],
+                "test",
+                "name lock race",
+                OffsetDateTime::now_utc(),
+            )
+            .await
+    });
+    wait_for_name_lock_waiters(&db, 1).await;
+    let import_pool = db.pool.clone();
+    let item = incoming.work_item_id;
+    let import = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &import_pool,
+                item,
+                &worker,
+                &CatalogImportRequest::new("hard-delete-name-race", "test"),
+                OffsetDateTime::now_utc(),
+            )
+            .await
+    });
+    wait_for_name_lock_waiters(&db, 2).await;
+    holder.commit().await.expect("release Artist name");
+    let (deletion, import) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        (
+            deletion.await.expect("delete task"),
+            import.await.expect("import task"),
+        )
+    })
+    .await
+    .expect("name-conflicting operations complete without deadlock");
+    deletion.expect("Artist deletion succeeds");
+    import.expect("incoming catalog import succeeds");
+    assert_eq!(
+        count(
+            &db,
+            "SELECT count(*) FROM artists WHERE public_api_id=$1",
+            artist_public
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        count(
+            &db,
+            "SELECT count(*) FROM catalog_imports WHERE work_item_id=$1",
+            item
+        )
+        .await,
+        1
+    );
+    db.drop().await;
+}
+
+async fn wait_for_name_lock_waiters(db: &TestDb, minimum: i64) {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiters: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
+                  AND wait_event_type='Lock' AND query LIKE 'SELECT lock_artist_identity_names%'",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .expect("count Artist name waiters");
+            if waiters >= minimum {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("Artist name waiters");
+}
+
+#[tokio::test]
+async fn artist_hard_delete_rejects_name_change_while_waiting_on_advisory_lock() {
+    let db = TestDb::create("hard_artist_name_revalidation").await;
+    let store = CatalogStore;
+    let release = seed_release(&db, &store, 227, "Existing", "Original Name").await;
+    let (artist, artist_public, normalized_name): (Uuid, Uuid, String) = sqlx::query_as(
+        "SELECT artist.id,artist.public_api_id,artist.normalized_name FROM release_artists credit
+         JOIN artists artist ON artist.id=credit.artist_id
+         WHERE credit.release_id=$1 AND credit.role='primary'",
+    )
+    .bind(release.internal_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("existing Artist");
+    let mut holder = db.pool.begin().await.expect("advisory holder");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(&normalized_name)
+        .execute(&mut *holder)
+        .await
+        .expect("hold Artist name");
+    let pool = db.pool.clone();
+    let deletion = tokio::spawn(async move {
+        CatalogStore
+            .hard_delete_artists(
+                &pool,
+                &[artist_public],
+                "test",
+                "name changed",
+                OffsetDateTime::now_utc(),
+            )
+            .await
+    });
+    wait_for_name_lock_waiters(&db, 1).await;
+    // Model an older/raw writer bypassing the advisory protocol while the
+    // deletion waits: stale name locks must never authorize deletion.
+    sqlx::query("UPDATE artists SET normalized_name='changed while waiting' WHERE id=$1")
+        .bind(artist)
+        .execute(&db.pool)
+        .await
+        .expect("change Artist name");
+    holder.commit().await.expect("release Artist name");
+    let result = tokio::time::timeout(std::time::Duration::from_secs(15), deletion)
+        .await
+        .expect("deletion completes")
+        .expect("delete task");
+    assert!(matches!(
+        result,
+        Err(melodee_persistence::CatalogStoreError::MutationConflict)
+    ));
+    assert_eq!(
+        count(&db, "SELECT count(*) FROM artists WHERE id=$1", artist).await,
+        1
+    );
+    assert_eq!(
+        count(
+            &db,
+            "SELECT count(*) FROM releases WHERE id=$1",
+            release.internal_id
+        )
+        .await,
+        1
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn artist_hard_delete_handles_multiple_bounded_name_pages() {
+    let db = TestDb::create("hard_artist_name_pages").await;
+    let store = CatalogStore;
+    let release = seed_release(&db, &store, 228, "Existing", "Redirect Target").await;
+    let (artist, artist_public): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT artist.id,artist.public_api_id FROM release_artists credit
+         JOIN artists artist ON artist.id=credit.artist_id
+         WHERE credit.release_id=$1 AND credit.role='primary'",
+    )
+    .bind(release.internal_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("redirect target");
+    sqlx::query(
+        "INSERT INTO artists (id,public_api_id,canonical_name,normalized_name,sort_name,
+                              artist_type,status,merged_into_artist_id,created_at,updated_at)
+         SELECT uuidv7(),uuidv7(),'Redirect '||g,'redirect '||g,'Redirect '||g,
+                'unknown','merged',$1,now(),now() FROM generate_series(1,300) AS g",
+    )
+    .bind(artist)
+    .execute(&db.pool)
+    .await
+    .expect("create redirect closure");
+    store
+        .hard_delete_artists(
+            &db.pool,
+            &[artist_public],
+            "test",
+            "bounded name pages",
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("delete target Artist");
+    let survivors: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM artists WHERE canonical_name LIKE 'Redirect %'
+           AND status='active' AND merged_into_artist_id IS NULL",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count surviving redirect sources");
+    assert_eq!(survivors, 300);
+    db.drop().await;
+}
+
 /// A raw Track move can commit after deletion captures the Release membership
 /// but before it acquires the parent lock. Both Release and Artist deletion
 /// must reject the stale membership before deleting dependent observations.

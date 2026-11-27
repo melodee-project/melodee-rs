@@ -178,6 +178,8 @@ impl CatalogStore {
         artist: &Artist,
     ) -> Result<(), CatalogStoreError> {
         let mut tx = pool.begin().await?;
+        crate::catalog::lock_artist_identity_names(&mut tx, &[artist.normalized_name().to_owned()])
+            .await?;
         insert_artist(&mut *tx, artist).await?;
         audit_artist_change(
             &mut tx,
@@ -905,6 +907,63 @@ impl CatalogStore {
     ) -> Result<(), CatalogStoreError> {
         GroupMembership::new(membership.clone())?;
         let mut tx = pool.begin().await?;
+        let affected_tracks = sqlx::query_scalar::<_, Uuid>(
+            "SELECT track_id FROM artist_track_associations
+             WHERE (artist_id = $1 AND participation_kind = 'direct' AND is_performance)
+                OR (participation_kind = 'inferred_group' AND source_key = $2)
+             ORDER BY track_id LIMIT $3",
+        )
+        .bind(membership.group_artist_id.into_uuid())
+        .bind(membership.id.into_uuid())
+        .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
+        .fetch_all(&mut *tx)
+        .await?;
+        ensure_correction_scope(
+            affected_tracks.len(),
+            CatalogCorrectionDimension::Tracks,
+            MAX_CATALOG_CORRECTION_TRACKS,
+        )?;
+        ensure_correction_scope(
+            membership.excluded_tracks.len(),
+            CatalogCorrectionDimension::Tracks,
+            MAX_CATALOG_CORRECTION_TRACKS,
+        )?;
+        let excluded_track_ids = membership
+            .excluded_tracks
+            .iter()
+            .map(|id| id.into_uuid())
+            .collect::<Vec<_>>();
+        let mut selected = affected_tracks.clone();
+        selected.extend_from_slice(&excluded_track_ids);
+        if !lock_participation_closure(
+            &mut tx,
+            &[],
+            Some(&selected),
+            &[
+                membership.member_artist_id.into_uuid(),
+                membership.group_artist_id.into_uuid(),
+            ],
+            &[],
+            &[],
+        )
+        .await?
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let current_tracks = sqlx::query_scalar::<_, Uuid>(
+            "SELECT track_id FROM artist_track_associations
+             WHERE (artist_id=$1 AND participation_kind='direct' AND is_performance)
+                OR (participation_kind='inferred_group' AND source_key=$2)
+             ORDER BY track_id LIMIT $3",
+        )
+        .bind(membership.group_artist_id.into_uuid())
+        .bind(membership.id.into_uuid())
+        .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
+        .fetch_all(&mut *tx)
+        .await?;
+        if current_tracks != affected_tracks {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         sqlx::query(
             "INSERT INTO group_memberships (
                 id, member_artist_id, group_artist_id, role, start_date,
@@ -922,27 +981,6 @@ impl CatalogStore {
         .bind(created_at)
         .execute(&mut *tx)
         .await?;
-        let affected_tracks = sqlx::query_scalar::<_, Uuid>(
-            "SELECT track_id FROM artist_track_associations
-             WHERE (artist_id = $1 AND participation_kind = 'direct' AND is_performance)
-                OR (participation_kind = 'inferred_group' AND source_key = $2)
-             ORDER BY track_id LIMIT $3",
-        )
-        .bind(membership.group_artist_id.into_uuid())
-        .bind(membership.id.into_uuid())
-        .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
-        .fetch_all(&mut *tx)
-        .await?;
-        ensure_correction_scope(
-            membership.excluded_tracks.len(),
-            CatalogCorrectionDimension::Tracks,
-            MAX_CATALOG_CORRECTION_TRACKS,
-        )?;
-        let excluded_track_ids = membership
-            .excluded_tracks
-            .iter()
-            .map(|id| id.into_uuid())
-            .collect::<Vec<_>>();
         if !excluded_track_ids.is_empty() {
             sqlx::query(
                 "INSERT INTO group_membership_track_exclusions (
@@ -1007,6 +1045,63 @@ impl CatalogStore {
                 (release_id, Some(track_id.into_uuid()))
             }
         };
+        let affected_tracks = if let Some(track_id) = track_id {
+            vec![track_id]
+        } else {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM tracks WHERE release_id = $1 ORDER BY id LIMIT $2",
+            )
+            .bind(release_id)
+            .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
+            .fetch_all(&mut *tx)
+            .await?
+        };
+        ensure_correction_scope(
+            affected_tracks.len(),
+            CatalogCorrectionDimension::Tracks,
+            MAX_CATALOG_CORRECTION_TRACKS,
+        )?;
+        let prospective = if contribution.role.is_performance_role() {
+            affected_tracks
+                .iter()
+                .map(|track| (contribution.artist_id.into_uuid(), *track))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        if !lock_participation_closure(
+            &mut tx,
+            &[release_id],
+            Some(&affected_tracks),
+            &[contribution.artist_id.into_uuid()],
+            &[],
+            &prospective,
+        )
+        .await?
+        {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        if let Some(track_id) = track_id {
+            let current: Option<Uuid> =
+                sqlx::query_scalar("SELECT release_id FROM tracks WHERE id=$1")
+                    .bind(track_id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if current != Some(release_id) {
+                return Err(CatalogStoreError::MutationConflict);
+            }
+        } else {
+            let current = sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM tracks WHERE release_id=$1 ORDER BY id LIMIT $2",
+            )
+            .bind(release_id)
+            .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
+            .fetch_all(&mut *tx)
+            .await?;
+            if current != affected_tracks {
+                return Err(CatalogStoreError::MutationConflict);
+            }
+        }
         sqlx::query(
             "INSERT INTO contributions (
                 id, release_id, track_id, artist_id, observed_artist_id,
@@ -1025,17 +1120,6 @@ impl CatalogStore {
         .bind(created_at)
         .execute(&mut *tx)
         .await?;
-        let affected_tracks = if let Some(track_id) = track_id {
-            vec![track_id]
-        } else {
-            sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM tracks WHERE release_id = $1 ORDER BY id LIMIT $2",
-            )
-            .bind(release_id)
-            .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
-            .fetch_all(&mut *tx)
-            .await?
-        };
         rebuild_participation_for_tracks(&mut tx, &affected_tracks, created_at).await?;
         append_overlay_revisions(
             &mut tx,
@@ -1062,6 +1146,19 @@ impl CatalogStore {
             .iter()
             .map(|id| id.into_uuid())
             .collect::<Vec<_>>();
+        ensure_correction_scope(
+            track_ids.len(),
+            CatalogCorrectionDimension::Tracks,
+            MAX_CATALOG_CORRECTION_TRACKS,
+        )?;
+        let existing =
+            sqlx::query_scalar::<_, Uuid>("SELECT id FROM tracks WHERE id=ANY($1) ORDER BY id")
+                .bind(&track_ids)
+                .fetch_all(&mut *tx)
+                .await?;
+        if !lock_participation_closure(&mut tx, &[], Some(&existing), &[], &[], &[]).await? {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         rebuild_participation_for_tracks(&mut tx, &track_ids, rebuilt_at).await?;
         tx.commit().await?;
         Ok(())
@@ -1078,6 +1175,14 @@ impl CatalogStore {
             .bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?)
             .fetch_all(&mut *tx)
             .await?;
+        ensure_correction_scope(
+            track_ids.len(),
+            CatalogCorrectionDimension::Tracks,
+            MAX_CATALOG_CORRECTION_TRACKS,
+        )?;
+        if !lock_participation_closure(&mut tx, &[], Some(&track_ids), &[], &[], &[]).await? {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         rebuild_participation_for_tracks(&mut tx, &track_ids, rebuilt_at).await?;
         tx.commit().await?;
         Ok(())
@@ -1215,14 +1320,32 @@ impl CatalogStore {
             return Err(CatalogStoreError::InvalidRequest);
         }
 
-        // Verify the artist exists first (unknown ids surface as InvalidRequest → 400).
-        let old_normalized_name = sqlx::query_scalar::<_, String>(
+        // The complete old/new name set is locked before the Artist row, in
+        // the same order as import. Otherwise a rename could enter a name group
+        // after import has counted it, or deadlock an import holding that name.
+        let old_normalized_name =
+            sqlx::query_scalar::<_, String>("SELECT normalized_name FROM artists WHERE id = $1")
+                .bind(artist_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(CatalogStoreError::InvalidRequest)?;
+        let mut names = vec![old_normalized_name.clone()];
+        if let Some(name) = patch.canonical_name.as_deref() {
+            names.push(compute_normalized(name));
+        }
+        names.sort();
+        names.dedup();
+        crate::catalog::lock_artist_identity_names(&mut tx, &names).await?;
+        let locked_name = sqlx::query_scalar::<_, String>(
             "SELECT normalized_name FROM artists WHERE id = $1 FOR UPDATE",
         )
         .bind(artist_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(CatalogStoreError::InvalidRequest)?;
+        if locked_name != old_normalized_name {
+            return Err(CatalogStoreError::MutationConflict);
+        }
 
         // Build the dynamic UPDATE with only supplied fields.
         let mut builder = QueryBuilder::new("UPDATE artists SET updated_at = CURRENT_TIMESTAMP");
@@ -1615,7 +1738,12 @@ async fn lock_match_decision_binding(
     artists.sort_unstable();
     artists.dedup();
     if confirmed {
-        if !lock_participation_closure(tx, &[initial.0], None, &artists).await? {
+        let prospective =
+            match_prospective_performance(tx, observation, candidate, initial.0).await?;
+        if !lock_participation_closure(tx, &[initial.0], None, &artists, &[], &prospective).await?
+            || match_prospective_performance(tx, observation, candidate, initial.0).await?
+                != prospective
+        {
             return Ok(None);
         }
     } else {
@@ -1692,6 +1820,16 @@ async fn lock_match_decision_binding(
     Ok(Some(initial.0))
 }
 
+async fn match_prospective_performance(
+    tx: &mut Transaction<'_, Postgres>,
+    observation: Uuid,
+    candidate: Uuid,
+    release: Uuid,
+) -> Result<Vec<(Uuid, Uuid)>, CatalogStoreError> {
+    Ok(sqlx::query_as::<_, (Uuid, Uuid)>("SELECT $2::uuid,t.id FROM tracks t WHERE t.release_id=$3 AND EXISTS(SELECT 1 FROM release_artists a WHERE a.observed_artist_id=$1 AND a.role IN ('primary','featured','guest')) UNION SELECT $2::uuid,a.track_id FROM track_artists a WHERE a.observed_artist_id=$1 AND a.role IN ('primary','featured','guest') UNION SELECT $2::uuid,t.id FROM contributions c JOIN tracks t ON (c.track_id=t.id OR (c.track_id IS NULL AND t.release_id=c.release_id)) WHERE c.observed_artist_id=$1 AND c.is_performance ORDER BY 1,2 LIMIT $4")
+        .bind(observation).bind(candidate).bind(release).bind(correction_limit_plus_one(MAX_CATALOG_CORRECTION_TRACKS)?).fetch_all(&mut **tx).await?)
+}
+
 /// Locks the Artist and membership closure needed to rebuild participation
 /// before taking Release or Track locks. Revalidation detects a changed scope
 /// while the ordered parent locks fence new links to the selected Artists.
@@ -1700,6 +1838,8 @@ pub(crate) async fn lock_participation_closure(
     release_ids: &[Uuid],
     selected_tracks: Option<&[Uuid]>,
     additional_artists: &[Uuid],
+    additional_names: &[String],
+    prospective: &[(Uuid, Uuid)],
 ) -> Result<bool, CatalogStoreError> {
     let mut tracks = if let Some(selected) = selected_tracks {
         selected.to_vec()
@@ -1717,7 +1857,13 @@ pub(crate) async fn lock_participation_closure(
     ensure_correction_scope(
         tracks.len(),
         CatalogCorrectionDimension::Tracks,
-        MAX_CATALOG_CORRECTION_TRACKS,
+        if selected_tracks.is_some() {
+            // Membership exclusions and rebuilt Tracks are independently
+            // bounded selections and may be disjoint.
+            MAX_CATALOG_CORRECTION_TRACKS.saturating_mul(2)
+        } else {
+            MAX_CATALOG_CORRECTION_TRACKS
+        },
     )?;
     let bindings = sqlx::query_as::<_, (Uuid, Uuid)>(
         "SELECT id,release_id FROM tracks WHERE id=ANY($1) ORDER BY id",
@@ -1732,37 +1878,40 @@ pub(crate) async fn lock_participation_closure(
     releases.extend(bindings.iter().map(|(_, release)| *release));
     releases.sort_unstable();
     releases.dedup();
-    let before = participation_artist_ids(tx, &tracks, additional_artists).await?;
+    let memberships = participation_memberships(tx, &tracks, prospective).await?;
+    let before = participation_artist_ids(tx, &tracks, additional_artists, &memberships).await?;
+    let names = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT normalized_name FROM artists WHERE id=ANY($1) ORDER BY normalized_name",
+    )
+    .bind(&before)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut all_names = names.clone();
+    all_names.extend_from_slice(additional_names);
+    crate::catalog::lock_artist_identity_names(tx, &all_names).await?;
     let locked = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM artists WHERE id=ANY($1) ORDER BY id FOR UPDATE",
     )
     .bind(&before)
     .fetch_all(&mut **tx)
     .await?;
-    if locked != before {
-        return Ok(false);
-    }
-    let memberships = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM group_memberships WHERE group_artist_id=ANY($1) ORDER BY id LIMIT $2",
+    let current_names = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT normalized_name FROM artists WHERE id=ANY($1) ORDER BY normalized_name",
     )
     .bind(&before)
-    .bind(correction_limit_plus_one(
-        crate::MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
-    )?)
     .fetch_all(&mut **tx)
     .await?;
-    ensure_correction_scope(
-        memberships.len(),
-        CatalogCorrectionDimension::IdentityRows,
-        crate::MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
-    )?;
+    if locked != before || current_names != names {
+        return Ok(false);
+    }
+    let membership_ids = memberships.iter().map(|(id, _, _)| *id).collect::<Vec<_>>();
     let locked_memberships = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM group_memberships WHERE id=ANY($1) ORDER BY id FOR UPDATE",
     )
-    .bind(&memberships)
+    .bind(&membership_ids)
     .fetch_all(&mut **tx)
     .await?;
-    if locked_memberships != memberships {
+    if locked_memberships != membership_ids {
         return Ok(false);
     }
     let locked_releases = sqlx::query_scalar::<_, Uuid>(
@@ -1801,7 +1950,8 @@ pub(crate) async fn lock_participation_closure(
     if locked_tracks != tracks
         || after_tracks != tracks
         || after_bindings != bindings
-        || participation_artist_ids(tx, &tracks, additional_artists).await? != before
+        || participation_memberships(tx, &tracks, prospective).await? != memberships
+        || participation_artist_ids(tx, &tracks, additional_artists, &memberships).await? != before
     {
         return Ok(false);
     }
@@ -1812,7 +1962,12 @@ async fn participation_artist_ids(
     tx: &mut Transaction<'_, Postgres>,
     track_ids: &[Uuid],
     additional_artists: &[Uuid],
+    memberships: &[(Uuid, Uuid, Uuid)],
 ) -> Result<Vec<Uuid>, CatalogStoreError> {
+    let membership_artists = memberships
+        .iter()
+        .flat_map(|(_, member, group)| [*member, *group])
+        .collect::<Vec<_>>();
     let rows = sqlx::query_scalar::<_, Uuid>(
                 "WITH selected AS MATERIALIZED (SELECT id,release_id FROM tracks WHERE id=ANY($1)), direct AS MATERIALIZED (
                    SELECT credit.artist_id FROM release_artists credit JOIN selected t ON t.release_id=credit.release_id
@@ -1821,12 +1976,54 @@ async fn participation_artist_ids(
                    UNION SELECT unnest($2::uuid[])
                  ), closure AS (
                    SELECT artist_id FROM direct
-                   UNION SELECT member_artist_id FROM group_memberships WHERE group_artist_id IN (SELECT artist_id FROM direct)
+                   UNION SELECT unnest($4::uuid[])
+                   UNION SELECT artist_id FROM artist_track_associations WHERE track_id=ANY($1)
+                   UNION SELECT source_artist_id FROM artist_track_associations WHERE track_id=ANY($1) AND source_artist_id IS NOT NULL
                  ) SELECT artist_id FROM closure ORDER BY artist_id LIMIT $3",
             )
             .bind(track_ids).bind(additional_artists)
             .bind(correction_limit_plus_one(crate::MAX_CATALOG_CORRECTION_IDENTITY_ROWS)?)
+            .bind(&membership_artists)
             .fetch_all(&mut **tx).await?;
+    ensure_correction_scope(
+        rows.len(),
+        CatalogCorrectionDimension::IdentityRows,
+        crate::MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
+    )?;
+    Ok(rows)
+}
+
+async fn participation_memberships(
+    tx: &mut Transaction<'_, Postgres>,
+    track_ids: &[Uuid],
+    prospective: &[(Uuid, Uuid)],
+) -> Result<Vec<(Uuid, Uuid, Uuid)>, CatalogStoreError> {
+    let groups = prospective
+        .iter()
+        .map(|(group, _)| *group)
+        .collect::<Vec<_>>();
+    let group_tracks = prospective
+        .iter()
+        .map(|(_, track)| *track)
+        .collect::<Vec<_>>();
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid)>(
+        "WITH selected AS MATERIALIZED (SELECT t.id,t.release_id,r.release_date FROM tracks t JOIN releases r ON r.id=t.release_id WHERE t.id=ANY($1)), performance AS MATERIALIZED (
+             SELECT a.artist_id,a.track_id FROM track_artists a WHERE a.track_id=ANY($1) AND a.role IN ('primary','featured','guest')
+             UNION SELECT a.artist_id,t.id FROM release_artists a JOIN selected t ON t.release_id=a.release_id WHERE a.role IN ('primary','featured','guest')
+             UNION SELECT c.artist_id,t.id FROM contributions c JOIN selected t ON (c.track_id=t.id OR (c.track_id IS NULL AND c.release_id=t.release_id)) WHERE c.is_performance
+             UNION SELECT extra.artist_id,extra.track_id FROM unnest($2::uuid[],$3::uuid[]) extra(artist_id,track_id) JOIN selected t ON t.id=extra.track_id
+         )
+         SELECT DISTINCT membership.id,membership.member_artist_id,membership.group_artist_id
+         FROM group_memberships membership JOIN performance p ON p.artist_id=membership.group_artist_id
+         JOIN selected t ON t.id=p.track_id
+         LEFT JOIN group_membership_track_exclusions exclusion ON exclusion.membership_id=membership.id AND exclusion.track_id=t.id
+         WHERE exclusion.track_id IS NULL AND t.release_date IS NOT NULL
+           AND (membership.start_date IS NULL OR t.release_date>=membership.start_date)
+           AND (membership.end_date IS NULL OR t.release_date<=membership.end_date)
+         ORDER BY membership.id LIMIT $4",
+    ).bind(track_ids).bind(&groups).bind(&group_tracks)
+        .bind(correction_limit_plus_one(crate::MAX_CATALOG_CORRECTION_IDENTITY_ROWS)?)
+        .fetch_all(&mut **tx).await?;
     ensure_correction_scope(
         rows.len(),
         CatalogCorrectionDimension::IdentityRows,

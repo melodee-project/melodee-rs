@@ -1,6 +1,6 @@
 use std::{error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
-use axum::{Router, routing::get};
+use axum::{Router, routing::get, serve::ListenerExt as _};
 use melodee_catalog::{CatalogConfig, CatalogSchedulerHandle, start_catalog_loop};
 use melodee_ingestion::{
     IngestionConfig, SchedulerHandle, start_inspection_loop, start_normalization_loop,
@@ -21,6 +21,7 @@ use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+mod connection_admission;
 mod logging;
 
 async fn wait_for_shutdown_signal() {
@@ -301,7 +302,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let monitor_limits = admin::monitor_limits(&ingestion_config, work_config);
     let monitor_handle = tokio::spawn(admin::monitor_stages(pool.clone(), monitor_limits));
-    let mut reconcile_handle = None;
+    let reconcile_handle = Some(start_reconciliation_loop(
+        ingestion_config.clone(),
+        pool.clone(),
+        melodee_persistence::WorkItemStore,
+    ));
     let mut inspection_handle = None;
     let mut normalization_handle = None;
     let mut validation_handle = None;
@@ -312,11 +317,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             interval_ms = %ingestion_config.reconciliation_interval.whole_milliseconds(),
             "starting periodic reconciliation loop"
         );
-        reconcile_handle = Some(start_reconciliation_loop(
-            ingestion_config.clone(),
-            pool.clone(),
-            melodee_persistence::WorkItemStore,
-        ));
         inspection_handle = Some(start_inspection_loop(
             ingestion_config.clone(),
             pool.clone(),
@@ -791,9 +791,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let listener = tokio::net::TcpListener::bind(address).await?;
+    let bound_address = listener.local_addr()?;
+    let connection_limit = config_var(connection_admission::ENV_MAX_CONNECTIONS)
+        .ok()
+        .map(|value| connection_admission::parse_limit(&value))
+        .transpose()
+        .map_err(|error| -> Box<dyn Error + Send + Sync> { error.into() })?
+        .flatten();
+    if let Some(limit) = connection_limit {
+        info!(limit, "HTTP connection admission enabled");
+    }
+    let listener = connection_admission::ConnectionListener::new(listener, connection_limit);
     let server_handle = tokio::spawn(async move {
+        // `tap_io` retains axum's generic SocketAddr ConnectInfo mapping for
+        // custom listeners; request handlers continue to see the actual peer.
         axum::serve(
-            listener,
+            listener.tap_io(|_| {}),
             app.into_make_service_with_connect_info::<SocketAddr>(),
         )
         .with_graceful_shutdown(async move {
@@ -802,7 +815,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .await
     });
 
-    info!(%address, "Melodee Rust bootstrap server listening");
+    info!(address = %bound_address, "Melodee Rust bootstrap server listening");
     wait_for_shutdown_signal().await;
     monitor_handle.abort();
     let _ = monitor_handle.await;

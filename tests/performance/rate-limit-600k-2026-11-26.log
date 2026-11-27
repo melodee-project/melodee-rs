@@ -1,0 +1,26 @@
+Seeded 35000 artists, 50000 releases, 600000 tracks in 177.4s
+
+running 1 test
+test production_rate_limit_contention ... round=0 workers=1 shared_actor=true samples=20 elapsed_seconds=0.1908 attempts_per_second=104.8 p50_us=5914 p95_us=19790 p99_us=65089 lock_samples=31 lock_waiter_sum=0 max_lock_waiters=0 errors=0 counters_exact=true
+round=0 workers=1 shared_actor=false samples=20 elapsed_seconds=0.1421 attempts_per_second=140.7 p50_us=5780 p95_us=8875 p99_us=35245 lock_samples=24 lock_waiter_sum=0 max_lock_waiters=0 errors=0 counters_exact=true
+round=0 workers=8 shared_actor=true samples=160 elapsed_seconds=0.5503 attempts_per_second=290.8 p50_us=24057 p95_us=43949 p99_us=44261 lock_samples=92 lock_waiter_sum=594 max_lock_waiters=7 errors=0 counters_exact=true
+round=0 workers=8 shared_actor=false samples=160 elapsed_seconds=0.6401 attempts_per_second=250.0 p50_us=23955 p95_us=76287 p99_us=182184 lock_samples=106 lock_waiter_sum=675 max_lock_waiters=7 errors=0 counters_exact=true
+round=0 workers=32 shared_actor=true samples=640 elapsed_seconds=2.2821 attempts_per_second=280.4 p50_us=96098 p95_us=206139 p99_us=307883 lock_samples=377 lock_waiter_sum=11295 max_lock_waiters=31 errors=0 counters_exact=true
+round=0 workers=32 shared_actor=false samples=640 elapsed_seconds=2.0012 attempts_per_second=319.8 p50_us=95909 p95_us=106230 p99_us=205956 lock_samples=332 lock_waiter_sum=9984 max_lock_waiters=31 errors=0 counters_exact=true
+round=1 workers=1 shared_actor=true samples=20 elapsed_seconds=0.0484 attempts_per_second=413.2 p50_us=2411 p95_us=2583 p99_us=2742 lock_samples=9 lock_waiter_sum=0 max_lock_waiters=0 errors=0 counters_exact=true
+round=1 workers=1 shared_actor=false samples=20 elapsed_seconds=0.0477 attempts_per_second=419.0 p50_us=2406 p95_us=2589 p99_us=2636 lock_samples=8 lock_waiter_sum=0 max_lock_waiters=0 errors=0 counters_exact=true
+round=1 workers=8 shared_actor=true samples=160 elapsed_seconds=0.6586 attempts_per_second=242.9 p50_us=23857 p95_us=126359 p99_us=234187 lock_samples=108 lock_waiter_sum=691 max_lock_waiters=7 errors=0 counters_exact=true
+round=1 workers=8 shared_actor=false samples=160 elapsed_seconds=0.4843 attempts_per_second=330.3 p50_us=24009 p95_us=25090 p99_us=26029 lock_samples=81 lock_waiter_sum=541 max_lock_waiters=7 errors=0 counters_exact=true
+round=1 workers=32 shared_actor=true samples=640 elapsed_seconds=2.1563 attempts_per_second=296.8 p50_us=96120 p95_us=205202 p99_us=207067 lock_samples=357 lock_waiter_sum=10737 max_lock_waiters=31 errors=0 counters_exact=true
+round=1 workers=32 shared_actor=false samples=640 elapsed_seconds=2.4711 attempts_per_second=259.0 p50_us=96962 p95_us=304962 p99_us=307075 lock_samples=408 lock_waiter_sum=12261 max_lock_waiters=31 errors=0 counters_exact=true
+round=2 workers=1 shared_actor=true samples=20 elapsed_seconds=0.0603 attempts_per_second=331.7 p50_us=3051 p95_us=3236 p99_us=3800 lock_samples=11 lock_waiter_sum=0 max_lock_waiters=0 errors=0 counters_exact=true
+round=2 workers=1 shared_actor=false samples=20 elapsed_seconds=0.0603 attempts_per_second=331.9 p50_us=3047 p95_us=3082 p99_us=3243 lock_samples=11 lock_waiter_sum=0 max_lock_waiters=0 errors=0 counters_exact=true
+round=2 workers=8 shared_actor=true samples=160 elapsed_seconds=0.5561 attempts_per_second=287.7 p50_us=24032 p95_us=28879 p99_us=96225 lock_samples=93 lock_waiter_sum=574 max_lock_waiters=7 errors=0 counters_exact=true
+round=2 workers=8 shared_actor=false samples=160 elapsed_seconds=0.4915 attempts_per_second=325.6 p50_us=24042 p95_us=27025 p99_us=28965 lock_samples=82 lock_waiter_sum=547 max_lock_waiters=7 errors=0 counters_exact=true
+round=2 workers=32 shared_actor=true samples=640 elapsed_seconds=2.1064 attempts_per_second=303.8 p50_us=98171 p95_us=116063 p99_us=206080 lock_samples=349 lock_waiter_sum=10407 max_lock_waiters=31 errors=0 counters_exact=true
+round=2 workers=32 shared_actor=false samples=640 elapsed_seconds=2.1411 attempts_per_second=298.9 p50_us=97073 p95_us=152074 p99_us=214101 lock_samples=355 lock_waiter_sum=10650 max_lock_waiters=31 errors=0 counters_exact=true
+path=AuthStore::record_rate_limit_attempt http_and_password_hashing=excluded postgres_lock_samples=approximate sampling_interval_ms=5
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.19s
+

@@ -112,6 +112,8 @@ pub enum CatalogStoreError {
     NegativeAssertion,
     #[error("the requested merge, split, or legacy mapping conflicts with persisted catalog data")]
     MutationConflict,
+    #[error("catalog import Artist candidate bindings changed during preparation")]
+    ImportIdentityChanged,
     #[error("provider enrichment scheduling failed")]
     ProviderEnrichment(#[from] crate::provider_enrichment::ProviderEnrichmentStoreError),
     #[error("provider eligibility scheduling failed")]
@@ -4300,6 +4302,38 @@ fn parse_observed_date(value: Option<&str>) -> (Option<Date>, Option<String>) {
     (date, Some(text))
 }
 
+/// Serializes mutations that can change an import's exact-name candidate set.
+/// Call before locking any Artist row and include every old and new name in a
+/// transaction's mutation set. Names remain non-unique identity observations.
+pub(crate) async fn lock_artist_identity_names(
+    tx: &mut Transaction<'_, Postgres>,
+    names: &[String],
+) -> Result<(), CatalogStoreError> {
+    if names.is_empty() {
+        return Ok(());
+    }
+    let has_sorted_lock_helper: bool = sqlx::query_scalar(
+        "SELECT to_regprocedure('public.lock_artist_identity_names(text[])') IS NOT NULL",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_sorted_lock_helper {
+        sqlx::query("SELECT lock_artist_identity_names($1)")
+            .bind(names)
+            .execute(&mut **tx)
+            .await?;
+    } else {
+        // Pre-0064 upgrade tests retain the historical SQL helper path.
+        for name in names {
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(name)
+                .execute(&mut **tx)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 /// Rewrites each resolution's Artist id to an existing Artist with the exact same
 /// normalized name when that is unambiguous (ADR-0189).
 ///
@@ -4332,24 +4366,7 @@ async fn reuse_existing_artists(
     // A historical-schema forward test runs today's importer against a schema
     // that predates this helper. Fall back to the previous per-name loop there;
     // every migrated production schema has the sorted helper.
-    let has_sorted_lock_helper: bool = sqlx::query_scalar(
-        "SELECT to_regprocedure('public.lock_artist_identity_names(text[])') IS NOT NULL",
-    )
-    .fetch_one(&mut **tx)
-    .await?;
-    if has_sorted_lock_helper {
-        sqlx::query("SELECT lock_artist_identity_names($1)")
-            .bind(&names)
-            .execute(&mut **tx)
-            .await?;
-    } else {
-        for name in &names {
-            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-                .bind(name)
-                .execute(&mut **tx)
-                .await?;
-        }
-    }
+    lock_artist_identity_names(tx, &names).await?;
     // Lock all live homonyms, not just the eventually selected candidate. A
     // concurrent merge or metadata edit may change eligibility while this
     // statement waits; the candidate query below runs with a fresh READ
@@ -4379,7 +4396,7 @@ async fn reuse_existing_artists(
     if locked_artist_ids != current_artist_ids {
         // A matching identity appeared or disappeared while parent locks were
         // being acquired. A retry resolves all homonyms under a new snapshot.
-        return Err(CatalogStoreError::MutationConflict);
+        return Err(CatalogStoreError::ImportIdentityChanged);
     }
     // Count every live homonym before checking the sole candidate's eligibility.
     // Aggregate provider rows per Artist: multiple aliases for one provider identity
@@ -4399,6 +4416,11 @@ async fn reuse_existing_artists(
     .bind(&names)
     .fetch_all(&mut **tx)
     .await?;
+    let mut candidate_ids = candidates.iter().map(|row| row.0).collect::<Vec<_>>();
+    candidate_ids.sort_unstable();
+    if candidate_ids != locked_artist_ids {
+        return Err(CatalogStoreError::ImportIdentityChanged);
+    }
     let mut by_name = BTreeMap::<_, Vec<_>>::new();
     for (id, name, disambiguation, external_ids) in candidates {
         by_name

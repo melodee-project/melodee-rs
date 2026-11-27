@@ -429,7 +429,9 @@ Two pre-existing, unrelated gate failures were corrected minimally so the mandat
 an inconsistent settings-inventory consumer label assertion and a stats test that assumed an empty
 asset registry after migration 0054. Neither touches remediation behavior.
 
-## 8.10 Remaining limitations (not completion claims)
+## 8.10 Limitations at the previous checkpoint (historical)
+
+These observations describe that checkpoint only; later implementation and evidence are recorded below and in `PERF-REMEDIATION-STATUS.md`. They are not current dispositions.
 
 - **RM-11** content-read reduction (adjacent duplicate hashes, hash-during-copy, artwork dedup) with
   integrity/failure-injection tests is not implemented.
@@ -452,7 +454,7 @@ remain. This is not a claim that the whole remediation is complete.
 
 ---
 
-# 9. Session 3 — correctness fixes and bounded execution
+# 9. Session 3 — correctness fixes and bounded execution (historical)
 
 ## 9.1 RM-09 seed deletion is commit-order safe
 
@@ -537,6 +539,25 @@ RM-15 route optimization, RM-17 streaming/auth/rate-limit, and RM-18/RM-19 measu
 document does not claim full remediation completion.
 
 ## Current execution: partial media operation inventory
+
+The following is a source inventory, not a measured operation count. Conditional
+branches, retries and failed stages change the actual number of operations.
+
+| Path | Reads, verification and temporary operations | External work |
+|---|---|---|
+| Same-filesystem acquisition | Rename into owned staging; hash staged tree and write a durable receipt. Recovery verifies a pre-existing receipt. | None |
+| Cross-filesystem acquisition | Hash source tree; copy to a partial tree; hash source and copy again; sync and rename; recheck source at cleanup. | None |
+| Inspection | Verify owned tree before and after inspection; read and hash media files; parse tags and artwork; retain a manifest. | Probe audio using ffprobe. |
+| Retained MP3 | Hash source before and after; decode-check, copy to a unique temporary output, hash and probe output; fingerprint source. | ffprobe, ffmpeg decode check and fpcalc. |
+| FLAC and other transcoded audio | Hash source before and after; write, hash and probe an encoded output; fingerprint source. | ffprobe, ffmpeg encoding and fpcalc. |
+| CUE | Hash and probe source; process and verify individual outputs; recheck source after segment work. | ffprobe, ffmpeg and fingerprint work depend on segments. |
+| External and embedded artwork | Read bounded external input for hash/header checks; extract embedded images from source; normalize and verify output; recheck source when embedded extraction read it. | ffmpeg artwork processing. |
+| Validation | Read and cryptographically hash normalized assets against the manifest. | No new audio probe in this stage. |
+| Publication and retry | Copy assets while hashing, seal and verify bundle; adoption or recovery independently verifies existing bytes and receipts. | None |
+
+This inventory does not prove that every remaining read is necessary or that a
+given build performed it. Operation-count instrumentation and fault tests are
+still needed before RM-11 can be closed.
 
 Source inspection, not a measured I/O count: same-filesystem acquisition renames
 and hashes the staged tree; cross-filesystem acquisition hashes the source tree,
@@ -642,3 +663,176 @@ same-Release, repeated-credit and name-proposal queries took 15.120/2,899.674 ms
 production drain took 167.904 ms. The strong Release case had no seeded
 candidate and was vacuous. The binary's exact dirty source is unestablished;
 this is not final equivalence or baseline acceptance evidence.
+
+The later NOWAIT identity/cursor diagnostic on the populated 600,000-track
+fixture passed the same narrow scoped/global comparisons, including non-empty
+strong Artist and Release cases, and the late lower-ID test. The production
+drain took 2,459.191 ms and retained 62 closure seeds. Its cursor SELECT plan
+was an index-only scan without Sort or Materialize for 1 and 1,001 credits;
+this measures full SELECT execution on one fixture, not incremental FETCH,
+locking, a planner guarantee, or full concurrency equivalence.
+
+The later pre-acceptance RM-18/RM-19 fixture rerun is recorded in [the NOWAIT
+mutation evidence](tests/performance/recommendation-merge-nowait-2026-11-26.md).
+The 10,000-Track merge/split sample took 5.765/8.919 seconds. Observed scrobble
+p99 values were higher than the earlier pre-0065 single-run samples, a real
+unresolved tail-latency concern; uncontrolled cache and one run per scenario do
+not establish the cause. The fixture script changed after launch and the record
+identifies the drift. Repeat controlled runs and final source qualification are
+required.
+
+A matched disk-backed ingestion pair used 35,000 Artists, 50,000 Releases,
+600,000 Tracks and 200 synthetic one-track MP3/FLAC releases, with two workers
+per stage. The baseline cataloged all 200 in 96.771 seconds; the current
+binary cataloged all 200 in 62.689 seconds. Same-work-item CatalogStore retry
+samples (n=50) had baseline p50/p95 3.067/4.121 ms and current 3.081/4.109 ms;
+identifiers and import counts were preserved, and the current seed set did not
+change. These are single runs with uncontrolled cache and synthetic five-second
+media; current binary/source correspondence was not independently established.
+Search, policy, interactive traffic, I/O counters, artwork, CUE, media retry
+faults and cross-filesystem acquisition were excluded. The [paired evidence](design/evidence/performance/ingestion-600k-paired-disk.md)
+links the raw logs and records source, environment and measurement limitations.
+
+A real HTTP/1 ingress diagnostic on the 600,000-Track fixture tested caps
+0/4/16/32/64 with 16 Jellyfin stopped events, 16 interactive probes, one idle
+keep-alive and one slow MP3 stream while a Track was locked for three seconds.
+All 204s corresponded to distinct persisted plays and exact Track popularity;
+no play completed while the lock was held. System/Info p95 was 4.05 ms,
+3.131 s, 3.044 s, 2.112 ms and 3.809 ms respectively. Caps 4 and 16 delayed all
+probes until the lock released. Each cap has only 16 samples, with one synthetic
+lock, loopback HTTP/1 and tmpfs media; the dirty server binary's source identity
+was not independently established. This does not justify a generally safe
+production default or establish HTTP/2, proxy or concurrent-ingestion behavior.
+
+The controlled five-round contention repeat reported zero errors and exact
+popularity, but p99 ranges remained 575–1,281 ms for a shared Track,
+233–809 ms for separate Tracks sharing an Artist, and 679–852 ms during
+concurrent credit changes (160 plays per round). The admission histograms did
+not identify permit wait as the dominant measured cost. These results do not
+establish a cause; Track and candidate locks, retries and scheduling still need
+isolation, and the tail concern is not resolved.
+
+The follow-up real HTTP/1 ingress run measured first media byte separately from
+response headers; raw samples are in [the TTFB evidence](tests/performance/ingress-ttfb-600k-2026-11-26.md).
+All 80 Jellyfin responses corresponded to persisted plays and exact popularity.
+Caps 4 and 16 delayed all interactive probes during the held Track lock. This
+single synthetic run does not establish a safe default or cover concurrent
+production ingestion.
+
+In a separate disk-backed mixed run on the 600,000-Track fixture, 200/200
+synthetic releases reached `cataloged` in 60.901 seconds while a slow stream
+remained open. Among active-window samples, first-media-byte p50/p95/p99 were
+2.535/4.517/5.241 ms (n=59), and System/Info p50/p95/p99 were
+0.549/0.718/0.894 ms (n=236), with no recorded request errors. This single run
+used two workers per stage and synthetic media; it has no baseline, real-client
+or audible-underrun measurement and did not run concurrent search rebuilding.
+See [the mixed-run evidence](tests/performance/ingestion-stream-600k-2026-11-26.md)
+for overlap and measurement limitations.
+
+On the 600,000-Track fixture, three current release-build production policy
+samples took 8.791–9.595 ms for snapshot plus evaluation and 377.170–404.488 ms
+for an eight-Release dry-run load plus evaluation. The harness observed 13/3
+SQLx statements and 7/10 returned rows respectively; retained acoustic digest
+data was 64 bytes, not a measurement of wire traffic. An isolated scoped/global
+query diagnostic is in [the current policy log](tests/performance/policy-current-2026-11-26.log).
+These are three samples of one synthetic input with uncontrolled cache; baseline
+and final integrated acceptance remain pending.
+
+The corrected original/current policy comparison used identical benchmark and
+fixture source on separate 600,000-Track databases (baseline migrations through
+0059; current through 0066). Three baseline normal samples took 1,285.6–1,472.1
+ms and returned 600,014 SQLx rows; current samples took 7.894–8.804 ms and
+returned seven. Eight-Release dry-run samples took 16.305–16.756 s baseline
+versus 390.060–418.873 ms current. The baseline retained 4,800,057 digest
+entries (307,203,648 digest-character bytes), versus one/64 bytes current.
+These are not PostgreSQL wire-byte counts. Process high-water RSS includes setup
+and allocator effects. Each side used one fixture, three samples, uncontrolled
+cache and eight one-track handoffs, with no mixed load; raw logs are
+[baseline](tests/performance/policy-baseline-2026-11-26.log) and
+[current](tests/performance/policy-current-2026-11-26.log).
+
+An incremental search diagnostic applied and acknowledged 2,048 synthetic
+Artist upserts in eight 256-event production batches in 0.4335 seconds (4,725
+per second), with 152 observed SQLx statement events. Writer initialization
+was 0.807 ms median and 6.203 ms total; commits had 10.726 ms median. A cold
+query took 7.891 ms and ten warm queries 1.468–2.222 ms. This one Artist-only
+run did not exercise concurrent load, and statement events are not proven
+network round trips. It does not by itself settle writer lifecycle or final
+acceptance.
+
+The genre/scheduler diagnostic on the 600,000-Track fixture cataloged all 200
+synthetic one-Track Releases in 62.518 seconds. Native and OpenSubsonic genre
+aggregates each exactly matched 200 Releases and 200 Tracks. Across 234 sampled
+observations, at most three advisory/lock waiters were seen; ready-to-first-claim
+p50/p95 were 12.814/23.025 seconds (n=200). The [raw log](tests/performance/genre-scheduler-600k-2026-11-26.log)
+records one run, an unverified dirty server binary identity and no interactive
+load; sampling does not prove continuous utilization, fairness or lock duration.
+
+Three subsequent mixed Artist/Release/Track outbox trials each applied and
+acknowledged 2,048 events in eight batches, draining in 0.5905/0.5032/0.4976
+seconds with 164 SQLx statement events per trial. Across 24 batches, writer
+initialization was 0.740 ms median and 19.062 ms total; commit median was
+15.326 ms. Process high-water RSS rose from 273,856 to 418,168 KiB across the
+rebuild and trials; it cannot be attributed to writers alone. These were
+sequential warm trials, not concurrent worker/interactive acceptance or a
+long-lived-writer comparison.
+
+A concurrent PostgreSQL/Tantivy diagnostic held the second-generation snapshot,
+applied and acknowledged 2,048 mixed events on the old generation, replayed
+those events into the new generation, then verified Artist/Release/Track
+visibility. Four in-process readers completed 2,472 queries without errors;
+p50/p95/p99 were 2.175/3.348/4.502 ms. Snapshot age was 32.491 s and the
+activation call 6.640 ms. No sampled query spanned the activation completion,
+so this does not establish in-flight switch behavior. This was one process, one
+run, with an instrumentation barrier, uncontrolled cache and no HTTP or
+competing writer process; SQLx events are not network round trips.
+
+
+## Additional current execution evidence (not final acceptance)
+
+The isolated original-baseline mixed workload on an owned 35K/50K/600K fixture
+completed 200 generated one-track imports with concurrent search rebuilding and
+HTTP probes at pool sizes 8 and 32. Elapsed times were 127.26 and 127.25 seconds
+respectively, with zero HTTP errors. The [baseline record](tests/performance/db-competition-baseline-2026-11-26.md)
+contains percentile samples, resource figures, exact binary provenance and the
+important omissions: one uncontrolled-cache trial per case, no idle/single-load
+controls, and no baseline pool hold metrics. The matching final-source run is
+still required.
+
+The [rate-limit contention workload](tests/performance/rate-limit-600k-2026-11-26.md)
+exercised the production store on the 600K fixture. At 32 simultaneous workers,
+three rounds of shared and separate actor keys produced 259–320 attempts/s,
+roughly 95.9–98.2 ms p50 and 206.0–307.9 ms p99, with exact counters and no
+errors. The tested pre-instrumentation limiter function matched the original
+baseline; this is not a before/after measurement. Normal HTTP authentication,
+password hashing, realistic request distributions, multi-process and mixed-load
+behavior were not measured. Checkout and hold instrumentation was subsequently
+added and passed its focused tests; a post-change representative measurement
+and an evidence-backed limiter decision remain open.
+
+On an owned 600K catalog, a [Jellyfin Audio SQL plan comparison](tests/performance/jellyfin-audio-index-plan-2026-11-26.md)
+measured four sequential page-query samples at 109.7–118.4 ms before and
+1.29–1.68 ms with the candidate ordering index. Exact count and page hashes
+matched; the exact count alone remained approximately 68–77 ms. Migration 0069,
+the page-scoped Artist count, all 20 focused Jellyfin media API tests, and fresh
+and populated upgrade checks passed. This is a warm-order SQL microbenchmark,
+not an HTTP before/after or a measurement of deep-page and write costs.
+
+A [post-supervisor codec matrix](tests/performance/codec-matrix-supervised-2026-11-26.md)
+measured retained MP3 and FLAC at 1/2/4 workers, two samples each, using eight
+60-second synthetic single-track inputs. Mean release rates were
+1.731/3.505/6.853 per second for MP3 and 1.419/2.825/5.418 for FLAC. The run
+excluded database, scheduling and interactive traffic and predates subsequent
+media source changes, so a final-source and mixed-load decision remains open.
+
+An unused ffprobe version lookup was subsequently removed; 14 real-media
+normalization tests passed, including wrapper counts confirming two independent
+data probes and no version probe for retained MP3. A cold version subprocess is
+avoided only when the configured executable path resolves directly. At that measurement the usual bare executable defaults failed metadata
+lookup before spawning, leaving inspection version provenance absent. A later
+PATH-resolution fix and focused tests restored Unix bare-name provenance; a
+final integrated measurement remains pending. This narrow saving does not
+complete RM-11. The current custody, ambiguous-path and subprocess
+work remains in progress. In particular, the occurrence-bound filesystem
+handoff and cleanup, final upgrades/recovery, required full suites and quality
+gates have not been verified against the integrated working tree.

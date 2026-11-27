@@ -266,23 +266,26 @@ async fn load_artists(
     } else {
         "artist.sort_name COLLATE \"C\", artist.public_api_id"
     };
+    // Page first: grouping every artist's credits makes a small response do
+    // catalog-wide work. Count distinct active primary releases only for the
+    // selected artists, as in the original aggregate.
     let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-        "SELECT artist.public_api_id, artist.canonical_name, artist.sort_name, \
+        "WITH selected AS MATERIALIZED ( \
+            SELECT artist.id, artist.public_api_id, artist.canonical_name, artist.sort_name, \
+                   artist.created_at, artist.updated_at \
+              FROM artists artist \
+             WHERE artist.status NOT IN ('merged', 'deprecated') \
+               AND ($1::text IS NULL OR {fold_expr} LIKE '%' || $1 || '%') \
+             ORDER BY {order_clause} LIMIT $2 OFFSET $3 \
+         ) \
+         SELECT artist.public_api_id, artist.canonical_name, artist.sort_name, \
                 artist.created_at, artist.updated_at, \
-                COALESCE(aggregate.release_count, 0) \
-           FROM artists artist \
-           LEFT JOIN ( \
-                SELECT billing.artist_id, count(DISTINCT billing.release_id) AS release_count \
-                  FROM release_artists billing \
-                  JOIN releases release ON release.id = billing.release_id \
-                   AND release.status = 'active' \
-                 WHERE billing.role = 'primary' \
-                 GROUP BY billing.artist_id \
-           ) aggregate ON aggregate.artist_id = artist.id \
-          WHERE artist.status NOT IN ('merged', 'deprecated') \
-            AND ($1::text IS NULL OR {fold_expr} LIKE '%' || $1 || '%') \
-          ORDER BY {order_clause} \
-          LIMIT $2 OFFSET $3"
+                (SELECT count(DISTINCT billing.release_id) \
+                   FROM release_artists billing \
+                   JOIN releases release ON release.id = billing.release_id \
+                    AND release.status = 'active' \
+                  WHERE billing.artist_id = artist.id AND billing.role = 'primary') \
+           FROM selected artist ORDER BY {order_clause}"
     )))
     .bind(search_term.map(fold))
     .bind(take)
@@ -307,16 +310,12 @@ async fn load_artist(pool: &PgPool, public_id: Uuid) -> Result<Option<ArtistFact
     let row = sqlx::query(
         "SELECT artist.public_api_id, artist.canonical_name, artist.sort_name, \
                 artist.created_at, artist.updated_at, \
-                COALESCE(aggregate.release_count, 0) \
+                (SELECT count(DISTINCT billing.release_id) \
+                   FROM release_artists billing \
+                   JOIN releases release ON release.id = billing.release_id \
+                    AND release.status = 'active' \
+                  WHERE billing.artist_id = artist.id AND billing.role = 'primary') \
            FROM artists artist \
-           LEFT JOIN ( \
-                SELECT billing.artist_id, count(DISTINCT billing.release_id) AS release_count \
-                  FROM release_artists billing \
-                  JOIN releases release ON release.id = billing.release_id \
-                   AND release.status = 'active' \
-                 WHERE billing.role = 'primary' \
-                 GROUP BY billing.artist_id \
-           ) aggregate ON aggregate.artist_id = artist.id \
           WHERE artist.public_api_id = $1 AND artist.status NOT IN ('merged', 'deprecated')",
     )
     .bind(public_id)

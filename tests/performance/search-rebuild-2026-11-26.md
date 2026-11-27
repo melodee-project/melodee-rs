@@ -41,9 +41,9 @@ Results (one run, 685,000 documents):
   measured.
 
 The observed writer-initialization time below refers to the fresh rebuild
-writer only. Incremental outbox writer open frequency, per-batch writer cost,
-reader request latency, multi-process contention, and a controlled multi-sample
-baseline comparison remain unmeasured. This run does not justify the RM-13 writer lifecycle decision
+writer only. Later [incremental outbox measurements](search-outbox-mixed-2026-11-26.md)
+recorded per-batch writer and reader costs. Multi-process contention and a
+controlled multi-sample baseline comparison remain unmeasured. This run does not justify the RM-13 writer lifecycle decision
 or alone complete RM-14 acceptance.
 
 Reproduce from a compiled migration CLI and a release build of the benchmark:

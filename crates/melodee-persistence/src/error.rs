@@ -6,6 +6,20 @@ use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum WorkStoreError {
+    #[error("inbound discovery scan lease has expired or was replaced")]
+    DiscoveryScanLeaseExpired,
+
+    #[error("inbound discovery scan scope remains busy: {0}")]
+    DiscoveryScanBusy(String),
+
+    #[error("inbound discovery scan has retryable candidate failures: {0}")]
+    DiscoveryScanIncomplete(String),
+
+    #[error(
+        "settling capture staging budget exhausted; raise its configured row or byte limit and retry"
+    )]
+    SettlingCaptureBudgetExhausted,
+
     #[error("review identification merge failed")]
     ReviewMerge(#[source] Box<crate::CatalogStoreError>),
 

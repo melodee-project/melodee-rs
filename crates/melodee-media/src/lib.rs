@@ -13,7 +13,6 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::atomic::{AtomicBool, Ordering},
-    sync::mpsc,
     thread,
     time::{Duration as StdDuration, Instant},
 };
@@ -88,6 +87,7 @@ impl Drop for ToolInvocation {
 }
 
 mod normalize;
+pub mod operation_metrics;
 mod secure_fs;
 
 pub use normalize::{
@@ -239,6 +239,412 @@ fn snapshot_from_tagged(tagged: &lofty::file::TaggedFile) -> TagSnapshot {
     }
 }
 
+// Every tool is admitted before a supervisor thread or runtime is created.
+// The slot remains held until the child is reaped and all owned pipes close.
+const MAX_SUPERVISED_TOOLS: usize = 8;
+static TOOL_ADMISSION: std::sync::OnceLock<(std::sync::Mutex<usize>, std::sync::Condvar)> =
+    std::sync::OnceLock::new();
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SupervisedToolError {
+    #[error("canceled")]
+    Canceled,
+    #[error("timed out")]
+    Timeout,
+    #[error("tool process error: {0}")]
+    Io(#[from] io::Error),
+    #[error("tool supervisor thread failed")]
+    Supervisor,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ToolStdout {
+    Capture(usize),
+    PcmFingerprint,
+    None,
+}
+
+pub(crate) struct SupervisedToolOutput {
+    pub status: std::process::ExitStatus,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub fingerprint: Option<String>,
+}
+
+struct ToolSlot;
+impl Drop for ToolSlot {
+    fn drop(&mut self) {
+        let (lock, ready) = TOOL_ADMISSION.get_or_init(Default::default);
+        if let Ok(mut count) = lock.lock() {
+            *count = count.saturating_sub(1);
+            ready.notify_one();
+        }
+    }
+}
+
+fn tool_canceled(cancellation: Option<&AtomicBool>, shutdown: Option<&AtomicBool>) -> bool {
+    cancellation.is_some_and(|flag| flag.load(Ordering::SeqCst))
+        || shutdown.is_some_and(|flag| flag.load(Ordering::SeqCst))
+}
+
+fn acquire_tool_slot(
+    deadline: Instant,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> Result<ToolSlot, SupervisedToolError> {
+    let (lock, ready) = TOOL_ADMISSION.get_or_init(Default::default);
+    let mut count = lock.lock().map_err(|_| SupervisedToolError::Supervisor)?;
+    loop {
+        if tool_canceled(cancellation, shutdown) {
+            return Err(SupervisedToolError::Canceled);
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(SupervisedToolError::Timeout);
+        }
+        if *count < MAX_SUPERVISED_TOOLS {
+            *count += 1;
+            return Ok(ToolSlot);
+        }
+        let (next, _) = ready
+            .wait_timeout(count, remaining.min(StdDuration::from_millis(25)))
+            .map_err(|_| SupervisedToolError::Supervisor)?;
+        count = next;
+    }
+}
+
+async fn tool_cancel_or_timeout(
+    deadline: Instant,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> SupervisedToolError {
+    loop {
+        if tool_canceled(cancellation, shutdown) {
+            return SupervisedToolError::Canceled;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return SupervisedToolError::Timeout;
+        }
+        tokio::time::sleep(remaining.min(StdDuration::from_millis(10))).await;
+    }
+}
+
+async fn read_tool_pipe<R: tokio::io::AsyncRead + Unpin>(
+    reader: Option<R>,
+    mode: ToolStdout,
+) -> io::Result<(Vec<u8>, Option<String>)> {
+    use tokio::io::AsyncReadExt;
+    let Some(mut reader) = reader else {
+        return Ok((Vec::new(), None));
+    };
+    let mut output = Vec::new();
+    let mut hasher = matches!(mode, ToolStdout::PcmFingerprint).then(|| {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"melodee-decoded-audio-pcm-v1\0");
+        hasher
+    });
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = reader.read(&mut buffer).await?;
+        if count == 0 {
+            break;
+        }
+        if let Some(hasher) = &mut hasher {
+            hasher.update(&buffer[..count]);
+        }
+        if let ToolStdout::Capture(limit) = mode {
+            let remaining = limit.saturating_sub(output.len());
+            output.extend_from_slice(&buffer[..count.min(remaining)]);
+        }
+    }
+    Ok((
+        output,
+        hasher.map(|hash| hash.finalize().to_hex().to_string()),
+    ))
+}
+
+#[cfg(windows)]
+type ToolChild = Box<dyn process_wrap::tokio::ChildWrapper>;
+#[cfg(not(windows))]
+type ToolChild = tokio::process::Child;
+
+fn spawn_with_budget<T>(
+    mut spawn: impl FnMut() -> io::Result<T>,
+    deadline: Instant,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> Result<T, SupervisedToolError> {
+    normalize::retry_executable_busy(|| {
+        if tool_canceled(cancellation, shutdown) {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "tool canceled before spawn",
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "tool deadline expired before spawn",
+            ));
+        }
+        spawn()
+    })
+    .map_err(|error| {
+        if tool_canceled(cancellation, shutdown) {
+            SupervisedToolError::Canceled
+        } else if Instant::now() >= deadline {
+            SupervisedToolError::Timeout
+        } else {
+            SupervisedToolError::Io(error)
+        }
+    })
+}
+
+#[cfg(windows)]
+fn spawn_supervised(
+    command: tokio::process::Command,
+    deadline: Instant,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> Result<ToolChild, SupervisedToolError> {
+    use process_wrap::tokio::{CommandWrap, JobObject, KillOnDrop};
+    let mut wrapped = CommandWrap::from(command);
+    wrapped.wrap(KillOnDrop).wrap(JobObject);
+    spawn_with_budget(|| wrapped.spawn(), deadline, cancellation, shutdown)
+}
+
+#[cfg(not(windows))]
+fn spawn_supervised(
+    mut command: tokio::process::Command,
+    deadline: Instant,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> Result<ToolChild, SupervisedToolError> {
+    spawn_with_budget(|| command.spawn(), deadline, cancellation, shutdown)
+}
+
+#[cfg(windows)]
+fn take_tool_pipes(
+    child: &mut ToolChild,
+) -> (
+    Option<tokio::process::ChildStdout>,
+    Option<tokio::process::ChildStderr>,
+) {
+    (child.stdout().take(), child.stderr().take())
+}
+#[cfg(not(windows))]
+fn take_tool_pipes(
+    child: &mut ToolChild,
+) -> (
+    Option<tokio::process::ChildStdout>,
+    Option<tokio::process::ChildStderr>,
+) {
+    (child.stdout.take(), child.stderr.take())
+}
+
+#[cfg(unix)]
+fn kill_tool_group(child: &ToolChild) {
+    // The direct child remains unreaped here, pinning its process-group ID.
+    if let Some(pid) = child
+        .id()
+        .and_then(|pid| i32::try_from(pid).ok())
+        .and_then(rustix::process::Pid::from_raw)
+    {
+        let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+    }
+}
+#[cfg(not(unix))]
+fn kill_tool_group(_child: &ToolChild) {}
+
+async fn kill_and_reap_tool(child: &mut ToolChild) {
+    kill_tool_group(child);
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+}
+
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "horizon",
+        target_os = "cygwin"
+    ))
+))]
+async fn wait_tool_exit(child: &mut ToolChild) -> io::Result<std::process::ExitStatus> {
+    use rustix::process::{WaitId, WaitIdOptions, waitid};
+    let raw = child
+        .id()
+        .and_then(|pid| i32::try_from(pid).ok())
+        .and_then(rustix::process::Pid::from_raw)
+        .ok_or_else(|| io::Error::other("tool child ID is unavailable"))?;
+    loop {
+        match waitid(
+            WaitId::Pid(raw),
+            WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
+        ) {
+            Ok(Some(_)) => {
+                // Kill any remaining ordinary descendants while the unreaped
+                // group leader pins the identifier, then collect its status.
+                kill_tool_group(child);
+                return child.wait().await;
+            }
+            Ok(None) => tokio::time::sleep(StdDuration::from_millis(10)).await,
+            Err(error) => return Err(io::Error::from_raw_os_error(error.raw_os_error())),
+        }
+    }
+}
+
+#[cfg(windows)]
+async fn wait_tool_exit(child: &mut ToolChild) -> io::Result<std::process::ExitStatus> {
+    loop {
+        if let Some(status) = child.inner_mut().try_wait()? {
+            // The job handle is still owned, so terminating it cannot target a
+            // recycled process identifier. Wait for its completion after kill.
+            let _ = child.start_kill();
+            child.wait().await?;
+            return Ok(status);
+        }
+        tokio::time::sleep(StdDuration::from_millis(10)).await;
+    }
+}
+
+// OpenBSD's kernel rejects registering NOTE_EXIT after a process begins
+// exiting. Our child has not been reaped, so ESRCH means the original PID is
+// still pinned and its process group can be terminated safely.
+#[cfg(any(target_os = "openbsd", all(test, target_os = "macos")))]
+async fn wait_tool_exit_kqueue(child: &mut ToolChild) -> io::Result<std::process::ExitStatus> {
+    use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
+    use nix::sys::time::TimeSpec;
+    let pid = child
+        .id()
+        .ok_or_else(|| io::Error::other("tool child ID is unavailable"))?;
+    let queue = Kqueue::new().map_err(io::Error::from)?;
+    rustix::io::fcntl_setfd(&queue, rustix::io::FdFlags::CLOEXEC).map_err(io::Error::from)?;
+    let event = KEvent::new(
+        pid as usize,
+        EventFilter::EVFILT_PROC,
+        EvFlags::EV_ADD | EvFlags::EV_ONESHOT,
+        FilterFlag::NOTE_EXIT,
+        0,
+        0,
+    );
+    let events = [event];
+    let zero = *TimeSpec::new(0, 0).as_ref();
+    let mut registering = true;
+    loop {
+        let changes = if registering { &events[..] } else { &[] };
+        let mut result = [event];
+        match queue.kevent(changes, &mut result, Some(zero)) {
+            Err(nix::errno::Errno::ESRCH) => {
+                kill_tool_group(child);
+                return child.wait().await;
+            }
+            Err(nix::errno::Errno::EINTR) => continue,
+            Err(error) => return Err(io::Error::from(error)),
+            Ok(count) if count > 0 => {
+                if result[0].flags().contains(EvFlags::EV_ERROR) {
+                    let code = i32::try_from(result[0].data()).unwrap_or(i32::MAX);
+                    if code != nix::errno::Errno::ESRCH as i32 {
+                        return Err(io::Error::from_raw_os_error(code));
+                    }
+                }
+                kill_tool_group(child);
+                return child.wait().await;
+            }
+            Ok(_) => {
+                registering = false;
+            }
+        }
+        // kqueue polling never owns a detached blocking worker; the scoped
+        // supervisor can still observe cancellation and its deadline.
+        tokio::time::sleep(StdDuration::from_millis(10)).await;
+    }
+}
+
+#[cfg(target_os = "openbsd")]
+async fn wait_tool_exit(child: &mut ToolChild) -> io::Result<std::process::ExitStatus> {
+    wait_tool_exit_kqueue(child).await
+}
+
+#[cfg(not(any(
+    windows,
+    all(
+        unix,
+        not(any(
+            target_os = "openbsd",
+            target_os = "redox",
+            target_os = "horizon",
+            target_os = "cygwin"
+        ))
+    ),
+    target_os = "openbsd"
+)))]
+async fn wait_tool_exit(child: &mut ToolChild) -> io::Result<std::process::ExitStatus> {
+    child.wait().await
+}
+
+/// Run and drain one process with a bounded resource slot and no detached readers.
+pub(crate) fn run_supervised_tool(
+    command: Command,
+    timeout: StdDuration,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+    stdout_mode: ToolStdout,
+    stderr_limit: Option<usize>,
+) -> Result<SupervisedToolOutput, SupervisedToolError> {
+    let operation = if command.get_args().any(|arg| arg == "-version") {
+        operation_metrics::Operation::ToolVersion
+    } else {
+        match Path::new(command.get_program())
+            .file_stem()
+            .and_then(|name| name.to_str())
+        {
+            Some("ffprobe") => operation_metrics::Operation::Ffprobe,
+            Some("ffmpeg") => operation_metrics::Operation::Ffmpeg,
+            Some("fpcalc") => operation_metrics::Operation::Fpcalc,
+            _ => operation_metrics::Operation::OtherTool,
+        }
+    };
+    let deadline = Instant::now()
+        .checked_add(timeout)
+        .ok_or(SupervisedToolError::Timeout)?;
+    let _slot = acquire_tool_slot(deadline, cancellation, shutdown)?;
+    thread::scope(|scope| {
+        let supervisor = thread::Builder::new().name("melodee-media-tool".to_owned()).spawn_scoped(scope, move || {
+            let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+            runtime.block_on(async move {
+                let mut command = tokio::process::Command::from(command);
+                command.stdin(Stdio::null()).stdout(match stdout_mode { ToolStdout::None => Stdio::null(), _ => Stdio::piped() })
+                    .stderr(if stderr_limit.is_some() { Stdio::piped() } else { Stdio::null() }).kill_on_drop(true);
+                #[cfg(unix)]
+                command.process_group(0);
+                let mut child = spawn_supervised(command, deadline, cancellation, shutdown)?;
+                let operation = operation_metrics::OperationGuard::start(operation);
+                let (stdout, stderr) = take_tool_pipes(&mut child);
+                let reads = async {
+                    tokio::try_join!(read_tool_pipe(stdout, stdout_mode),
+                        read_tool_pipe(stderr, ToolStdout::Capture(stderr_limit.unwrap_or(0))))
+                };
+                let output = tokio::select! {
+                    result = reads => match result { Ok(value) => value, Err(error) => { kill_and_reap_tool(&mut child).await; return Err(SupervisedToolError::Io(error)); } },
+                    error = tool_cancel_or_timeout(deadline, cancellation, shutdown) => { kill_and_reap_tool(&mut child).await; return Err(error); }
+                };
+                let status = tokio::select! {
+                    result = wait_tool_exit(&mut child) => match result { Ok(value) => value, Err(error) => { kill_and_reap_tool(&mut child).await; return Err(SupervisedToolError::Io(error)); } },
+                    error = tool_cancel_or_timeout(deadline, cancellation, shutdown) => { kill_and_reap_tool(&mut child).await; return Err(error); }
+                };
+                if status.success() { operation.finish(); }
+                Ok(SupervisedToolOutput { status, stdout: output.0.0, fingerprint: output.0.1, stderr: output.1.0 })
+            })
+        }).map_err(SupervisedToolError::Io)?;
+        supervisor
+            .join()
+            .map_err(|_| SupervisedToolError::Supervisor)?
+    })
+}
+
 /// Computes a streaming fingerprint over a canonical decoded audio stream.
 /// The output is never buffered in memory. This is the integrity predicate for
 /// tag rewrites; a whole-file hash is expected to change when tags change.
@@ -251,76 +657,39 @@ pub fn decoded_audio_fingerprint(
         .to_str()
         .ok_or_else(|| "media path is not UTF-8".to_owned())?;
     let mut command = Command::new(ffmpeg_path);
-    command
-        .args([
-            "-v",
-            "error",
-            "-i",
-            path_text,
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-f",
-            "s16le",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-acodec",
-            "pcm_s16le",
-            "-",
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("unable to start audio verifier: {error}"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "audio verifier did not expose output".to_owned())?;
-    let (sender, receiver) = mpsc::sync_channel(1);
-    let reader_thread = thread::spawn(move || {
-        let mut reader = stdout;
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(b"melodee-decoded-audio-pcm-v1\0");
-        let mut buffer = [0_u8; HASH_BUFFER_SIZE];
-        let result = loop {
-            let count = match reader.read(&mut buffer) {
-                Ok(count) => count,
-                Err(error) => break Err(format!("audio verifier read failed: {error}")),
-            };
-            if count == 0 {
-                break Ok(hasher.finalize().to_hex().to_string());
-            }
-            hasher.update(&buffer[..count]);
-        };
-        let _ = sender.send(result);
-    });
-    let result = match receiver.recv_timeout(timeout) {
-        Ok(result) => result,
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = reader_thread.join();
-            return Err("audio verification timed out".to_owned());
-        }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = reader_thread.join();
-            return Err("audio verifier output reader stopped unexpectedly".to_owned());
-        }
-    }?;
-    let status = child
-        .wait()
-        .map_err(|error| format!("audio verifier wait failed: {error}"))?;
-    let _ = reader_thread.join();
-    if !status.success() {
+    command.args([
+        "-v",
+        "error",
+        "-i",
+        path_text,
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-f",
+        "s16le",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-acodec",
+        "pcm_s16le",
+        "-",
+    ]);
+    let output = run_supervised_tool(
+        command,
+        timeout,
+        None,
+        None,
+        ToolStdout::PcmFingerprint,
+        None,
+    )
+    .map_err(|error| format!("audio verification {error}"))?;
+    if !output.status.success() {
         return Err("audio verifier rejected the media".to_owned());
     }
-    Ok(result)
+    output
+        .fingerprint
+        .ok_or_else(|| "audio verifier did not expose output".to_owned())
 }
 
 /// Probe one media file for the hook context fields. Returns `None` when
@@ -1049,6 +1418,8 @@ fn mime_for_container(format_name: Option<&str>) -> Option<String> {
 }
 
 pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
+    let mut operation =
+        operation_metrics::OperationGuard::start(operation_metrics::Operation::MediaFileHash);
     // Hash through the descriptor-relative no-follow opener. This keeps the
     // inspection/normalization settling hash from following a source symlink
     // introduced after the caller's metadata check.
@@ -1061,9 +1432,11 @@ pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
         if read == 0 {
             break;
         }
+        operation.add_read(u64::try_from(read).unwrap_or(u64::MAX));
         hasher.update(&buffer[..read]);
         bytes = bytes.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
     }
+    operation.finish();
     Ok((hasher.finalize().to_hex().to_string(), bytes))
 }
 
@@ -1275,59 +1648,20 @@ pub(crate) fn run_ffprobe_cancellable(
     shutdown: Option<&AtomicBool>,
 ) -> Result<ProbeResult, String> {
     let mut invocation = ToolInvocation::start("ffprobe", path);
-    let mut child = Command::new(&options.ffprobe_path)
-        .args(ffprobe_args(path))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("unable to start ffprobe: {error}"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "ffprobe stdout was not captured".to_owned())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "ffprobe stderr was not captured".to_owned())?;
-    let max_output = options.max_tool_output_bytes;
-    let stdout_reader = thread::spawn(move || read_limited(stdout, max_output));
-    let stderr_reader = thread::spawn(move || read_limited(stderr, max_output));
-
-    let deadline = Instant::now() + options.ffprobe_timeout;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Ok(status),
-            Ok(None)
-                if cancellation.load(Ordering::SeqCst)
-                    || shutdown.is_some_and(|signal| signal.load(Ordering::SeqCst)) =>
-            {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Err("ffprobe canceled".to_owned());
-            }
-            Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Err("ffprobe timed out".to_owned());
-            }
-            Ok(None) => thread::sleep(StdDuration::from_millis(10)),
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Err(format!("unable to wait for ffprobe: {error}"));
-            }
-        }
-    };
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| "ffprobe stdout reader failed".to_owned())?
-        .map_err(|error| format!("unable to read ffprobe stdout: {error}"))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| "ffprobe stderr reader failed".to_owned())?
-        .map_err(|error| format!("unable to read ffprobe stderr: {error}"))?;
-    let status = status?;
+    let mut command = Command::new(&options.ffprobe_path);
+    command.args(ffprobe_args(path));
+    let output = run_supervised_tool(
+        command,
+        options.ffprobe_timeout,
+        Some(cancellation),
+        shutdown,
+        ToolStdout::Capture(options.max_tool_output_bytes),
+        Some(options.max_tool_output_bytes),
+    )
+    .map_err(|error| format!("ffprobe {error}"))?;
+    let status = output.status;
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     if !status.success() {
         invocation.set_outcome("exit_failure");
         return Err(format!(
@@ -1381,14 +1715,17 @@ pub(crate) fn run_ffprobe_cancellable(
 /// PERF-007 / RM-11: a tool's `-version` output is a function of the resolved
 /// executable, not of the media being processed. Normalization previously
 /// started ffmpeg/fpcalc/ffprobe `-version` three times per album. Cache the
-/// result by canonical path plus file identity (size and modification time),
-/// so an in-place tool upgrade invalidates the entry. The map is small and
-/// bounded.
+/// result by resolved invocation path and executable identity, so PATH order
+/// and ordinary executable replacement invalidate the entry. The map is small
+/// and bounded; an unavailable or canceled probe is not cached.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ToolVersionKey {
     path: std::path::PathBuf,
+    invocation: std::path::PathBuf,
     size: u64,
     modified: Option<StdDuration>,
+    #[cfg(unix)]
+    unix_identity: (u64, u64, i64, i64),
     max_output: usize,
 }
 
@@ -1399,27 +1736,60 @@ type ToolVersionCache = std::sync::Mutex<Vec<(ToolVersionKey, Option<String>)>>;
 static TOOL_VERSION_CACHE: std::sync::OnceLock<ToolVersionCache> = std::sync::OnceLock::new();
 
 pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
-    let metadata = match std::fs::metadata(path) {
-        Ok(metadata) => metadata,
-        Err(_) => return None,
-    };
-    let key = ToolVersionKey {
-        path: path.canonicalize().unwrap_or_else(|_| path.to_path_buf()),
-        size: metadata.len(),
-        modified: metadata
-            .modified()
-            .ok()
-            .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok()),
+    tool_version_with_cancellation(path, max_output, None, None)
+}
+
+pub(crate) fn tool_version_with_cancellation(
+    path: &Path,
+    max_output: usize,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> Option<String> {
+    let search_path = std::env::var_os("PATH");
+    tool_version_with_search_path(
+        path,
         max_output,
-    };
+        cancellation,
+        shutdown,
+        search_path.as_deref(),
+    )
+}
+
+fn tool_version_with_search_path(
+    path: &Path,
+    max_output: usize,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+    search_path: Option<&std::ffi::OsStr>,
+) -> Option<String> {
+    if tool_canceled(cancellation, shutdown) {
+        return None;
+    }
+    // Windows' executable search also includes system/application directories;
+    // Android does not expose effective-ID faccessat through rustix. In both
+    // cases use the platform search for bare names without caching a guessed
+    // identity for a potentially different file.
+    #[cfg(any(windows, target_os = "android"))]
+    if is_bare_tool_name(path) {
+        return probe_tool_version(path, max_output, cancellation, shutdown);
+    }
+    let invocation = resolve_tool_path(path, search_path)?;
+    let key = tool_version_key(&invocation, max_output)?;
     let cache = TOOL_VERSION_CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
     if let Ok(cache) = cache.lock()
         && let Some((_, cached)) = cache.iter().find(|(entry, _)| entry == &key)
     {
         return cached.clone();
     }
-    let value = probe_tool_version(path, max_output);
-    if let Ok(mut cache) = cache.lock() {
+    let value = probe_tool_version(&invocation, max_output, cancellation, shutdown);
+    let current = resolve_tool_path(path, search_path)
+        .and_then(|resolved| tool_version_key(&resolved, max_output));
+    if tool_canceled(cancellation, shutdown) || current.as_ref() != Some(&key) {
+        return None;
+    }
+    if value.is_some()
+        && let Ok(mut cache) = cache.lock()
+    {
         if cache.len() >= MAX_CACHED_TOOL_VERSIONS {
             cache.remove(0);
         }
@@ -1428,37 +1798,94 @@ pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
     value
 }
 
-fn probe_tool_version(path: &Path, max_output: usize) -> Option<String> {
-    let mut child = Command::new(path)
-        .arg("-version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
-    let stderr = child.stderr.take()?;
-    let stdout_reader = thread::spawn(move || read_limited(stdout, max_output));
-    let stderr_reader = thread::spawn(move || read_limited(stderr, max_output));
-    let deadline = Instant::now() + StdDuration::from_secs(2);
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-            Ok(None) => thread::sleep(StdDuration::from_millis(10)),
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-        }
+fn is_bare_tool_name(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| path.as_os_str() == name)
+}
+
+fn resolve_tool_path(path: &Path, search_path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let invocation = if is_bare_tool_name(path) {
+        std::env::split_paths(search_path?)
+            .map(|directory| directory.join(path))
+            .find(|candidate| is_executable_file(candidate))?
+    } else {
+        path.to_path_buf()
     };
-    let stdout = stdout_reader.join().ok()?.ok()?;
-    let _stderr = stderr_reader.join().ok()?.ok()?;
+    if invocation.is_absolute() {
+        Some(invocation)
+    } else {
+        Some(std::env::current_dir().ok()?.join(invocation))
+    }
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    if !std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file()) {
+        return false;
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
+    {
+        rustix::fs::accessat(
+            rustix::fs::CWD,
+            path,
+            rustix::fs::Access::EXEC_OK,
+            rustix::fs::AtFlags::EACCESS,
+        )
+        .is_ok()
+    }
+    #[cfg(any(not(unix), target_os = "android"))]
+    {
+        true
+    }
+}
+
+fn tool_version_key(invocation: &Path, max_output: usize) -> Option<ToolVersionKey> {
+    let metadata = std::fs::metadata(invocation).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    #[cfg(unix)]
+    let unix_identity = {
+        use std::os::unix::fs::MetadataExt;
+        (
+            metadata.dev(),
+            metadata.ino(),
+            metadata.ctime(),
+            metadata.ctime_nsec(),
+        )
+    };
+    Some(ToolVersionKey {
+        path: invocation.canonicalize().ok()?,
+        invocation: invocation.to_path_buf(),
+        size: metadata.len(),
+        modified: metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok()),
+        #[cfg(unix)]
+        unix_identity,
+        max_output,
+    })
+}
+
+fn probe_tool_version(
+    path: &Path,
+    max_output: usize,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+) -> Option<String> {
+    let mut command = Command::new(path);
+    command.arg("-version");
+    let output = run_supervised_tool(
+        command,
+        StdDuration::from_secs(2),
+        cancellation,
+        shutdown,
+        ToolStdout::Capture(max_output),
+        Some(max_output),
+    )
+    .ok()?;
+    let stdout = output.stdout;
+    let status = output.status;
     if !status.success() {
         return None;
     }
@@ -1472,13 +1899,17 @@ fn probe_tool_version(path: &Path, max_output: usize) -> Option<String> {
 }
 
 pub(crate) fn read_limited<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
+    let mut operation =
+        operation_metrics::OperationGuard::start(operation_metrics::Operation::MediaBoundedRead);
     let mut output = Vec::new();
     let mut buffer = [0_u8; 8192];
     loop {
         let read = reader.read(&mut buffer)?;
         if read == 0 {
+            operation.finish();
             return Ok(output);
         }
+        operation.add_read(u64::try_from(read).unwrap_or(u64::MAX));
         if output.len() < limit {
             let remaining = limit - output.len();
             output.extend_from_slice(&buffer[..read.min(remaining)]);
@@ -1512,6 +1943,8 @@ fn hash_artwork_and_header(
     path: &Path,
     max_bytes: usize,
 ) -> io::Result<(String, Result<(), String>)> {
+    let mut operation =
+        operation_metrics::OperationGuard::start(operation_metrics::Operation::MediaFileHash);
     let mut file = secure_fs::open_read(path)?;
     let mut hasher = Hasher::new();
     let mut header = Vec::new();
@@ -1521,6 +1954,7 @@ fn hash_artwork_and_header(
         if count == 0 {
             break;
         }
+        operation.add_read(u64::try_from(count).unwrap_or(u64::MAX));
         hasher.update(&buffer[..count]);
         let take = count.min(max_bytes.saturating_sub(header.len()));
         header.extend_from_slice(&buffer[..take]);
@@ -1528,6 +1962,7 @@ fn hash_artwork_and_header(
     let result = image_dimensions(&header)
         .map(|_| ())
         .ok_or_else(|| "unsupported or malformed image header".to_owned());
+    operation.finish();
     Ok((hasher.finalize().to_hex().to_string(), result))
 }
 
@@ -1649,6 +2084,326 @@ mod tests {
         tag::{ItemKey, ItemValue, Tag, TagExt, TagItem, TagType},
     };
 
+    // Runs only when invoked as an isolated test subprocess by the tests below.
+    // It uses the same executable on Unix and Windows, avoiding shell-specific
+    // child-tree or pipe behavior in the fixture.
+    #[test]
+    // This deliberately models a parent that exits without waiting for a descendant.
+    #[allow(clippy::zombie_processes)]
+    fn supervised_child_fixture() {
+        use std::io::Write;
+        let Ok(mode) = std::env::var("MELODEE_MEDIA_TEST_CHILD_MODE") else {
+            return;
+        };
+        match mode.as_str() {
+            "parent" => {
+                let mut child = Command::new(std::env::current_exe().unwrap());
+                child
+                    .args(["--exact", "tests::supervised_child_fixture", "--nocapture"])
+                    .env("MELODEE_MEDIA_TEST_CHILD_MODE", "descendant")
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit());
+                let _child = child.spawn().unwrap();
+                let ready = PathBuf::from(std::env::var_os("MELODEE_MEDIA_TEST_READY").unwrap());
+                let deadline = Instant::now() + StdDuration::from_secs(2);
+                while !ready.exists() && Instant::now() < deadline {
+                    thread::sleep(StdDuration::from_millis(5));
+                }
+                assert!(ready.exists());
+            }
+            "parent_closed" => {
+                let mut child = Command::new(std::env::current_exe().unwrap());
+                child
+                    .args(["--exact", "tests::supervised_child_fixture", "--nocapture"])
+                    .env("MELODEE_MEDIA_TEST_CHILD_MODE", "descendant")
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+                let _child = child.spawn().unwrap();
+                let ready = PathBuf::from(std::env::var_os("MELODEE_MEDIA_TEST_READY").unwrap());
+                let deadline = Instant::now() + StdDuration::from_secs(2);
+                while !ready.exists() && Instant::now() < deadline {
+                    thread::sleep(StdDuration::from_millis(5));
+                }
+                assert!(ready.exists());
+            }
+            "descendant" => {
+                fs::write(
+                    std::env::var_os("MELODEE_MEDIA_TEST_READY").unwrap(),
+                    b"ready",
+                )
+                .unwrap();
+                thread::sleep(StdDuration::from_millis(1500));
+                fs::write(
+                    std::env::var_os("MELODEE_MEDIA_TEST_MARKER").unwrap(),
+                    b"escaped",
+                )
+                .unwrap();
+            }
+            "flood" => {
+                let payload = [b'x'; 8192];
+                for _ in 0..32 {
+                    std::io::stdout().write_all(&payload).unwrap();
+                    std::io::stderr().write_all(&payload).unwrap();
+                }
+            }
+            "sleep" => thread::sleep(StdDuration::from_secs(10)),
+            "delayed_exit" => thread::sleep(StdDuration::from_millis(100)),
+            _ => panic!("unknown fixture mode"),
+        }
+    }
+
+    fn supervised_fixture_command(mode: &str, ready: &Path, marker: &Path) -> Command {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--exact", "tests::supervised_child_fixture", "--nocapture"])
+            .env("MELODEE_MEDIA_TEST_CHILD_MODE", mode)
+            .env("MELODEE_MEDIA_TEST_READY", ready)
+            .env("MELODEE_MEDIA_TEST_MARKER", marker);
+        command
+    }
+
+    #[test]
+    fn supervised_tool_drains_both_pipes_and_bounds_captured_output() {
+        let temp = temp_dir("supervised-flood");
+        let output = run_supervised_tool(
+            supervised_fixture_command("flood", &temp.join("ready"), &temp.join("marker")),
+            StdDuration::from_secs(5),
+            None,
+            None,
+            ToolStdout::Capture(37),
+            Some(53),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len(), 37);
+        assert_eq!(output.stderr.len(), 53);
+        assert_eq!(*TOOL_ADMISSION.get().unwrap().0.lock().unwrap(), 0);
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn inherited_pipes_timeout_terminates_tree_and_releases_admission() {
+        let temp = temp_dir("supervised-inherited-pipe");
+        let ready = temp.join("ready");
+        let marker = temp.join("marker");
+        let start = Instant::now();
+        let result = run_supervised_tool(
+            supervised_fixture_command("parent", &ready, &marker),
+            StdDuration::from_millis(700),
+            None,
+            None,
+            ToolStdout::Capture(128),
+            Some(128),
+        );
+        assert!(matches!(result, Err(SupervisedToolError::Timeout)));
+        assert!(
+            ready.exists(),
+            "descendant was active and inherited the pipes"
+        );
+        assert!(start.elapsed() < StdDuration::from_secs(3));
+        assert_eq!(*TOOL_ADMISSION.get().unwrap().0.lock().unwrap(), 0);
+        thread::sleep(StdDuration::from_millis(1600));
+        assert!(
+            !marker.exists(),
+            "descendant must not keep working after timeout"
+        );
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn cancellation_terminates_tree_and_releases_admission() {
+        let temp = temp_dir("supervised-cancel");
+        let ready = temp.join("ready");
+        let marker = temp.join("marker");
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let flag = cancel.clone();
+        let signal_path = ready.clone();
+        let canceler = thread::spawn(move || {
+            let deadline = Instant::now() + StdDuration::from_secs(3);
+            while !signal_path.exists() && Instant::now() < deadline {
+                thread::sleep(StdDuration::from_millis(5));
+            }
+            flag.store(true, Ordering::SeqCst);
+        });
+        let result = run_supervised_tool(
+            supervised_fixture_command("parent", &ready, &marker),
+            StdDuration::from_secs(5),
+            Some(&cancel),
+            None,
+            ToolStdout::Capture(128),
+            Some(128),
+        );
+        canceler.join().unwrap();
+        assert!(matches!(result, Err(SupervisedToolError::Canceled)));
+        assert!(ready.exists());
+        assert_eq!(*TOOL_ADMISSION.get().unwrap().0.lock().unwrap(), 0);
+        thread::sleep(StdDuration::from_millis(1600));
+        assert!(
+            !marker.exists(),
+            "descendant must not keep working after cancellation"
+        );
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn normal_exit_terminates_descendant_that_closed_its_pipes() {
+        let temp = temp_dir("supervised-closed-pipes");
+        let ready = temp.join("ready");
+        let marker = temp.join("marker");
+        let output = run_supervised_tool(
+            supervised_fixture_command("parent_closed", &ready, &marker),
+            StdDuration::from_secs(4),
+            None,
+            None,
+            ToolStdout::Capture(128),
+            Some(128),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        assert!(ready.exists());
+        thread::sleep(StdDuration::from_millis(1600));
+        assert!(
+            !marker.exists(),
+            "a successful parent exit must not leave descendants running"
+        );
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn supervisor_admits_before_spawning_and_times_out_when_full() {
+        let deadline = Instant::now() + StdDuration::from_secs(5);
+        let slots: Vec<_> = (0..MAX_SUPERVISED_TOOLS)
+            .map(|_| acquire_tool_slot(deadline, None, None).unwrap())
+            .collect();
+        let temp = temp_dir("supervised-admission");
+        let result = run_supervised_tool(
+            supervised_fixture_command("parent", &temp.join("ready"), &temp.join("marker")),
+            StdDuration::from_millis(75),
+            None,
+            None,
+            ToolStdout::None,
+            None,
+        );
+        assert!(matches!(result, Err(SupervisedToolError::Timeout)));
+        assert!(
+            !temp.join("ready").exists(),
+            "no child is spawned before admission"
+        );
+        drop(slots);
+        assert_eq!(*TOOL_ADMISSION.get().unwrap().0.lock().unwrap(), 0);
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "macos"))]
+    #[test]
+    fn kqueue_observer_receives_exit_after_registration() {
+        let temp = temp_dir("supervised-kqueue-delayed");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let mut command = tokio::process::Command::from(supervised_fixture_command(
+                "delayed_exit",
+                &temp.join("ready"),
+                &temp.join("marker"),
+            ));
+            command
+                .process_group(0)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            let mut child = command.spawn().unwrap();
+            let status =
+                tokio::time::timeout(StdDuration::from_secs(3), wait_tool_exit_kqueue(&mut child))
+                    .await
+                    .unwrap()
+                    .unwrap();
+            assert!(status.success());
+        });
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "macos"))]
+    #[test]
+    fn kqueue_observer_handles_a_child_that_already_exited() {
+        let temp = temp_dir("supervised-kqueue-exited");
+        let ready = temp.join("ready");
+        let marker = temp.join("marker");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let mut command = tokio::process::Command::from(supervised_fixture_command(
+                "parent_closed",
+                &ready,
+                &marker,
+            ));
+            command
+                .process_group(0)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            let mut child = command.spawn().unwrap();
+            tokio::time::sleep(StdDuration::from_millis(250)).await;
+            let status = wait_tool_exit_kqueue(&mut child).await.unwrap();
+            assert!(status.success());
+        });
+        assert!(ready.exists());
+        thread::sleep(StdDuration::from_millis(1600));
+        assert!(
+            !marker.exists(),
+            "the already-exited leader must still fence its descendants"
+        );
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn executable_busy_retry_checks_cancellation_and_deadline_before_each_attempt() {
+        let cancel = AtomicBool::new(false);
+        let mut attempts = 0;
+        let result = spawn_with_budget::<()>(
+            || {
+                attempts += 1;
+                cancel.store(true, Ordering::SeqCst);
+                Err(io::Error::from_raw_os_error(26))
+            },
+            Instant::now() + StdDuration::from_secs(1),
+            Some(&cancel),
+            None,
+        );
+        assert!(matches!(result, Err(SupervisedToolError::Canceled)));
+        assert_eq!(attempts, 1);
+        let mut attempts = 0;
+        let result = spawn_with_budget::<()>(
+            || {
+                attempts += 1;
+                Err(io::Error::from_raw_os_error(26))
+            },
+            Instant::now() + StdDuration::from_millis(1),
+            None,
+            None,
+        );
+        assert!(matches!(result, Err(SupervisedToolError::Timeout)));
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn deadline_also_covers_process_wait_with_no_pipes() {
+        let temp = temp_dir("supervised-wait");
+        let start = Instant::now();
+        let result = run_supervised_tool(
+            supervised_fixture_command("sleep", &temp.join("ready"), &temp.join("marker")),
+            StdDuration::from_millis(150),
+            None,
+            None,
+            ToolStdout::None,
+            None,
+        );
+        assert!(matches!(result, Err(SupervisedToolError::Timeout)));
+        assert!(start.elapsed() < StdDuration::from_secs(2));
+        fs::remove_dir_all(temp).unwrap();
+    }
+
     #[test]
     fn ffprobe_argv_separates_options_from_the_media_path() {
         let args = ffprobe_args(Path::new("relative/-leading-dash.flac"));
@@ -1669,6 +2424,122 @@ mod tests {
         let path = std::env::temp_dir().join(format!("melodee-media-{name}-{}", Uuid::now_v7()));
         fs::create_dir_all(&path).expect("temp directory");
         path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tool_version_resolves_path_order_and_invalidates_replaced_executables() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("tool-version-path");
+        let denied = root.join("denied");
+        let first = root.join("first");
+        let second = root.join("second");
+        for directory in [&denied, &first, &second] {
+            fs::create_dir(directory).unwrap();
+        }
+        fs::write(denied.join("tool"), b"not executable").unwrap();
+        let marker = root.join("calls");
+        let write_tool = |path: &Path, value: &str| {
+            fs::write(
+                path,
+                format!(
+                    "#!/bin/sh\nprintf x >> '{}'\nprintf '{value}'\n",
+                    marker.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        };
+        write_tool(&first.join("tool"), "alpha");
+        write_tool(&second.join("tool"), "bravo");
+        let paths = std::env::join_paths([&denied, &first, &second]).unwrap();
+        let lookup = |path: &std::ffi::OsStr| {
+            tool_version_with_search_path(Path::new("tool"), 1024, None, None, Some(path))
+        };
+        assert_eq!(lookup(&paths).as_deref(), Some("alpha"));
+        assert_eq!(lookup(&paths).as_deref(), Some("alpha"));
+        assert_eq!(
+            fs::read(&marker).unwrap(),
+            b"x",
+            "the second probe must use the cache"
+        );
+        let reordered = std::env::join_paths([&second, &first]).unwrap();
+        assert_eq!(lookup(&reordered).as_deref(), Some("bravo"));
+
+        let original = fs::metadata(first.join("tool")).unwrap();
+        let replacement = first.join("replacement");
+        write_tool(&replacement, "gamma");
+        assert_eq!(fs::metadata(&replacement).unwrap().len(), original.len());
+        fs::File::open(&replacement)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(original.modified().unwrap()))
+            .unwrap();
+        fs::rename(&replacement, first.join("tool")).unwrap();
+        assert_eq!(
+            fs::metadata(first.join("tool"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            original.modified().unwrap()
+        );
+        assert_eq!(lookup(&paths).as_deref(), Some("gamma"));
+        assert_eq!(fs::read(&marker).unwrap(), b"xxx");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_tool_version_probe_is_not_cached() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("tool-version-retry");
+        let ready = root.join("ready");
+        let tool = root.join("tool");
+        fs::write(
+            &tool,
+            format!(
+                "#!/bin/sh\nif [ -f '{}' ]; then printf ready; else exit 1; fi\n",
+                ready.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(tool_version(&tool, 1024).is_none());
+        fs::write(&ready, b"ready").unwrap();
+        assert_eq!(tool_version(&tool, 1024).as_deref(), Some("ready"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn executable_replaced_during_version_probe_is_not_reported_or_cached() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("tool-version-race");
+        let tool = root.join("tool");
+        let ready = root.join("ready");
+        let release = root.join("release");
+        fs::write(&tool, format!(
+            "#!/bin/sh\nprintf ready > '{}'\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nprintf old\n",
+            ready.display(), release.display()
+        )).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        let task_tool = tool.clone();
+        let task = thread::spawn(move || tool_version(&task_tool, 1024));
+        let deadline = Instant::now() + StdDuration::from_secs(1);
+        while !ready.exists() && Instant::now() < deadline {
+            thread::sleep(StdDuration::from_millis(5));
+        }
+        assert!(ready.exists(), "version probe did not start");
+        let replacement = root.join("replacement");
+        fs::write(&replacement, "#!/bin/sh\nprintf new\n").unwrap();
+        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::rename(&replacement, &tool).unwrap();
+        fs::write(&release, b"go").unwrap();
+        assert!(task.join().unwrap().is_none());
+        assert_eq!(tool_version(&tool, 1024).as_deref(), Some("new"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

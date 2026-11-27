@@ -296,6 +296,112 @@ async fn confirmed_match_locks_other_participation_artists_before_release() {
 }
 
 #[tokio::test]
+async fn match_closure_locks_only_date_eligible_group_members() {
+    let db = TestDb::create("match_group_closure").await;
+    let fixture = seed_published_release(
+        &db,
+        7613,
+        CatalogFixturePresentation {
+            release_title: "Group Closure",
+            release_artist: "Current Group",
+            track_title: "Group Track",
+            track_artist: "Current Group",
+            release_date: "2020-01-01",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("group-closure", "test"),
+            now,
+        )
+        .await
+        .expect("import");
+    let release = fixture.release_id.into_uuid();
+    let (observation,group): (Uuid,Uuid) = sqlx::query_as("SELECT a.observed_artist_id,a.artist_id FROM track_artists a JOIN tracks t ON t.id=a.track_id WHERE t.release_id=$1 AND a.role='primary' LIMIT 1")
+        .bind(release).fetch_one(&db.pool).await.expect("read group credit");
+    let eligible = Uuid::now_v7();
+    let ineligible = Uuid::now_v7();
+    let candidate = Uuid::now_v7();
+    for (id, name) in [
+        (eligible, "eligible"),
+        (ineligible, "ineligible"),
+        (candidate, "candidate"),
+    ] {
+        insert_artist(&db.pool, id, Uuid::now_v7(), name, name, "person", None)
+            .await
+            .expect("insert Artist");
+    }
+    sqlx::query("INSERT INTO group_memberships(id,member_artist_id,group_artist_id,role,start_date,end_date,confidence,evidence_source,created_at) VALUES (uuidv7(),$1,$3,'member','2010-01-01','2025-01-01',10000,'test',now()),(uuidv7(),$2,$3,'member','2030-01-01',NULL,10000,'test',now())")
+        .bind(eligible).bind(ineligible).bind(group).execute(&db.pool).await.expect("insert dated memberships");
+    let decision = ArtistMatchDecision::new(
+        NewArtistMatchDecision {
+            id: ArtistMatchDecisionId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(observation),
+            artist_id: ArtistId::from_uuid(candidate),
+            outcome: ArtistMatchOutcome::Confirmed,
+            authority: DecisionAuthority::Administrator {
+                actor: "test".into(),
+            },
+            locked: false,
+            reason: "group scope".into(),
+            decided_at: now,
+        },
+        &[],
+    )
+    .expect("decision");
+    let mut active_lock = db.pool.begin().await.expect("eligible blocker");
+    let mut inactive_lock = db.pool.begin().await.expect("ineligible blocker");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(eligible)
+        .execute(&mut *active_lock)
+        .await
+        .expect("lock eligible member");
+    sqlx::query("SELECT id FROM artists WHERE id=$1 FOR UPDATE")
+        .bind(ineligible)
+        .execute(&mut *inactive_lock)
+        .await
+        .expect("lock ineligible member");
+    let pool = db.pool.clone();
+    let task = tokio::spawn(async move {
+        CatalogStore
+            .record_artist_match_decision(
+                &pool,
+                &decision,
+                Confidence::new(10_000).expect("confidence"),
+                serde_json::json!({}),
+            )
+            .await
+    });
+    wait_for_identity_lock(&db.pool, "SELECT id FROM artists WHERE id=ANY").await;
+    sqlx::query("SELECT id FROM releases WHERE id=$1 FOR UPDATE NOWAIT")
+        .bind(release)
+        .execute(&mut *active_lock)
+        .await
+        .expect("Release remains unlocked while waiting");
+    active_lock.commit().await.expect("release eligible member");
+    tokio::time::timeout(std::time::Duration::from_secs(15), task)
+        .await
+        .expect("match must not wait for ineligible member")
+        .expect("join")
+        .expect("record match");
+    inactive_lock
+        .rollback()
+        .await
+        .expect("release ineligible member");
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn negative_assertion_create_and_revoke_lock_artist_before_observation() {
     let db = TestDb::create("negative_parent_lock").await;
     let fixture = seed_published_release(

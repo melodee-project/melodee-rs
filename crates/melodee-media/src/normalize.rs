@@ -10,7 +10,7 @@ use std::{
     fs,
     io::Read,
     path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
     sync::Arc,
     sync::atomic::{AtomicBool, Ordering},
     thread,
@@ -34,7 +34,7 @@ use uuid::Uuid;
 use crate::secure_fs;
 use crate::{
     InspectionOptions, ProbeResult, hash_file, image_dimensions, path_to_posix, read_limited,
-    run_ffprobe_cancellable, tool_version,
+    run_ffprobe_cancellable, tool_version_with_cancellation,
 };
 
 /// Converted MP3 profile parameters (PRD-MEDIA-002). The legacy-seeded FFmpeg
@@ -182,9 +182,21 @@ pub fn normalize_release(
         options.attempt_id,
     )?;
 
-    let ffmpeg_version = tool_version(&options.ffmpeg_path, options.max_tool_output_bytes);
-    let fpcalc_version = tool_version(&options.fpcalc_path, options.max_tool_output_bytes);
-    let _ffprobe_version = tool_version(&options.ffprobe_path, options.max_tool_output_bytes);
+    let ffmpeg_version = tool_version_with_cancellation(
+        &options.ffmpeg_path,
+        options.max_tool_output_bytes,
+        Some(&options.cancellation),
+        options.shutdown.as_deref(),
+    );
+    let fpcalc_version = tool_version_with_cancellation(
+        &options.fpcalc_path,
+        options.max_tool_output_bytes,
+        Some(&options.cancellation),
+        options.shutdown.as_deref(),
+    );
+    if is_canceled(options) {
+        return Err(NormalizationError::Canceled);
+    }
 
     info!(
         work_item_id = %manifest.work_item_id,
@@ -1134,6 +1146,16 @@ fn process_audio_file(
     })
 }
 
+fn hash_observed_buffer(bytes: &[u8]) -> blake3::Hash {
+    let mut operation = crate::operation_metrics::OperationGuard::start(
+        crate::operation_metrics::Operation::MediaBufferHash,
+    );
+    let hash = blake3::hash(bytes);
+    operation.add_read(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+    operation.finish();
+    hash
+}
+
 fn hash_source(source: &Path) -> Result<(String, u64), NormalizationError> {
     hash_file(source).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
@@ -1284,7 +1306,7 @@ fn preflight_artwork(
             options.max_artwork_bytes
         )));
     }
-    let actual = blake3::hash(&bytes).to_hex().to_string();
+    let actual = hash_observed_buffer(&bytes).to_hex().to_string();
     if observed.content_hash.as_deref() != Some(actual.as_str()) {
         return Err(NormalizationError::SourceChanged(
             observed.relative_path.clone(),
@@ -1331,7 +1353,7 @@ fn verify_normalized_artwork(
             options.max_artwork_bytes
         )));
     }
-    let byte_hash = blake3::hash(&bytes).to_hex().to_string();
+    let byte_hash = hash_observed_buffer(&bytes).to_hex().to_string();
     if !bytes.starts_with(&[0xff, 0xd8]) {
         return Err(NormalizationError::Verification(
             "normalized artwork is not JPEG".to_owned(),
@@ -1553,61 +1575,23 @@ fn run_ffmpeg_process(
     shutdown: Option<&AtomicBool>,
 ) -> Result<(i32, String), NormalizationError> {
     let mut command = Command::new(ffmpeg_path);
-    for arg in args {
-        command.arg(arg);
-    }
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped());
-
-    let mut child = spawn_tool(&mut command)
-        .map_err(|error| NormalizationError::Ffmpeg(format!("unable to start ffmpeg: {error}")))?;
-    let stderr = child.stderr.take();
-    let stderr_reader =
-        stderr.map(|stderr| thread::spawn(move || read_limited(stderr, max_output)));
-    let deadline = Instant::now() + timeout;
-
-    let status = run_child_wait_ffmpeg(child, deadline, cancellation, shutdown)?;
-
-    let stderr_output = stderr_reader
-        .and_then(|h| h.join().ok())
-        .and_then(|result| result.ok())
-        .map(|b| crate::truncate_bytes(&b))
-        .unwrap_or_default();
-
-    Ok((status.code().unwrap_or(-1), stderr_output))
-}
-
-fn run_child_wait_ffmpeg(
-    mut child: std::process::Child,
-    deadline: Instant,
-    cancellation: &AtomicBool,
-    shutdown: Option<&AtomicBool>,
-) -> Result<std::process::ExitStatus, NormalizationError> {
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status),
-            Ok(None)
-                if cancellation.load(Ordering::SeqCst)
-                    || shutdown.is_some_and(|signal| signal.load(Ordering::SeqCst)) =>
-            {
-                terminate_and_reap(&mut child);
-                return Err(NormalizationError::Canceled);
-            }
-            Ok(None) if Instant::now() >= deadline => {
-                terminate_and_reap(&mut child);
-                return Err(NormalizationError::Ffmpeg("ffmpeg timed out".to_owned()));
-            }
-            Ok(None) => thread::sleep(StdDuration::from_millis(10)),
-            Err(error) => {
-                terminate_and_reap(&mut child);
-                return Err(NormalizationError::Ffmpeg(format!(
-                    "unable to wait for ffmpeg: {error}"
-                )));
-            }
-        }
-    }
+    command.args(args);
+    let output = crate::run_supervised_tool(
+        command,
+        timeout,
+        Some(cancellation),
+        shutdown,
+        crate::ToolStdout::None,
+        Some(max_output),
+    )
+    .map_err(|error| match error {
+        crate::SupervisedToolError::Canceled => NormalizationError::Canceled,
+        other => NormalizationError::Ffmpeg(format!("ffmpeg {other}")),
+    })?;
+    Ok((
+        output.status.code().unwrap_or(-1),
+        crate::truncate_bytes(&output.stderr),
+    ))
 }
 
 fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, NormalizationError> {
@@ -1618,44 +1602,23 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
         .arg("-length")
         .arg(FINGERPRINT_LENGTH_SECONDS.to_string())
         .arg("--")
-        .arg(input)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = spawn_tool(&mut command)
-        .map_err(|error| NormalizationError::Fpcalc(format!("unable to start fpcalc: {error}")))?;
-
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    let max_output = options.max_tool_output_bytes;
-    let stdout_reader =
-        stdout.map(|stdout| thread::spawn(move || read_limited(stdout, max_output)));
-    let stderr_reader =
-        stderr.map(|stderr| thread::spawn(move || read_limited(stderr, max_output)));
-
-    let deadline = Instant::now() + options.fpcalc_timeout;
-    let mut child_for_wait = child;
-    let status = run_child_wait_generic(
-        &mut child_for_wait,
-        deadline,
-        "fpcalc",
-        &options.cancellation,
+        .arg(input);
+    let output = crate::run_supervised_tool(
+        command,
+        options.fpcalc_timeout,
+        Some(&options.cancellation),
         options.shutdown.as_deref(),
-    )?;
-
-    let stdout_output = stdout_reader
-        .and_then(|h| h.join().ok())
-        .and_then(|result| result.ok())
-        // fpcalc fingerprints routinely make the JSON response longer than
-        // the 512-byte diagnostic preview. The reader already enforces the
-        // configured output bound, so parsing must use the complete capture.
-        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-        .unwrap_or_default();
-    let stderr_output = stderr_reader
-        .and_then(|h| h.join().ok())
-        .and_then(|result| result.ok())
-        .map(|b| crate::truncate_bytes(&b))
-        .unwrap_or_default();
+        crate::ToolStdout::Capture(options.max_tool_output_bytes),
+        Some(options.max_tool_output_bytes),
+    )
+    .map_err(|error| match error {
+        crate::SupervisedToolError::Canceled => NormalizationError::Canceled,
+        other => NormalizationError::Fpcalc(format!("fpcalc {other}")),
+    })?;
+    let status = output.status;
+    // The complete bounded capture is required for long Chromaprint JSON.
+    let stdout_output = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr_output = crate::truncate_bytes(&output.stderr);
 
     if !status.success() {
         invocation.set_outcome("exit_failure");
@@ -1676,48 +1639,9 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
     Ok(stdout_output)
 }
 
-fn run_child_wait_generic(
-    child: &mut std::process::Child,
-    deadline: Instant,
-    name: &str,
-    cancellation: &AtomicBool,
-    shutdown: Option<&AtomicBool>,
-) -> Result<std::process::ExitStatus, NormalizationError> {
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status),
-            Ok(None)
-                if cancellation.load(Ordering::SeqCst)
-                    || shutdown.is_some_and(|signal| signal.load(Ordering::SeqCst)) =>
-            {
-                terminate_and_reap(child);
-                return Err(NormalizationError::Canceled);
-            }
-            Ok(None) if Instant::now() >= deadline => {
-                terminate_and_reap(child);
-                return Err(NormalizationError::Fpcalc(format!("{name} timed out")));
-            }
-            Ok(None) => thread::sleep(StdDuration::from_millis(10)),
-            Err(error) => {
-                terminate_and_reap(child);
-                return Err(NormalizationError::Fpcalc(format!(
-                    "unable to wait for {name}: {error}"
-                )));
-            }
-        }
-    }
-}
-
-fn terminate_and_reap(child: &mut std::process::Child) {
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
-fn spawn_tool(command: &mut Command) -> std::io::Result<std::process::Child> {
-    retry_executable_busy(|| command.spawn())
-}
-
-fn retry_executable_busy<T>(mut spawn: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+pub(crate) fn retry_executable_busy<T>(
+    mut spawn: impl FnMut() -> std::io::Result<T>,
+) -> std::io::Result<T> {
     const EXECUTABLE_BUSY_RETRIES: u8 = 4;
     let mut retry_count = 0;
     loop {
@@ -2115,7 +2039,7 @@ fn parse_sidecar_content(
             "sidecar exceeds the {MAX_SIDECAR_BYTES} byte limit"
         )));
     }
-    let actual_hash = blake3::hash(&bytes).to_hex().to_string();
+    let actual_hash = hash_observed_buffer(&bytes).to_hex().to_string();
     if file.content_hash.as_deref() != Some(actual_hash.as_str()) {
         return Err(NormalizationError::SourceChanged(
             file.relative_path.clone(),
@@ -2985,6 +2909,13 @@ mod tests {
         assert!(hash_file(&source_link).is_err());
 
         let fifo = temp.join("source.fifo");
+        #[cfg(any(target_os = "macos", target_os = "openbsd"))]
+        nix::unistd::mkfifo(
+            &fifo,
+            nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+        )
+        .unwrap();
+        #[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
         rustix::fs::mkfifoat(
             rustix::fs::CWD,
             &fifo,
@@ -3544,6 +3475,105 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.raw_os_error(), Some(2));
         assert_eq!(other_attempts, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn all_media_wrappers_terminate_inherited_pipes_and_descendants() {
+        let temp = test_temp_dir();
+        let marker = temp.join("escaped");
+        let script = write_script(
+            &temp,
+            "inherited",
+            &format!(
+                "(sleep 1; printf escaped >> '{}') &\nexit 0",
+                marker.display()
+            ),
+        );
+        let input = temp.join("track.flac");
+        fs::write(&input, b"fixture").unwrap();
+        let cancel = AtomicBool::new(false);
+        assert!(
+            run_ffmpeg_process(
+                &script,
+                &[],
+                StdDuration::from_millis(120),
+                1024,
+                &cancel,
+                None
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("timed out")
+        );
+        let options = NormalizationOptions {
+            fpcalc_path: script.clone(),
+            ffprobe_path: script.clone(),
+            fpcalc_timeout: StdDuration::from_millis(120),
+            ffprobe_timeout: StdDuration::from_millis(120),
+            ..NormalizationOptions::default()
+        };
+        assert!(
+            run_fpcalc(&input, &options)
+                .unwrap_err()
+                .to_string()
+                .contains("timed out")
+        );
+        assert!(
+            run_ffprobe_safe(&input, &options)
+                .unwrap_err()
+                .to_string()
+                .contains("timed out")
+        );
+        assert!(
+            crate::decoded_audio_fingerprint(&input, &script, StdDuration::from_millis(120))
+                .unwrap_err()
+                .contains("timed out")
+        );
+        thread::sleep(StdDuration::from_millis(1200));
+        assert!(
+            !marker.exists(),
+            "no descendant may continue after a wrapper times out"
+        );
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn version_probe_cancellation_is_prompt_and_does_not_poison_cache() {
+        let temp = test_temp_dir();
+        let marker = temp.join("escaped");
+        let ready = temp.join("normal");
+        let script = write_script(
+            &temp,
+            "version",
+            &format!(
+                "if [ -f '{}' ]; then printf 'version 1'; exit 0; fi\n(sleep 1; printf escaped >> '{}') &\nexit 0",
+                ready.display(),
+                marker.display()
+            ),
+        );
+        let cancel = Arc::new(AtomicBool::new(false));
+        let flag = cancel.clone();
+        let canceler = thread::spawn(move || {
+            thread::sleep(StdDuration::from_millis(100));
+            flag.store(true, Ordering::SeqCst);
+        });
+        let started = Instant::now();
+        assert!(
+            crate::tool_version_with_cancellation(&script, 1024, Some(&cancel), None).is_none()
+        );
+        canceler.join().unwrap();
+        assert!(started.elapsed() < StdDuration::from_secs(1));
+        fs::write(ready, b"ready").unwrap();
+        cancel.store(false, Ordering::SeqCst);
+        assert_eq!(
+            crate::tool_version_with_cancellation(&script, 1024, Some(&cancel), None).as_deref(),
+            Some("version 1")
+        );
+        thread::sleep(StdDuration::from_millis(1100));
+        assert!(!marker.exists());
+        fs::remove_dir_all(temp).unwrap();
     }
 
     #[cfg(unix)]

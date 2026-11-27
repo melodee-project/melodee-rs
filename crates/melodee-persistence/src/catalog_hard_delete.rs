@@ -326,18 +326,43 @@ async fn lock_delete_artist_closure(
     artist_ids: &[Uuid],
 ) -> Result<(), CatalogStoreError> {
     sqlx::query(
-        "CREATE TEMP TABLE melodee_hard_delete_artist_scope (id uuid PRIMARY KEY) ON COMMIT DROP",
+        "CREATE TEMP TABLE melodee_hard_delete_artist_scope (
+             id uuid PRIMARY KEY, normalized_name text NOT NULL, merged_into_artist_id uuid
+         ) ON COMMIT DROP",
     )
     .execute(&mut **tx)
     .await?;
     sqlx::query(
-        "INSERT INTO melodee_hard_delete_artist_scope (id)
-         SELECT id FROM artists WHERE id=ANY($1)
-         UNION SELECT id FROM artists WHERE merged_into_artist_id=ANY($1)",
+        "INSERT INTO melodee_hard_delete_artist_scope (id,normalized_name,merged_into_artist_id)
+         SELECT id,normalized_name,merged_into_artist_id FROM artists WHERE id=ANY($1)
+         UNION SELECT id,normalized_name,merged_into_artist_id FROM artists WHERE merged_into_artist_id=ANY($1)",
     )
     .bind(artist_ids)
     .execute(&mut **tx)
     .await?;
+    // Redirect closures may be large. Stream their exact normalized names in
+    // the same hash/name order as the shared advisory protocol, keeping at most
+    // one bounded page in the application. Each lock lasts until commit.
+    sqlx::query(
+        "DECLARE melodee_hard_delete_name_cursor NO SCROLL CURSOR FOR
+         SELECT name FROM (SELECT DISTINCT normalized_name AS name FROM melodee_hard_delete_artist_scope) names
+         ORDER BY hashtextextended(name,0),name",
+    ).execute(&mut **tx).await?;
+    loop {
+        let names = sqlx::query_scalar::<_, String>(
+            "FETCH FORWARD 256 FROM melodee_hard_delete_name_cursor",
+        )
+        .fetch_all(&mut **tx)
+        .await?;
+        if names.is_empty() {
+            break;
+        }
+        crate::catalog::lock_artist_identity_names(tx, &names).await?;
+    }
+    sqlx::query("CLOSE melodee_hard_delete_name_cursor")
+        .execute(&mut **tx)
+        .await?;
+    verify_delete_artist_closure(tx, artist_ids).await?;
     sqlx::query(
         "SELECT artist.id FROM artists artist
          JOIN melodee_hard_delete_artist_scope scope ON scope.id=artist.id
@@ -352,10 +377,25 @@ async fn lock_delete_artist_closure(
     )
     .execute(&mut **tx)
     .await?;
+    verify_delete_artist_closure(tx, artist_ids).await
+}
+
+async fn verify_delete_artist_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    artist_ids: &[Uuid],
+) -> Result<(), CatalogStoreError> {
     let changed: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM artists artist
-         WHERE artist.merged_into_artist_id=ANY($1)
-           AND NOT EXISTS (SELECT 1 FROM melodee_hard_delete_artist_scope scope WHERE scope.id=artist.id))",
+        "WITH actual AS MATERIALIZED (
+             SELECT id,normalized_name,merged_into_artist_id FROM artists WHERE id=ANY($1)
+             UNION SELECT id,normalized_name,merged_into_artist_id FROM artists WHERE merged_into_artist_id=ANY($1)
+         )
+         SELECT EXISTS (
+             (SELECT id,normalized_name,merged_into_artist_id FROM actual
+              EXCEPT SELECT id,normalized_name,merged_into_artist_id FROM melodee_hard_delete_artist_scope)
+             UNION ALL
+             (SELECT id,normalized_name,merged_into_artist_id FROM melodee_hard_delete_artist_scope
+              EXCEPT SELECT id,normalized_name,merged_into_artist_id FROM actual)
+         )",
     ).bind(artist_ids).fetch_one(&mut **tx).await?;
     if changed {
         return Err(CatalogStoreError::MutationConflict);

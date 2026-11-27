@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run an owned-database search rebuild test with a safe bounded duration.
+"""Run an owned-database search performance test with a safe bounded duration.
 
 Use inside perf_representative.py. A timeout is recorded as censored evidence;
 the test process is terminated and reaped before its private temp tree is
@@ -30,7 +30,7 @@ def main() -> int:
         print("Refusing to run without the owned fixture database marker and URL.", file=sys.stderr)
         return 1
     binary = args.test_binary
-    if binary.is_symlink() or not binary.is_file() or not binary.name.startswith("perf_rebuild-"):
+    if binary.is_symlink() or not binary.is_file() or not binary.name.startswith(("perf_rebuild-", "perf_outbox-", "perf_outbox_concurrent-")):
         print("Refusing an invalid search benchmark test binary.", file=sys.stderr)
         return 1
     binary = binary.resolve()
@@ -44,7 +44,7 @@ def main() -> int:
                 env=env, check=False, timeout=args.timeout_seconds,
             )
         except subprocess.TimeoutExpired:
-            print(f"CENSORED: rebuild exceeded {args.timeout_seconds} seconds.", flush=True)
+            print(f"CENSORED: search benchmark exceeded {args.timeout_seconds} seconds.", flush=True)
             return 124
         return result.returncode
 

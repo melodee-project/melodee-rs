@@ -1,0 +1,88 @@
+Seeded 35000 artists, 50000 releases, 600000 tracks in 178.6s
+scenario=shared_track round=0 workers=8 samples=160 seconds=0.877 scrobbles_per_second=182.37 p50_us=4088 p95_us=146967 p99_us=631222 errors=0 relationship_updates=0 sqlx_query_events=2371 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=85 admission_sum_us=626 admission_buckets=[85, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=85 probe_sum_us=29379 probe_buckets=[84, 1, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=shared_track round=0 stage=binding samples=172 p50_us=492 p95_us=2229 p99_us=3117
+stage_scenario=shared_track round=0 stage=track_wait samples=12 p50_us=208075 p95_us=640795 p99_us=640795
+stage_scenario=shared_track round=0 stage=play_insert samples=160 p50_us=420 p95_us=3079 p99_us=5500
+stage_scenario=shared_track round=0 stage=counters samples=160 p50_us=276 p95_us=1181 p99_us=1721
+stage_scenario=shared_track round=0 stage=commit samples=160 p50_us=2819 p95_us=3640 p99_us=7207
+scenario=separate_tracks_shared_artist round=0 workers=8 samples=160 seconds=0.746 scrobbles_per_second=214.49 p50_us=12002 p95_us=74975 p99_us=348858 errors=0 relationship_updates=0 sqlx_query_events=2080 lock_waiter_samples=485 lock_max_waiters=7 sampling_interval_ms=5 admission_count=0 admission_sum_us=0 admission_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=0 probe_sum_us=0 probe_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=separate_tracks_shared_artist round=0 stage=binding samples=160 p50_us=500 p95_us=910 p99_us=1486
+stage_scenario=separate_tracks_shared_artist round=0 stage=play_insert samples=160 p50_us=7819 p95_us=66125 p99_us=342232
+stage_scenario=separate_tracks_shared_artist round=0 stage=counters samples=160 p50_us=290 p95_us=418 p99_us=812
+stage_scenario=separate_tracks_shared_artist round=0 stage=commit samples=160 p50_us=3231 p95_us=5312 p99_us=6418
+scenario=concurrent_artist_changes round=0 workers=8 samples=160 seconds=0.988 scrobbles_per_second=161.96 p50_us=3977 p95_us=122713 p99_us=597938 errors=0 relationship_updates=20 sqlx_query_events=2409 lock_waiter_samples=2 lock_max_waiters=1 sampling_interval_ms=5 admission_count=90 admission_sum_us=2142 admission_buckets=[90, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=90 probe_sum_us=25076 probe_buckets=[90, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=concurrent_artist_changes round=0 stage=binding samples=173 p50_us=444 p95_us=601 p99_us=1534
+stage_scenario=concurrent_artist_changes round=0 stage=track_wait samples=13 p50_us=226889 p95_us=641607 p99_us=641607
+stage_scenario=concurrent_artist_changes round=0 stage=play_insert samples=160 p50_us=382 p95_us=516 p99_us=688
+stage_scenario=concurrent_artist_changes round=0 stage=counters samples=160 p50_us=241 p95_us=342 p99_us=469
+stage_scenario=concurrent_artist_changes round=0 stage=commit samples=160 p50_us=2785 p95_us=5703 p99_us=7100
+scenario=shared_track round=1 workers=8 samples=160 seconds=0.755 scrobbles_per_second=212.03 p50_us=3967 p95_us=7061 p99_us=511423 errors=0 relationship_updates=0 sqlx_query_events=2296 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=63 admission_sum_us=3012 admission_buckets=[63, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=63 probe_sum_us=18002 probe_buckets=[63, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=shared_track round=1 stage=binding samples=169 p50_us=453 p95_us=616 p99_us=821
+stage_scenario=shared_track round=1 stage=track_wait samples=9 p50_us=319741 p95_us=507005 p99_us=507005
+stage_scenario=shared_track round=1 stage=play_insert samples=160 p50_us=381 p95_us=523 p99_us=795
+stage_scenario=shared_track round=1 stage=counters samples=160 p50_us=242 p95_us=367 p99_us=398
+stage_scenario=shared_track round=1 stage=commit samples=160 p50_us=2812 p95_us=3513 p99_us=4755
+scenario=separate_tracks_shared_artist round=1 workers=8 samples=160 seconds=0.647 scrobbles_per_second=247.36 p50_us=12026 p95_us=54091 p99_us=384650 errors=0 relationship_updates=0 sqlx_query_events=2080 lock_waiter_samples=451 lock_max_waiters=7 sampling_interval_ms=5 admission_count=0 admission_sum_us=0 admission_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=0 probe_sum_us=0 probe_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=separate_tracks_shared_artist round=1 stage=binding samples=160 p50_us=550 p95_us=809 p99_us=882
+stage_scenario=separate_tracks_shared_artist round=1 stage=play_insert samples=160 p50_us=7748 p95_us=49768 p99_us=380078
+stage_scenario=separate_tracks_shared_artist round=1 stage=counters samples=160 p50_us=302 p95_us=408 p99_us=545
+stage_scenario=separate_tracks_shared_artist round=1 stage=commit samples=160 p50_us=3249 p95_us=3626 p99_us=6235
+scenario=concurrent_artist_changes round=1 workers=8 samples=160 seconds=0.975 scrobbles_per_second=164.16 p50_us=4966 p95_us=98379 p99_us=751082 errors=0 relationship_updates=20 sqlx_query_events=2421 lock_waiter_samples=1 lock_max_waiters=1 sampling_interval_ms=5 admission_count=91 admission_sum_us=2954 admission_buckets=[91, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=91 probe_sum_us=28875 probe_buckets=[91, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=concurrent_artist_changes round=1 stage=binding samples=176 p50_us=543 p95_us=747 p99_us=1195
+stage_scenario=concurrent_artist_changes round=1 stage=track_wait samples=16 p50_us=145440 p95_us=759588 p99_us=759588
+stage_scenario=concurrent_artist_changes round=1 stage=play_insert samples=160 p50_us=467 p95_us=692 p99_us=950
+stage_scenario=concurrent_artist_changes round=1 stage=counters samples=160 p50_us=283 p95_us=401 p99_us=492
+stage_scenario=concurrent_artist_changes round=1 stage=commit samples=160 p50_us=3237 p95_us=3764 p99_us=4619
+scenario=shared_track round=2 workers=8 samples=160 seconds=0.826 scrobbles_per_second=193.79 p50_us=4921 p95_us=8019 p99_us=567560 errors=0 relationship_updates=0 sqlx_query_events=2323 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=71 admission_sum_us=3394 admission_buckets=[71, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=71 probe_sum_us=24352 probe_buckets=[71, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=shared_track round=2 stage=binding samples=170 p50_us=532 p95_us=779 p99_us=1152
+stage_scenario=shared_track round=2 stage=track_wait samples=10 p50_us=291843 p95_us=561223 p99_us=561223
+stage_scenario=shared_track round=2 stage=play_insert samples=160 p50_us=439 p95_us=638 p99_us=813
+stage_scenario=shared_track round=2 stage=counters samples=160 p50_us=274 p95_us=400 p99_us=539
+stage_scenario=shared_track round=2 stage=commit samples=160 p50_us=3154 p95_us=4395 p99_us=5917
+scenario=separate_tracks_shared_artist round=2 workers=8 samples=160 seconds=0.758 scrobbles_per_second=211.02 p50_us=11996 p95_us=47038 p99_us=379952 errors=0 relationship_updates=0 sqlx_query_events=2080 lock_waiter_samples=468 lock_max_waiters=7 sampling_interval_ms=5 admission_count=0 admission_sum_us=0 admission_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=0 probe_sum_us=0 probe_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=separate_tracks_shared_artist round=2 stage=binding samples=160 p50_us=484 p95_us=767 p99_us=996
+stage_scenario=separate_tracks_shared_artist round=2 stage=play_insert samples=160 p50_us=7772 p95_us=38854 p99_us=375169
+stage_scenario=separate_tracks_shared_artist round=2 stage=counters samples=160 p50_us=275 p95_us=388 p99_us=458
+stage_scenario=separate_tracks_shared_artist round=2 stage=commit samples=160 p50_us=3313 p95_us=3607 p99_us=6658
+scenario=concurrent_artist_changes round=2 workers=8 samples=160 seconds=0.936 scrobbles_per_second=170.86 p50_us=4080 p95_us=139321 p99_us=646989 errors=0 relationship_updates=20 sqlx_query_events=2415 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=90 admission_sum_us=2779 admission_buckets=[90, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=90 probe_sum_us=32984 probe_buckets=[88, 2, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=concurrent_artist_changes round=2 stage=binding samples=175 p50_us=445 p95_us=864 p99_us=1646
+stage_scenario=concurrent_artist_changes round=2 stage=track_wait samples=15 p50_us=193897 p95_us=641961 p99_us=641961
+stage_scenario=concurrent_artist_changes round=2 stage=play_insert samples=160 p50_us=402 p95_us=687 p99_us=3166
+stage_scenario=concurrent_artist_changes round=2 stage=counters samples=160 p50_us=241 p95_us=348 p99_us=2000
+stage_scenario=concurrent_artist_changes round=2 stage=commit samples=160 p50_us=2865 p95_us=3865 p99_us=6105
+scenario=shared_track round=3 workers=8 samples=160 seconds=0.766 scrobbles_per_second=208.76 p50_us=3966 p95_us=7326 p99_us=553149 errors=0 relationship_updates=0 sqlx_query_events=2302 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=65 admission_sum_us=3400 admission_buckets=[64, 1, 0, 0, 0, 0, 0, 0, 0] probe_count=65 probe_sum_us=17770 probe_buckets=[65, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=shared_track round=3 stage=binding samples=169 p50_us=447 p95_us=573 p99_us=1169
+stage_scenario=shared_track round=3 stage=track_wait samples=9 p50_us=258245 p95_us=681330 p99_us=681330
+stage_scenario=shared_track round=3 stage=play_insert samples=160 p50_us=386 p95_us=469 p99_us=613
+stage_scenario=shared_track round=3 stage=counters samples=160 p50_us=231 p95_us=314 p99_us=385
+stage_scenario=shared_track round=3 stage=commit samples=160 p50_us=2806 p95_us=3577 p99_us=5606
+scenario=separate_tracks_shared_artist round=3 workers=8 samples=160 seconds=0.965 scrobbles_per_second=165.82 p50_us=12086 p95_us=80095 p99_us=629044 errors=0 relationship_updates=0 sqlx_query_events=2080 lock_waiter_samples=801 lock_max_waiters=7 sampling_interval_ms=5 admission_count=0 admission_sum_us=0 admission_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=0 probe_sum_us=0 probe_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=separate_tracks_shared_artist round=3 stage=binding samples=160 p50_us=491 p95_us=802 p99_us=1017
+stage_scenario=separate_tracks_shared_artist round=3 stage=play_insert samples=160 p50_us=7842 p95_us=69879 p99_us=624276
+stage_scenario=separate_tracks_shared_artist round=3 stage=counters samples=160 p50_us=283 p95_us=409 p99_us=472
+stage_scenario=separate_tracks_shared_artist round=3 stage=commit samples=160 p50_us=3347 p95_us=4204 p99_us=19531
+scenario=concurrent_artist_changes round=3 workers=8 samples=160 seconds=0.931 scrobbles_per_second=171.81 p50_us=4974 p95_us=101079 p99_us=642165 errors=0 relationship_updates=20 sqlx_query_events=2430 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=97 admission_sum_us=4310 admission_buckets=[97, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=97 probe_sum_us=26376 probe_buckets=[97, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=concurrent_artist_changes round=3 stage=binding samples=173 p50_us=459 p95_us=586 p99_us=692
+stage_scenario=concurrent_artist_changes round=3 stage=track_wait samples=13 p50_us=316137 p95_us=772663 p99_us=772663
+stage_scenario=concurrent_artist_changes round=3 stage=play_insert samples=160 p50_us=398 p95_us=534 p99_us=751
+stage_scenario=concurrent_artist_changes round=3 stage=counters samples=160 p50_us=245 p95_us=324 p99_us=530
+stage_scenario=concurrent_artist_changes round=3 stage=commit samples=160 p50_us=3599 p95_us=4604 p99_us=6362
+scenario=shared_track round=4 workers=8 samples=160 seconds=0.934 scrobbles_per_second=171.22 p50_us=4965 p95_us=13602 p99_us=759326 errors=0 relationship_updates=0 sqlx_query_events=2332 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=77 admission_sum_us=2641 admission_buckets=[77, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=77 probe_sum_us=20905 probe_buckets=[77, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=shared_track round=4 stage=binding samples=167 p50_us=459 p95_us=555 p99_us=731
+stage_scenario=shared_track round=4 stage=track_wait samples=7 p50_us=548259 p95_us=847036 p99_us=847036
+stage_scenario=shared_track round=4 stage=play_insert samples=160 p50_us=393 p95_us=479 p99_us=530
+stage_scenario=shared_track round=4 stage=counters samples=160 p50_us=239 p95_us=321 p99_us=363
+stage_scenario=shared_track round=4 stage=commit samples=160 p50_us=3535 p95_us=4794 p99_us=12243
+scenario=separate_tracks_shared_artist round=4 workers=8 samples=160 seconds=0.801 scrobbles_per_second=199.84 p50_us=13940 p95_us=115977 p99_us=527670 errors=0 relationship_updates=0 sqlx_query_events=2080 lock_waiter_samples=577 lock_max_waiters=7 sampling_interval_ms=5 admission_count=0 admission_sum_us=0 admission_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=0 probe_sum_us=0 probe_buckets=[0, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=separate_tracks_shared_artist round=4 stage=binding samples=160 p50_us=527 p95_us=952 p99_us=1451
+stage_scenario=separate_tracks_shared_artist round=4 stage=play_insert samples=160 p50_us=8585 p95_us=56725 p99_us=522837
+stage_scenario=separate_tracks_shared_artist round=4 stage=counters samples=160 p50_us=289 p95_us=427 p99_us=577
+stage_scenario=separate_tracks_shared_artist round=4 stage=commit samples=160 p50_us=3324 p95_us=6153 p99_us=7668
+scenario=concurrent_artist_changes round=4 workers=8 samples=160 seconds=1.056 scrobbles_per_second=151.45 p50_us=4976 p95_us=8024 p99_us=868411 errors=0 relationship_updates=20 sqlx_query_events=2397 lock_waiter_samples=0 lock_max_waiters=0 sampling_interval_ms=5 admission_count=89 admission_sum_us=3172 admission_buckets=[89, 0, 0, 0, 0, 0, 0, 0, 0] probe_count=89 probe_sum_us=25368 probe_buckets=[89, 0, 0, 0, 0, 0, 0, 0, 0]
+stage_scenario=concurrent_artist_changes round=4 stage=binding samples=170 p50_us=477 p95_us=600 p99_us=724
+stage_scenario=concurrent_artist_changes round=4 stage=track_wait samples=10 p50_us=292861 p95_us=861927 p99_us=861927
+stage_scenario=concurrent_artist_changes round=4 stage=play_insert samples=160 p50_us=398 p95_us=541 p99_us=605
+stage_scenario=concurrent_artist_changes round=4 stage=counters samples=160 p50_us=253 p95_us=336 p99_us=402
+stage_scenario=concurrent_artist_changes round=4 stage=commit samples=160 p50_us=3577 p95_us=4711 p99_us=6680
+recommendation_consistency=exact scenarios=3 rounds=5 network=excluded lock_sampling=approximate sqlx_events_exclude_begin_and_trigger_internals=true benchmark_process_peak_rss_kib=Some(5864) postgres_resources=not_measured
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.12s

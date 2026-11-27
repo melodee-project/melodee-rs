@@ -868,10 +868,15 @@ impl ScriptingService {
         if !any_enabled {
             return Ok(HookVerdict::allow());
         }
+        let permit = melodee_ingestion::acquire_ingestion_admission()
+            .await
+            .map_err(|_| ScriptingError::Join)?;
         let root = candidate_root.to_path_buf();
-        let snapshot = snapshot.clone();
+        let input = DirectoryContextInput::from_snapshot(snapshot)?;
         let ctx = tokio::task::spawn_blocking(move || {
-            build_directory_processing_context(&root, &snapshot)
+            // Cancellation of the async waiter does not stop a blocking task.
+            let _permit = permit;
+            build_directory_processing_context(&root, &input)
         })
         .await
         .map_err(|_| ScriptingError::Join)??;
@@ -943,22 +948,54 @@ impl DirectoryProcessingGate for ScriptingDirectoryGate {
 ///   adjacent sorted pair is non-consecutive — the sequence may start at any
 ///   number (inventory §4.7 records the stricter spec-doc definition as a
 ///   do-not-preserve ambiguity; decision recorded in the migration guide).
+struct DirectoryContextInput {
+    total_files_count: usize,
+    total_bytes: i64,
+    most_recent_modified: Option<OffsetDateTime>,
+    probe_paths: Vec<String>,
+}
+
+impl DirectoryContextInput {
+    fn from_snapshot(snapshot: &CandidateSnapshot) -> Result<Self, ScriptingError> {
+        let mut input = Self {
+            total_files_count: 0,
+            total_bytes: 0,
+            most_recent_modified: None,
+            probe_paths: Vec::new(),
+        };
+        for file in snapshot
+            .files
+            .iter()
+            .filter(|file| file.file_type == "file" && !file.relative_path.contains('/'))
+        {
+            input.total_files_count += 1;
+            input.total_bytes = input
+                .total_bytes
+                .checked_add(file.file_size)
+                .ok_or(ScriptingError::ContextBuild)?;
+            input.most_recent_modified = Some(
+                input
+                    .most_recent_modified
+                    .map_or(file.modified_at, |prior| prior.max(file.modified_at)),
+            );
+            if input.probe_paths.len() < MAX_CTX_TAG_PROBES
+                && melodee_media::is_audio_file_name(&file.relative_path)
+            {
+                input.probe_paths.push(file.relative_path.clone());
+            }
+        }
+        Ok(input)
+    }
+}
+
 fn build_directory_processing_context(
     root: &Path,
-    snapshot: &CandidateSnapshot,
+    input: &DirectoryContextInput,
 ) -> Result<JsonValue, ScriptingError> {
-    let top_level: Vec<_> = snapshot
-        .files
-        .iter()
-        .filter(|file| file.file_type == "file" && !file.relative_path.contains('/'))
-        .collect();
-
-    let total_bytes: i64 = top_level.iter().map(|file| file.file_size).sum();
-    let total_size_megabytes = (total_bytes as f64 / (1024.0 * 1024.0) * 100.0).round() / 100.0;
-    let most_recent_modified = top_level
-        .iter()
-        .map(|file| file.modified_at)
-        .max()
+    let total_size_megabytes =
+        (input.total_bytes as f64 / (1024.0 * 1024.0) * 100.0).round() / 100.0;
+    let most_recent_modified = input
+        .most_recent_modified
         .unwrap_or_else(OffsetDateTime::now_utc)
         .format(&Rfc3339)
         .map_err(|_| ScriptingError::ContextBuild)?;
@@ -966,12 +1003,8 @@ fn build_directory_processing_context(
     let mut media_files_count = 0_u64;
     let mut total_duration_ms = 0_u64;
     let mut track_numbers: Vec<i64> = Vec::new();
-    for file in top_level
-        .iter()
-        .filter(|file| melodee_media::is_audio_file_name(&file.relative_path))
-        .take(MAX_CTX_TAG_PROBES)
-    {
-        let Some(probe) = melodee_media::probe_media_file(&root.join(&file.relative_path)) else {
+    for file in &input.probe_paths {
+        let Some(probe) = melodee_media::probe_media_file(&root.join(file)) else {
             continue;
         };
         media_files_count += 1;
@@ -998,7 +1031,7 @@ fn build_directory_processing_context(
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default(),
-        "totalFilesCount": top_level.len(),
+        "totalFilesCount": input.total_files_count,
         "totalSizeMegabytes": total_size_megabytes,
         "mostRecentModified": most_recent_modified,
         "mediaFilesCount": media_files_count,
@@ -1034,6 +1067,52 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn directory_context_input_preserves_totals_and_existing_probe_limit() {
+        let timestamp = OffsetDateTime::UNIX_EPOCH;
+        let mut files: Vec<melodee_ingestion::SnapshotFile> = (0..(MAX_CTX_TAG_PROBES + 4))
+            .map(|index| melodee_ingestion::SnapshotFile {
+                relative_path: format!("track-{index:05}.mp3"),
+                file_type: "file".to_owned(),
+                file_size: 3,
+                modified_at: timestamp,
+            })
+            .collect();
+        files.push(melodee_ingestion::SnapshotFile {
+            relative_path: "nested/ignored.mp3".to_owned(),
+            file_type: "file".to_owned(),
+            file_size: 99,
+            modified_at: timestamp,
+        });
+        files.push(melodee_ingestion::SnapshotFile {
+            relative_path: "folder".to_owned(),
+            file_type: "dir".to_owned(),
+            file_size: 0,
+            modified_at: timestamp,
+        });
+        let snapshot = CandidateSnapshot {
+            signature: String::new(),
+            file_count: files.len() as i64,
+            total_bytes: 0,
+            files,
+            ready_marker_seen: false,
+            bypassed_settling: false,
+        };
+        let input = DirectoryContextInput::from_snapshot(&snapshot).expect("context input");
+        assert_eq!(input.total_files_count, MAX_CTX_TAG_PROBES + 4);
+        assert_eq!(input.total_bytes, 3 * (MAX_CTX_TAG_PROBES + 4) as i64);
+        assert_eq!(input.most_recent_modified, Some(timestamp));
+        assert_eq!(input.probe_paths.len(), MAX_CTX_TAG_PROBES);
+        assert_eq!(
+            input.probe_paths.first().map(String::as_str),
+            Some("track-00000.mp3")
+        );
+        assert_eq!(
+            input.probe_paths.last().map(String::as_str),
+            Some("track-04095.mp3")
+        );
+    }
 
     fn eval(source: &str, ctx: &JsonValue) -> Evaluation {
         evaluate_sandboxed(

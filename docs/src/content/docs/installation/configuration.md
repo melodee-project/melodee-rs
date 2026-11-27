@@ -70,6 +70,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | Key | Default | Effect |
 | --- | --- | --- |
 | `MELODEE__SERVER__BIND` | `127.0.0.1:8080` | HTTP listener address. |
+| `MELODEE__SERVER__MAX_CONNECTIONS` | `0` (disabled) | Optional cap on accepted HTTP connections, from `1` to `65536`; `0` disables the cap. At capacity, new connections wait in the operating system's TCP backlog. The cap includes idle keep-alive connections and slow or long-running streams, so set it with enough capacity for all clients and monitor overload. This is a process-wide connection cap, not a per-user limit or a reservation for interactive requests. |
 | `MELODEE__LOGGING__LEVEL` | `info` | Server log verbosity: `trace`, `debug`, `info`, `warn`, or `error` (case-insensitive). When this setting is absent, a valid advanced `RUST_LOG` filter is honored for compatibility. The Melodee setting takes precedence when both are present. |
 | `MELODEE__LOGGING__DIRECTORY` | — (console only) | Optional directory for daily UTC files named `YYYY-MM-DD.log`. Melodee creates the directory, continues writing the same events to the console, appends within a day, and switches files after UTC midnight. Startup fails if the current file cannot be opened. Older files are retained; configure external retention and restrict access because operational logs can contain media paths and account identifiers. |
 | `MELODEE__DATABASE__URL` | — (required) | PostgreSQL connection URL. |
@@ -462,7 +463,8 @@ support report, so a troubleshooting agent does not need container log access.
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
-- If no inbound source is configured, startup remains healthy and periodic reconciliation is not started.
+- If no inbound source is configured, startup remains healthy and no inbound sources are scanned.
+  Background cleanup can still remove expired temporary scan data.
 - Media inspection requires `ffprobe`. Normalization also requires an FFmpeg build with
   `libmp3lame` and the Chromaprint `fpcalc` command.
 - Work leases, timeouts, retry settings, batch sizes, and concurrency must be positive. The
