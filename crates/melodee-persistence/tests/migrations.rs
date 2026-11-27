@@ -1466,7 +1466,7 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
         // present before seeding: the current worker code the driver invokes
         // (claim lanes, policy store) references remediation columns such as
         // `release_work_items.protected_custody_required` from 0071.
-        .filter(|migration| migration.version != 0041)
+        .filter(|migration| migration.version != 41)
         .cloned()
         .collect();
     assert_eq!(
@@ -2064,7 +2064,7 @@ async fn recommendation_lock_upgrade_preserves_popularity_and_accepts_new_plays(
         // the 0067-0071 schema the current claim/claim-guard code requires
         // must be present before seeding.
         .filter(|migration| {
-            !matches!(migration.version, 0065 | 0066)
+            !matches!(migration.version, 65 | 66)
         })
         .cloned()
         .collect();
@@ -2315,7 +2315,6 @@ async fn migration_0070_preserves_existing_inbound_state() {
 #[tokio::test]
 async fn migration_0071_preserves_populated_custody_and_initializes_budget() {
     use melodee_domain::ReleaseWorkItem;
-    use melodee_persistence::WorkItemStore;
     use uuid::Uuid;
     let db = TestDb::create_unmigrated("migration_0071_populated").await;
     let prior: Vec<_> = MIGRATOR
