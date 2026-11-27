@@ -279,3 +279,87 @@ Do not report successful completion until all of the following are true:
   commit/source identities, operator steps, limitations, documentation impact
   and any genuine external blocker precisely. Produce a coherent final
   integrated checkpoint without pushing, deploying or publishing.
+
+## Recovery checkpoint (2026-11-27, second restart — supersedes the state above)
+
+**Git state at this checkpoint:** branch `main`, HEAD `1b7ee81` (three
+documentation/benchmark commits on top of `554e9d5`: `9889896` matched
+rebuild/policy measurements and policy-benchmark scoping, `68e371e` matched
+media-normalization matrix, `1b7ee81` recommendation-contention evidence and
+merge-benchmark drift record). Working tree clean; no background builds. The
+nightly/policy/media/identity measurement logs are in the gitignored
+`.local-dev/` directory; the sanitized JSON evidence and build records are
+committed under `tests/performance/`.
+
+**Completed and verified in this restart (exact evidence):**
+
+1. **`make check-nightly` completed green on `554e9d5` (exit 0)** — the first
+   full green nightly of the operation. Log `.local-dev/check-nightly-20261127-113614.log`:
+   619 Python tests, Admin UI gate, fmt, strict workspace clippy, workspace
+   lib/bin tests, database-free integration crates, 208 PostgreSQL-backed
+   integration binaries (2,475 tests passed, 0 failed), six ignored historical
+   migration tests 6/6, `cargo deny` all-ok.
+2. **RM-00 progressed with three matched baseline/final production-path pairs
+   plus two final-only measurements** at the representative 560K–600K tier.
+   Full provenance, commands and limitations:
+   `tests/performance/final-matrix-2026-11-27.md`.
+   - Full search rebuild: baseline 42.32 s/16,188 docs/s/217.5 MiB vs final
+     35.21 s/19,454 docs/s (69 commits median 64.68 ms, activation 6.60 ms), 279.1 MiB.
+   - Policy single evaluate: 1,203–1,279 ms, 600,014 rows, 600,008 retained
+     digests (38.4 MB) vs 8.2–9.7 ms, 7 rows, 1 digest. Bounded 8-Release
+     dry-run: 15.8–16.4 s, 4,800,057 digests (307 MB) vs 374.7–396.4 ms, 1 digest.
+   - Media normalization (4 codecs × 1/2/4 workers × 2 samples): final is
+     9–12 % faster at 1–2 workers and 9–12 % slower at 4 workers than baseline,
+     with four-worker peak RSS 60–93 MiB lower; an earlier unsupervised
+     intermediate reached 6.65 MP3 releases/s at 4 workers.
+   - Identity reconciliation final-only (no baseline harness): scoped/global
+     6.53/59.72, 15.78/2,963.83, 6.32/1,365.02, 2.24/17.90, 5.68/718.75 ms;
+     drain 3,188 ms over 8 seeds; closure quiescent in 32.1 ms.
+   - `perf_recommendation_contention` final-source pass:
+     `recommendation_consistency=exact`, 3 scenarios, 1 round, 8 workers.
+3. **Two real benchmark defects fixed with regression coverage** (no production
+   code changed): the policy benchmark no longer assumes its own Releases are
+   the earliest `catalog_imports` rows (it discovers the bounded scope through
+   the production loader), and `scripts/perf_representative.py` gained
+   `--without-acl-placeholders` (Python regression in
+   `tests/python/test_perf_representative.py`). Verified with
+   `cargo fmt --all`, strict workspace clippy, the perf Python suite (25 tests),
+   the policy benchmark at 20-Release smoke and 600K, and **`make check` (full
+   pre-merge gate) exit 0 on `1b7ee81`**.
+4. **Newly discovered, unfixed:** `perf_large_release_merge` aborts before
+   timing because its pre-timing selection needs Tracks without
+   `observed_artists`/`track_artists` rows and the fixture now seeds credits for
+   essentially all Tracks (601,002 credits / 600,000 Tracks). Fix the benchmark
+   fixture (dedicated source/target Releases or move credits with the Tracks)
+   and rerun 1K/10K; RM-19 has no final-source measurement.
+
+**Ordered next actions from here:**
+
+1. Fix and rerun `perf_large_release_merge` (1K and 10K) — see item 4. Then run
+   the remaining nine RM-00 workload rows on the final source and collect
+   matching baseline pairs where a baseline harness is possible: single-album
+   import, 200-album import, unchanged reimport, concurrent genre imports,
+   incremental indexing, concurrent interactive load, streaming during
+   ingestion, worker scheduling, merge/split.
+2. Custody P0 items 2–8 from "Immediate next actions" above remain entirely
+   open (guarded owner with production stage readers/writers, protected stage
+   protocol publication, production-reachable retained-source obligations,
+   per-entry intent/quarantine fault cases and two-name recovery, deletion/
+   repair orchestration with durable pre-filesystem reservations, shared
+   capability under proposed ADR-0222). ADR-0221/0222 remain Proposed.
+3. The partial packages in the ledger table (RM-06, RM-07, RM-09–RM-15,
+   RM-17–RM-20) remain mandatory. Rebuild the CLI proof record after every
+   source change (`scripts/build_perf_cli.py`): the fixture validates
+   `commit == HEAD` and the workspace source fingerprint, so a commit or an
+   `apps/crates` edit invalidates the previous record.
+4. Finish RM-20 reconciliation, public doc updates, upgrade/repair rehearsal and
+   the final `make check-nightly` / `do-prechecks.py` run on the then-final
+   source.
+
+**Measurement hygiene notes for the next agent:** fixture seed time is 178–186 s
+on the current schema and 693–704 s on the pre-remediation schema — never
+import throughput. Every measured case used a fresh UUID-owned database, one
+workload at a time, release builds, `CARGO_BUILD_JOBS=2`,
+`RUST_TEST_THREADS=1`, uncontrolled post-seed cache, and no competing Cargo
+process. Existing intermediate artifacts for the nine remaining rows must not be
+relabelled as final-source before/after evidence.
