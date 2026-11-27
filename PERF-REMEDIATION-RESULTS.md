@@ -994,11 +994,33 @@ bounded policy dry-run scope covers workload Releases rather than publication
 placeholders; a Python regression covers the option. Production policy and
 search code are unchanged by these edits.
 
-## 10.4 Still outstanding in RM-00
+## 10.4 Coverage of the thirteen RM-00 rows
 
-Nine of the thirteen required workload rows were not executed in this round:
-single-album import, 200-album import, unchanged reimport, concurrent genre
-imports, incremental indexing, concurrent interactive load, streaming during
-ingestion, worker scheduling, and merge/split. Their existing
-artifacts are intermediate and must not be presented as final-source
-before/after evidence. RM-00 therefore remains PARTIAL.
+All thirteen required workload rows now have final-source production-path
+measurements; the full table, commands, provenance and limitations are in
+`tests/performance/final-matrix-2026-11-27.md`. Classes:
+
+| Workload | Class | Headline |
+| --- | --- | --- |
+| Policy evaluate / dry-run | matched baseline/final | 1.20-1.28 s → 8.2-9.7 ms; 15.8-16.4 s → 375-396 ms; 600,008 → 1 retained digest |
+| Media normalization | matched baseline/final (stage) | 9-12 % faster at 1-2 workers, 9-12 % slower at 4, RSS 60-93 MiB lower at 4 |
+| Full rebuild | matched baseline/final | 42.32 s / 16,188 docs/s → 35.21 s / 19,454 docs/s; 69 commits; 6.6 ms activation |
+| Concurrent interactive load | matched baseline/final (bounded mixed) | admin p99 1.15 s → 0.69 s; browse p99 224 ms → 19.4 ms; 0 errors |
+| Single-album import | measured | 7.15 s end-to-end, complete media-operation counts |
+| 200-album import | measured | 110.07 s, 109.02 albums/min, 1.82 Tracks/s |
+| Unchanged reimport | measured | same-item retry p50 3.05 ms, no new rows, identical IDs; identical-bytes re-drop is a distinct Release with repeated media work (ADR-0116) |
+| Concurrent genre imports | measured | 200 Releases, 111.5 s, 107.58 Rel/min, genre counts exact on both surfaces |
+| Worker scheduling | sampled | Ready→claim p50 28.2 s/p95 51.0 s; 413 polls; per-stage idle-pass counts |
+| Identity reconciliation | final-only | 5 scoped vs global query pairs (6.5 vs 59.7 ms … 15.8 vs 2,963.8 ms); drain 3,188 ms; closure 32.1 ms |
+| Incremental indexing | final-only | 8 trials, 137-6,008 events/s, lag 0.54-15.2 s, 82-2,624 statements |
+| Streaming during ingestion | final-only | TTFB p50 3.06 ms/p99 6.75 ms; 0 failures; slow stream 8.1 MB OK |
+| Merge/split | final-only | 1K: 3.56 s / 6.86 s; 10K: 12.22 s / 9.57 s; constant 36/24 statements |
+
+Comparable baseline pairs are impossible for identity reconciliation, incremental
+indexing, streaming during ingestion and merge/split with the current harnesses
+(the baseline lacks the scoped methods, the benchmark targets, or the
+bound-address startup log). Those rows are therefore final-only rather than
+before/after, and RM-00 comparable-pair acceptance remains partial for them.
+Single/low sample counts, uncontrolled cache state, sampled scheduling/lock
+figures and generated short media are declared per row. No worker, pool or
+policy default was changed on this evidence.

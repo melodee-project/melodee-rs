@@ -13,7 +13,7 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 
 | Package | State | What exists | Exact remaining action |
 |---|---|---|---|
-| RM-00 | PARTIAL | Disposable 35K/50K/600K fixture and real-media workloads; matched baseline/final 600K production-path pairs for full search rebuild and policy evaluation/dry-run, a matched baseline/final real-media normalization matrix, final-only 600K identity reconciliation, with full provenance (`tests/performance/final-matrix-2026-11-27.md`) | Execute the nine remaining workload rows (single/200-album import, unchanged reimport, concurrent genre imports, incremental indexing, concurrent interactive load, streaming during ingestion, worker scheduling, merge/split) and their baseline pairs. |
+| RM-00 | PARTIAL | All thirteen RM-00 workload rows measured on the final source: four matched baseline/final pairs (full rebuild, policy evaluate/dry-run, media normalization, bounded mixed load), five measured single/repeat runs (single/200-album import, unchanged reimport, concurrent genre imports, worker scheduling samples), four final-only (identity, incremental indexing, streaming, merge/split 1K/10K); full provenance and limitations in `tests/performance/final-matrix-2026-11-27.md` | Comparable-pair acceptance is impossible for the four final-only rows with current harnesses (baseline lacks scoped methods, targets, or bound-address log); keep those final-only, then close RM-20. |
 | RM-01 | IMPLEMENTED AND VERIFIED | narrow index 0060; historical 50K plan and regression evidence | Reconfirm in final integrated verification. |
 | RM-02 | IMPLEMENTED AND VERIFIED | scoped normal and dry-run acoustic queries; focused tests; matched baseline/final 600K production policy measurements (600,008 → 1 retained digest per evaluation; 16.4 s → 0.39 s bounded dry-run) in `tests/performance/final-matrix-2026-11-27.md` | Reconciled in the final integrated verification. |
 | RM-03 | IMPLEMENTED AND VERIFIED | genre indexes, status guard, Track-move term maintenance | Reconfirm in final integrated verification. |
@@ -2022,3 +2022,37 @@ Additional current execution state:
   the benchmark controlled credits (dedicated source/target Releases or move
   the fixture credits with the Tracks) and rerun 1K/10K. No production defect
   is implied.
+- Handoff restart (cont.): completed the remaining RM-00 workload rows on the
+  final source. **All thirteen rows now have final-source production-path
+  measurements**; the full table, provenance, commands and limitations are in
+  `tests/performance/final-matrix-2026-11-27.md` and
+  `PERF-REMEDIATION-RESULTS.md` §10.4. Newly measured: single-album import
+  7.148 s with complete media-operation counts (6 tree hashes, 4 media hashes,
+  3 ffprobe, 1 ffmpeg, 1 fpcalc, 1 copy); 200-album import 110.07 s /
+  109.02 albums/min / 1.82 Tracks/s; same-item unchanged retry 50 samples p50
+  3,045 µs / p95 3,977 µs with no new import rows, identical Release/Track IDs
+  and an unchanged identity-seed set, while an identical-bytes re-drop
+  (ADR-0116) repeats all media work as a distinct Release and is recorded as
+  such; concurrent genre imports 200 Releases / 111.5 s / 107.58 Rel/min with
+  exact native and OpenSubsonic genre counts; incremental indexing 8 mirrored
+  trials (137–6,008 events/s, lag 0.54–15.2 s, 82–2,624 statements); bounded
+  mixed load matched pair (admin p99 1.146 s → 0.685 s, browse p99 224 ms →
+  19.4 ms, 0 errors, rebuild overlap 114.3 s → 45.1 s); streaming during
+  ingestion 116 stream / 463 probe samples, TTFB p50 3.06 ms / p99 6.75 ms,
+  zero failures; worker-scheduling samples (Ready→claim p50 28.2 s / p95
+  51.0 s, 413 polls, per-stage idle passes); merge/split repaired and verified
+  at 1K (merge 3.56 s / split 6.86 s) and 10K (12.22 s / 9.57 s) with constant
+  36/24 statements and full evidence round-trip. Four rows remain final-only
+  because the baseline harness cannot run them (identity scoped methods,
+  incremental-index benchmark, bound-address startup log, merge/split target);
+  they must not be described as before/after evidence.
+- Handoff restart (cont.): fixed the last four benchmark-harness defects found
+  while executing those rows, all benchmark-only with no production behavior
+  change: `perf_large_release_merge` now installs controlled Track credits and
+  clears fixture ratings/plays for its selected Tracks (the fixture seeds
+  credits for essentially every Track); `perf_catalog_retry` selects the
+  ingestion occurrence by path suffix; the policy benchmark and the
+  `--without-acl-placeholders` fixture option were recorded earlier. Every
+  ingestion-driven workload (single/200-album, re-drop, genre, streaming, mixed
+  load) requires `--without-acl-placeholders` because the ACL placeholders
+  create work items the workloads refuse; this is documented in the matrix.

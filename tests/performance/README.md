@@ -8,11 +8,15 @@ queries, files/bytes touched, and errors. Baselines include 200 concurrent inbou
 ### Final integrated matrix (partial)
 
 `final-matrix-2026-11-27.md` records the representative-round measurements on
-the final integrated sources: matched baseline/final 600K pairs for full search
-rebuild and for policy evaluation/dry-run, a final-only 600K identity
-reconciliation case, the provenance records they reference, the benchmark-scope
-and fixture-option fixes made to obtain them, and the explicit list of required
-workloads not yet executed. It is a partial matrix, not RM-00 acceptance.
+the final integrated sources for all thirteen RM-00 workloads: four matched
+baseline/final pairs (full rebuild, policy evaluate/dry-run, media
+normalization, bounded mixed load), five measured single/repeat runs (single and
+200-album import, unchanged reimport, concurrent genre imports, worker-scheduling
+samples), and four final-only rows whose baseline harness cannot run (identity
+reconciliation, incremental indexing, streaming during ingestion, merge/split
+1K/10K). It also records the provenance records, the benchmark/fixture fixes
+made to obtain the runs, and each row's limitations. The four final-only rows
+are not before/after evidence; comparable-pair acceptance for them remains open.
 
 ### Disposable Rust catalog fixture (in progress)
 
