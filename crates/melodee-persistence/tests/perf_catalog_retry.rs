@@ -32,7 +32,7 @@ async fn measure_catalog_retry() {
     let (work_item, release_id, resolver): (Uuid, Uuid, String) = sqlx::query_as(
         "SELECT w.id, ci.release_id, ci.resolver_version FROM release_work_items w \
          JOIN catalog_imports ci ON ci.work_item_id = w.id \
-         WHERE w.source_path = 'bench-release-0000' AND w.state = 'cataloged' \
+         WHERE w.source_path LIKE '%bench-release-0000' AND w.state = 'cataloged' \
          ORDER BY w.created_at LIMIT 1",
     )
     .fetch_one(&pool)
