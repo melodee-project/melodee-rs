@@ -363,3 +363,58 @@ workload at a time, release builds, `CARGO_BUILD_JOBS=2`,
 `RUST_TEST_THREADS=1`, uncontrolled post-seed cache, and no competing Cargo
 process. Existing intermediate artifacts for the nine remaining rows must not be
 relabelled as final-source before/after evidence.
+
+## Recovery checkpoint 2 (2026-11-27/28, third session — supersedes the state above)
+
+**State:** `main` at the commit after this checkpoint (working tree clean). All
+thirteen RM-00 workload rows now have final-source production-path measurements;
+four are matched baseline/final pairs and four are final-only for documented
+harness reasons. The canonical record is
+`tests/performance/final-matrix-2026-11-27.md`; ledger tail and
+`PERF-REMEDIATION-RESULTS.md` §10.4 carry the same numbers.
+
+**Measured in this session (see the matrix for provenance/limitations):**
+
+- Matched baseline/final: full rebuild 42.32 s/16,188 docs/s → 35.21 s/19,454
+  docs/s; policy single-evaluate 1.20–1.28 s/600,008 digests → 8.2–9.7 ms/1
+  digest and bounded dry-run 15.8–16.4 s → 375–396 ms; media normalization
+  9–12 % faster at 1–2 workers and 9–12 % slower at 4 with 60–93 MiB lower
+  four-worker RSS; bounded mixed load admin p99 1.15 s → 0.69 s, browse p99
+  224 ms → 19.4 ms, rebuild overlap 114.3 s → 45.1 s, zero errors.
+- Measured: single-album import 7.148 s with complete media-op counts;
+  200-album import 110.07 s / 109.02 albums/min / 1.82 Tracks/s; same-item
+  unchanged retry p50 3.05 ms/p95 3.98 ms with no new rows and identical IDs
+  (identical-bytes re-drop is a distinct Release per ADR-0116 and repeats media
+  work — not idempotent, documented); concurrent genre imports 107.58 Rel/min
+  with exact genre counts; worker-scheduling samples (Ready→claim p50 28.2 s,
+  413 polls, per-stage idle passes).
+- Final-only: identity reconciliation (5 scoped/global pairs, drain 3,188 ms,
+  closure 32.1 ms); incremental indexing (8 trials, 137–6,008 events/s, lag
+  0.54–15.2 s, 82–2,624 statements); streaming during ingestion (TTFB p50
+  3.06 ms/p99 6.75 ms, 0 failures, 116/463 samples); merge/split 1K
+  (3.56 s/6.86 s) and 10K (12.22 s/9.57 s) with constant 36/24 statements.
+
+**Benchmark fixes made (benchmark-only; no production behavior changed):**
+policy dry-run scope discovery, `--without-acl-placeholders` fixture option plus
+Python regression, merge-benchmark controlled credits/rating/play isolation,
+retry-selector path suffix. Every ingestion-driven workload requires
+`--without-acl-placeholders` (ACL placeholders create work items the workloads
+refuse). The CLI proof binds `commit == HEAD` and the source fingerprint; rebuild
+it after every commit or `apps/crates` edit.
+
+**Gates:** `cargo fmt --all --check`, `make check-fast` and `make check` pass at
+this checkpoint (`1b5bae5` and its documentation successor). `make check-nightly`
+must be rerun on the final commit and recorded; the last green nightly was at
+`554e9d5` before these test/harness edits.
+
+**Still open in the program (not workload rows):** custody P0 items 2–8
+(guarded owner against production stage readers/writers, protected stage
+publication per Proposed ADR-0221, production-reachable retained-source
+obligations, per-entry intent/quarantine fault cases and two-name recovery,
+deletion/repair orchestration with pre-filesystem reservations, shared
+capability under Proposed ADR-0222); partial packages RM-06, RM-07, RM-09–RM-15,
+RM-17, RM-18 (contention reverified only), RM-20 closeout (reconcile 21
+packages/17 findings, public docs/`PERFORMANCE.md`/ADRs, upgrade+repair
+rehearsal through the final migration, final gates, final report). Four RM-00
+rows cannot have baseline pairs with current harnesses; keep them final-only
+rather than inventing a comparison.
