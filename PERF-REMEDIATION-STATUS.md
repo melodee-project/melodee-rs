@@ -13,9 +13,9 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 
 | Package | State | What exists | Exact remaining action |
 |---|---|---|---|
-| RM-00 | PARTIAL | Disposable 35K/50K/600K fixture and real-media workloads; multiple release-build measurements | Complete comparable baseline/current production-path workload matrix, provenance and resource evidence. |
+| RM-00 | PARTIAL | Disposable 35K/50K/600K fixture and real-media workloads; matched baseline/final 600K production-path pairs for full search rebuild and policy evaluation/dry-run, final-only 600K identity reconciliation, with full provenance (`tests/performance/final-matrix-2026-11-27.md`) | Execute the ten remaining workload rows (single/200-album import, unchanged reimport, media processing, concurrent genre imports, incremental indexing, concurrent interactive load, streaming during ingestion, worker scheduling, merge/split) and their baseline pairs. |
 | RM-01 | IMPLEMENTED AND VERIFIED | narrow index 0060; historical 50K plan and regression evidence | Reconfirm in final integrated verification. |
-| RM-02 | IMPLEMENTED AND VERIFIED | scoped normal and dry-run acoustic queries; focused tests; 600K production policy measurements | Reconfirm in final integrated verification. |
+| RM-02 | IMPLEMENTED AND VERIFIED | scoped normal and dry-run acoustic queries; focused tests; matched baseline/final 600K production policy measurements (600,008 → 1 retained digest per evaluation; 16.4 s → 0.39 s bounded dry-run) in `tests/performance/final-matrix-2026-11-27.md` | Reconciled in the final integrated verification. |
 | RM-03 | IMPLEMENTED AND VERIFIED | genre indexes, status guard, Track-move term maintenance | Reconfirm in final integrated verification. |
 | RM-04 | IMPLEMENTED AND VERIFIED | advisory-lock recount protocol; repair CLI and concurrency regression | Reconfirm under final migrations and repair rehearsal. |
 | RM-05 | IMPLEMENTED AND VERIFIED | snapshot-visible obligations and activation fence; old-generation consumer regression | Rerun final integrated regression. |
@@ -1919,3 +1919,74 @@ Additional current execution state:
   already contains later applied versions). Evidence on a fresh owned
   database: catalog_reuse 4/4. This test's base also verifies that nothing
   after 0045 depends on 0045 objects (grep-checked across migrations 0046-0071).
+- Handoff restart (2026-11-27, main `554e9d5`): **`make check-nightly` completed
+  green on the final integrated tree (exit 0)** — the first green nightly of
+  this operation. Log: `.local-dev/check-nightly-20261127-113614.log` (gitignored;
+  reproduced command `CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 make check-nightly`
+  at `554e9d590db9e97f7343abdcd60a22e4f3bf10f4` on a clean worktree). Evidence
+  inside the log: repository/document validation (123 ADRs, 8 mockups, 239
+  requirements), requirements index, 619 Python tests OK, Admin UI
+  typecheck/lint/i18n/unit build, `cargo fmt --check`, strict workspace
+  `clippy -D warnings`, script-worker build, workspace lib/bin tests, the
+  database-free application/domain/MQL/policy/media integration targets, the
+  full PostgreSQL-backed workspace suites (`cargo test --workspace
+  --all-features` under `scripts/test_database.py`: 208 `tests/*.rs`
+  binaries plus doc tests; 252 `test result: ok` lines, 2,475 tests passed,
+  0 failed), the six ignored historical-schema migration compatibility tests
+  (6/6 in 24.52 s), and `cargo deny check` (`advisories ok, bans ok, licenses
+  ok, sources ok`). No suite was skipped, weakened or ignored to obtain this
+  result.
+- Handoff restart (cont., 2026-11-27): resumed **RM-00** on the final integrated
+  tree and produced two matched baseline/final production-path measurements at
+  the representative 560K–600K tier, plus one final-only workload with a
+  documented reason no baseline pair exists. Full provenance, commands,
+  limitations and the explicit not-executed list are in
+  `tests/performance/final-matrix-2026-11-27.md`; raw sanitized JSON is
+  `final-search-rebuild-600k-2026-11-27.json`,
+  `final-search-rebuild-baseline-600k-2026-11-27.json`,
+  `final-identity-600k-2026-11-27v2.json`, and the CLI/test build records
+  `final-cli-build-2026-11-27{,e}.json`,
+  `final-baseline-cli-build-2026-11-27{,b}.json`,
+  `final-identity-build-2026-11-27v2.json`.
+  Measured results (single/triple samples, uncontrolled cache, no concurrency):
+  **full search rebuild** baseline `a0979cd` 42.32 s / 16,188 documents/s /
+  250,007,082 logical bytes / 217,552 KiB RSS versus final `554e9d5`+bench
+  35.21 s (snapshot 35.169 s, 69 commits median 64.68 ms, activation 6.60 ms,
+  catch-up 17.1 ms/0 rows) / 19,454 documents/s / 231,080,841 bytes /
+  279,084 KiB; **policy** baseline single-Release evaluate 1,203.0–1,278.9 ms
+  returning/retaining 600,014 rows and 600,008 digests (38,400,512 B) versus
+  final 8.21–9.66 ms returning 7 rows and 1 digest (64 B), and bounded
+  eight-Release dry-run baseline 15,806.8–16,363.8 ms retaining 4,800,057
+  digests (307,203,648 B) versus final 374.7–396.4 ms retaining 1 digest
+  (64 B), with identical cross-Release match outcomes; **identity
+  reconciliation final-only** (baseline lacks the scoped methods) strong Artist
+  6.53 ms vs 59.72 ms global, same-Release Track Artist 15.78 ms vs 2,963.83 ms,
+  repeated credit 6.32 ms vs 1,365.02 ms, strong Release 2.24 ms vs 17.90 ms,
+  name proposal 5.68 ms vs 718.75 ms, production drain 3,188.3 ms over 8 seeds
+  (3 Artist + 1 Release merges, 68 follow-ups) and closure quiescent in
+  32.1 ms. Fixture seed time (178–186 s final, 693–704 s on the pre-remediation
+  schema) is construction cost and is never reported as throughput.
+- Handoff restart (cont.): two benchmark/fixture defects surfaced while running
+  the representative matrix and are fixed with regression coverage, without
+  changing production policy or search code. (1) The policy benchmark assumed
+  its eight freshly seeded Releases were the earliest `catalog_imports` rows;
+  once the fixture gained ACL publication placeholders (which occupy those
+  rows), `load_test_contexts` returned placeholders and the test panicked at
+  representative size (`Option::unwrap()` on `None`). The test now discovers
+  the real bounded scope through the production loader, selects a subject that
+  is provably in scope and owns an acoustic digest, and keeps the scope
+  membership / cross-Release assertions. (2) `scripts/perf_representative.py`
+  gained `--without-acl-placeholders` so a bounded dry-run scope can cover the
+  workload's own Releases; the option omits only the synthetic ACL publication
+  placeholder block and is covered by
+  `tests/python/test_perf_representative.py::
+  RepresentativeFixtureTests::test_acl_placeholder_option_controls_the_earliest_catalog_imports`.
+  Verification on the final source: strict workspace `cargo clippy --all-targets
+  --all-features -D warnings` clean, `cargo fmt --all` applied, perf Python
+  suite 25 tests OK (4 fixture-only skips), `perf_catalog_policy` green at
+  20-Release smoke and at the full 35K/50K/600K fixture on both revisions.
+  RM-00 remains PARTIAL: ten of the thirteen required workloads (single-album
+  import, 200-album import, unchanged reimport, media processing, concurrent
+  genre imports, incremental indexing, concurrent interactive load, streaming
+  during ingestion, worker scheduling, merge/split) still need execution and,
+  for comparable pairs, baseline runs on this final source.

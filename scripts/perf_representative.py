@@ -202,11 +202,67 @@ def default_migration_cli() -> Path:
     return target / "debug" / ("melodee-cli.exe" if os.name == "nt" else "melodee-cli")
 
 
-def fixture_sql(artists: int, releases: int, tracks_per_release: int) -> str:
+def fixture_sql(
+    artists: int, releases: int, tracks_per_release: int, *, acl_placeholders: bool = True
+) -> str:
     if min(artists, releases, tracks_per_release) < 1:
         raise ValueError("fixture sizes must be positive")
     artwork = fixture_artwork()
     artwork_key = f"{hashlib.sha256(artwork).hexdigest()}-{len(artwork)}"
+    acl_placeholders_sql = """
+-- Synthetic publication provenance exists only to exercise the actual ACL
+-- predicates. The receipt payloads are placeholders, not import evidence.
+CREATE TEMP TABLE bench_acl_groups AS
+SELECT g n, uuidv7() id, uuidv7() public_id FROM generate_series(1, 2) g;
+INSERT INTO native_library_access_groups (id, public_api_id, name, created_at, updated_at)
+SELECT id, public_id, 'Benchmark group ' || n, now(), now() FROM bench_acl_groups;
+INSERT INTO native_user_library_groups (user_id, group_id, created_at)
+SELECT u.id, g.id, now() FROM bench_users u JOIN bench_acl_groups g
+ON g.n = CASE WHEN u.n <= 50 THEN 1 ELSE 2 END;
+CREATE TEMP TABLE bench_acl_libraries AS
+SELECT g n, uuidv7() id FROM generate_series(1, 4) g;
+INSERT INTO native_library_group_libraries (group_id, library_id, imported_at)
+SELECT g.id, l.id, now() FROM bench_acl_libraries l JOIN bench_acl_groups g
+ON g.n = CASE WHEN l.n <= 2 THEN 1 ELSE 2 END;
+CREATE TEMP TABLE bench_acl_releases AS
+SELECT r.n, r.id release_id, uuidv7() work_id, uuidv7() api_key, uuidv7() auth_id,
+       uuidv7() manifest_id, uuidv7() import_id, l.id library_id,
+       repeat(md5('plan:' || r.n), 2) plan_hash,
+       repeat(md5('manifest:' || r.n), 2) manifest_hash,
+       replace(r.id::text, '-', '') release_hex
+FROM bench_releases r JOIN bench_acl_libraries l ON l.n = ((r.n / 5) % 4) + 1
+WHERE r.n % 5 = 0;
+INSERT INTO release_work_items
+    (id, api_key, source_library_id, source_path, current_path, state, correlation_id,
+     discovered_at, updated_at, created_at, completed_at)
+SELECT work_id, api_key, library_id, 'benchmark/' || n, 'benchmark/' || n, 'indexed',
+       uuidv7(), now(), now(), now(), now() FROM bench_acl_releases;
+INSERT INTO release_work_item_manifests
+    (work_item_id, schema_version, manifest_hash, manifest_payload, source_stable, generation_duration_ms, generated_at)
+SELECT work_id, 3, manifest_hash, '{}'::jsonb, true, 0, now() FROM bench_acl_releases;
+INSERT INTO release_publication_authorizations
+    (authorization_id, work_item_id, release_id, authorization_name, authorization_version,
+     validation_profile_name, validation_profile_version, validation_outcome,
+     validation_payload, source_disposition, authorized_at)
+SELECT auth_id, work_id, release_id, 'phase3.structural-publication', 1,
+       'benchmark', 1, 'passed', '{}'::jsonb, 'retained', now() FROM bench_acl_releases;
+INSERT INTO release_publication_plans
+    (work_item_id, authorization_id, release_id, layout_version, input_manifest_hash,
+     target_relative_path, manifest_relative_path, plan_hash, plan_payload, created_at)
+SELECT work_id, auth_id, release_id, 1, manifest_hash,
+       'releases/' || substr(release_hex, 1, 2) || '/' || substr(release_hex, 3, 2) || '/rel_' || release_hex,
+       'releases/' || substr(release_hex, 1, 2) || '/' || substr(release_hex, 3, 2) || '/rel_' || release_hex || '/manifest.json',
+       plan_hash, '{}'::jsonb, now() FROM bench_acl_releases;
+INSERT INTO release_publication_receipts
+    (work_item_id, release_id, plan_hash, sealed_manifest_hash, source_disposition, published_at)
+SELECT work_id, release_id, plan_hash, manifest_hash, 'retained', now() FROM bench_acl_releases;
+INSERT INTO catalog_imports
+    (id, work_item_id, release_id, manifest_row_id, manifest_id, manifest_schema_version,
+     semantic_manifest_hash, publication_plan_hash, sealed_manifest_hash, resolver_version, imported_at)
+SELECT r.import_id, r.work_id, r.release_id, m.id, r.manifest_id, 3,
+       r.manifest_hash, r.plan_hash, r.manifest_hash, 'benchmark', now()
+FROM bench_acl_releases r JOIN release_work_item_manifests m ON m.work_item_id = r.work_id;
+""" if acl_placeholders else ""
     return f"""
 CREATE TEMP TABLE bench_artists AS
 SELECT g n, uuidv7() id, uuidv7() public_id FROM generate_series(1, {artists}) g;
@@ -252,58 +308,7 @@ WHERE r.n % 5 = 0;
 INSERT INTO release_artists (id, release_id, artist_id, role, presentation_order, display_value, join_phrase, created_at)
 SELECT uuidv7(), r.id, a.id, 'primary', 1, 'Artist ' || a.n, '', now()
 FROM bench_releases r JOIN bench_artists a ON a.n = ((r.n - 1) % {artists} + 1);
--- Synthetic publication provenance exists only to exercise the actual ACL
--- predicates. The receipt payloads are placeholders, not import evidence.
-CREATE TEMP TABLE bench_acl_groups AS
-SELECT g n, uuidv7() id, uuidv7() public_id FROM generate_series(1, 2) g;
-INSERT INTO native_library_access_groups (id, public_api_id, name, created_at, updated_at)
-SELECT id, public_id, 'Benchmark group ' || n, now(), now() FROM bench_acl_groups;
-INSERT INTO native_user_library_groups (user_id, group_id, created_at)
-SELECT u.id, g.id, now() FROM bench_users u JOIN bench_acl_groups g
-ON g.n = CASE WHEN u.n <= 50 THEN 1 ELSE 2 END;
-CREATE TEMP TABLE bench_acl_libraries AS
-SELECT g n, uuidv7() id FROM generate_series(1, 4) g;
-INSERT INTO native_library_group_libraries (group_id, library_id, imported_at)
-SELECT g.id, l.id, now() FROM bench_acl_libraries l JOIN bench_acl_groups g
-ON g.n = CASE WHEN l.n <= 2 THEN 1 ELSE 2 END;
-CREATE TEMP TABLE bench_acl_releases AS
-SELECT r.n, r.id release_id, uuidv7() work_id, uuidv7() api_key, uuidv7() auth_id,
-       uuidv7() manifest_id, uuidv7() import_id, l.id library_id,
-       repeat(md5('plan:' || r.n), 2) plan_hash,
-       repeat(md5('manifest:' || r.n), 2) manifest_hash,
-       replace(r.id::text, '-', '') release_hex
-FROM bench_releases r JOIN bench_acl_libraries l ON l.n = ((r.n / 5) % 4) + 1
-WHERE r.n % 5 = 0;
-INSERT INTO release_work_items
-    (id, api_key, source_library_id, source_path, current_path, state, correlation_id,
-     discovered_at, updated_at, created_at, completed_at)
-SELECT work_id, api_key, library_id, 'benchmark/' || n, 'benchmark/' || n, 'indexed',
-       uuidv7(), now(), now(), now(), now() FROM bench_acl_releases;
-INSERT INTO release_work_item_manifests
-    (work_item_id, schema_version, manifest_hash, manifest_payload, source_stable, generation_duration_ms, generated_at)
-SELECT work_id, 3, manifest_hash, '{{}}'::jsonb, true, 0, now() FROM bench_acl_releases;
-INSERT INTO release_publication_authorizations
-    (authorization_id, work_item_id, release_id, authorization_name, authorization_version,
-     validation_profile_name, validation_profile_version, validation_outcome,
-     validation_payload, source_disposition, authorized_at)
-SELECT auth_id, work_id, release_id, 'phase3.structural-publication', 1,
-       'benchmark', 1, 'passed', '{{}}'::jsonb, 'retained', now() FROM bench_acl_releases;
-INSERT INTO release_publication_plans
-    (work_item_id, authorization_id, release_id, layout_version, input_manifest_hash,
-     target_relative_path, manifest_relative_path, plan_hash, plan_payload, created_at)
-SELECT work_id, auth_id, release_id, 1, manifest_hash,
-       'releases/' || substr(release_hex, 1, 2) || '/' || substr(release_hex, 3, 2) || '/rel_' || release_hex,
-       'releases/' || substr(release_hex, 1, 2) || '/' || substr(release_hex, 3, 2) || '/rel_' || release_hex || '/manifest.json',
-       plan_hash, '{{}}'::jsonb, now() FROM bench_acl_releases;
-INSERT INTO release_publication_receipts
-    (work_item_id, release_id, plan_hash, sealed_manifest_hash, source_disposition, published_at)
-SELECT work_id, release_id, plan_hash, manifest_hash, 'retained', now() FROM bench_acl_releases;
-INSERT INTO catalog_imports
-    (id, work_item_id, release_id, manifest_row_id, manifest_id, manifest_schema_version,
-     semantic_manifest_hash, publication_plan_hash, sealed_manifest_hash, resolver_version, imported_at)
-SELECT r.import_id, r.work_id, r.release_id, m.id, r.manifest_id, 3,
-       r.manifest_hash, r.plan_hash, r.manifest_hash, 'benchmark', now()
-FROM bench_acl_releases r JOIN release_work_item_manifests m ON m.work_item_id = r.work_id;
+{acl_placeholders_sql}
 CREATE TEMP TABLE bench_tracks AS
 SELECT uuidv7() track_id, uuidv7() public_id, uuidv7() audio_id, uuidv7() asset_id,
        r.id release_id, r.n release_n, t ordinal
@@ -377,6 +382,15 @@ def main() -> int:
                         help="use this prebuilt CLI to migrate only the invocation-owned database")
     parser.add_argument("--migration-cli-provenance", type=Path,
                         help="verify this CLI build record before and after migration")
+    parser.add_argument(
+        "--without-acl-placeholders",
+        action="store_true",
+        help=(
+            "omit the synthetic ACL publication placeholder Releases; they occupy the "
+            "earliest catalog_imports rows, so a bounded policy dry-run scope would cover "
+            "them instead of the workload's own Releases (disables ACL fixture coverage)"
+        ),
+    )
     parser.add_argument("--seed-timeout", type=int,
                         help="limit fixture seeding in seconds; a timeout is reported as censored")
     parser.add_argument("--quiesce-fixture", action="store_true",
@@ -389,7 +403,10 @@ def main() -> int:
     if args.seed_timeout is not None and args.seed_timeout < 1:
         parser.error("--seed-timeout must be positive")
     try:
-        sql = fixture_sql(args.artists, args.releases, args.tracks_per_release)
+        sql = fixture_sql(
+            args.artists, args.releases, args.tracks_per_release,
+            acl_placeholders=not args.without_acl_placeholders,
+        )
         migration_cli = (args.migration_cli or default_migration_cli()).resolve(strict=True)
         if not migration_cli.is_file():
             raise ValueError("migration CLI must be a regular file")

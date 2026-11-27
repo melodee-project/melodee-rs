@@ -5,6 +5,15 @@ seed and counts, configuration, command, wall time, throughput, percentiles, CPU
 queries, files/bytes touched, and errors. Baselines include 200 concurrent inbound Releases, current
 35k/50k/560k scale, and synthetic multi-million Track targets.
 
+### Final integrated matrix (partial)
+
+`final-matrix-2026-11-27.md` records the representative-round measurements on
+the final integrated sources: matched baseline/final 600K pairs for full search
+rebuild and for policy evaluation/dry-run, a final-only 600K identity
+reconciliation case, the provenance records they reference, the benchmark-scope
+and fixture-option fixes made to obtain them, and the explicit list of required
+workloads not yet executed. It is a partial matrix, not RM-00 acceptance.
+
 ### Disposable Rust catalog fixture (in progress)
 
 `scripts/perf_representative.py -- <command>` creates an invocation-owned,

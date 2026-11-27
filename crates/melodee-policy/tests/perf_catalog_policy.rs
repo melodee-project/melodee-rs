@@ -273,22 +273,52 @@ async fn measure_production_policy() {
     let store = PolicyStore;
     let engine = PolicyEngine::new(PolicyConfig::default()).unwrap();
     let now = OffsetDateTime::now_utc();
-    // Add one actual cross-Release acoustic match; fixture has 600K unrelated digests.
-    let seed_context = store.load_snapshot(&pool, ids[0]).await.unwrap().unwrap();
-    let digest = seed_context.tracks[0]
-        .audio_fingerprint_digest
-        .clone()
-        .unwrap();
-    // The original implementation materializes the catalog-wide digest set.
-    // Do not retain the setup snapshot during timed samples: it would inflate
-    // the measured process memory of the baseline by an entire extra context.
-    drop(seed_context);
+    // The production bounded dry-run loader (`load_test_contexts`) measures the
+    // earliest `catalog_imports` rows. The representative fixture publishes ACL
+    // placeholder Releases before this test runs, so the measured scope is not
+    // necessarily the eight Releases seeded above. Discover the real scope once
+    // and measure a subject that is provably inside it instead of assuming the
+    // seeded batch is first.
+    let scope = store.load_test_contexts(&pool, RELEASES).await.unwrap();
+    assert_eq!(scope.len(), RELEASES as usize);
+    let scope_ids = scope
+        .iter()
+        .map(|context| context.claim.release_id.into_uuid())
+        .collect::<Vec<_>>();
+    // Add one actual cross-Release acoustic match; fixture has 600K unrelated
+    // digests. Pick the first in-scope Release that actually owns an acoustic
+    // digest, so the benchmark fails loudly if the fixture provides none.
+    let mut subject = None;
+    for context in &scope {
+        let snapshot = store
+            .load_snapshot(&pool, context.claim.release_id)
+            .await
+            .unwrap()
+            .unwrap();
+        if let Some(digest) = snapshot
+            .tracks
+            .iter()
+            .find_map(|track| track.audio_fingerprint_digest.clone())
+        {
+            subject = Some((context.claim.release_id, digest));
+            break;
+        }
+    }
+    let (subject_id, digest) = subject
+        .expect("representative fixture must expose an acoustic digest inside the dry-run scope");
+    drop(scope);
     sqlx::query("INSERT INTO audio_identity_evidence(id,source_audio_identity_id,track_id,evidence_kind,polarity,confidence,source,payload,created_at) SELECT uuidv7(), audio_identity_id, id, 'acoustic_fingerprint','supports',9000,'policy-benchmark',jsonb_build_object('fingerprint_digest',$1),now() FROM tracks WHERE release_id <> ALL($2) ORDER BY id LIMIT 1")
-        .bind(&digest).bind(ids.iter().map(|x| x.into_uuid()).collect::<Vec<_>>())
+        .bind(&digest).bind(&scope_ids)
         .execute(&pool).await.unwrap();
     println!(
-        "fixture_background_artists={} fixture_background_releases={} fixture_background_tracks={} cataloged_policy_releases={} samples_per_case={} baseline_acoustic_rows={} sample_input_digests=1 sample_cross_release_matches=1",
-        background.0, background.1, background.2, RELEASES, REPEATS, background.2
+        "fixture_background_artists={} fixture_background_releases={} fixture_background_tracks={} seeded_policy_releases={} dry_run_scope_releases={} samples_per_case={} baseline_acoustic_rows={} sample_input_digests=1 sample_cross_release_matches=1",
+        background.0,
+        background.1,
+        background.2,
+        ids.len(),
+        scope_ids.len(),
+        REPEATS,
+        background.2
     );
     // Bound any baseline query individually; the wrapper additionally sets a whole-workload limit.
     sqlx::query("SET statement_timeout = '30s'")
@@ -300,7 +330,11 @@ async fn measure_production_policy() {
         let before = snapshot(&counts);
         let rss = proc_kib("VmRSS:");
         let start = Instant::now();
-        let context = store.load_snapshot(&pool, ids[0]).await.unwrap().unwrap();
+        let context = store
+            .load_snapshot(&pool, subject_id)
+            .await
+            .unwrap()
+            .unwrap();
         let result = evaluate_catalog_context(&engine, &context, now).unwrap();
         if let Some(expected) = expected_disposition {
             assert_eq!(result.decision.disposition, expected);
@@ -325,14 +359,14 @@ async fn measure_production_policy() {
         assert_eq!(contexts.len(), RELEASES as usize);
         for context in &contexts {
             let evaluation = evaluate_catalog_context(&engine, context, now).unwrap();
-            if context.claim.release_id == ids[0] {
+            if context.claim.release_id == subject_id {
                 assert_eq!(Some(evaluation.decision.disposition), expected_disposition);
             }
         }
         assert!(
             contexts
                 .iter()
-                .find(|x| x.claim.release_id == ids[0])
+                .find(|x| x.claim.release_id == subject_id)
                 .unwrap()
                 .catalog_acoustic_fingerprints
                 .contains(&digest)
@@ -347,6 +381,6 @@ async fn measure_production_policy() {
             rss,
         );
     }
-    explain_acoustic(&pool, ids[0].into_uuid(), &digest).await;
+    explain_acoustic(&pool, subject_id.into_uuid(), &digest).await;
     pool.close().await;
 }

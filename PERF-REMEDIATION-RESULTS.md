@@ -918,3 +918,66 @@ completed in 22.999 seconds over 629 bounded turns against an owned database.
 It exercises provisional metadata APIs only; filesystem deletion, merge/split,
 statement and lock counts, concurrent activity and a 600K catalog were not
 measured.
+
+---
+
+# 10. Final integrated measurement round (2026-11-27, `554e9d5` + benchmark fixes)
+
+This section records measurements executed on the final integrated sources. It
+does not replace §9 or the ledger; `PERF-REMEDIATION-STATUS.md` remains the
+authoritative package state. Full provenance, commands, environment, limitations
+and the explicit list of workloads not executed are in
+`tests/performance/final-matrix-2026-11-27.md`.
+
+## 10.1 Matched baseline/final at the 560K–600K tier
+
+Two RM-00 workload rows now have matched production-path measurements on the
+same declared fixture (35,000 Artists / 50,000 Releases / 600,000 Tracks),
+release builds, one workload at a time, uncontrolled post-seed cache, fresh
+invocation-owned database per case. The baseline is the verified detached
+worktree at `a0979cde…`; only benchmark harness/test files were added there.
+
+- **Full search rebuild (RM-14 / PERF-006).** Baseline 42.32 s, 16,188
+  documents/s, 250,007,082 logical index bytes, 217,552 KiB peak RSS. Final
+  35.21 s (snapshot 35.169 s), 19,454 documents/s, 231,080,841 bytes,
+  279,084 KiB, with 69 commits (median 64.68 ms), 6.60 ms activation and
+  17.1 ms / 0-row catch-up now instrumented (the baseline does not emit those
+  events). One sample per side.
+- **Policy evaluation and dry-run (RM-02 / PERF-002).** Baseline
+  single-Release evaluate 1,203.0–1,278.9 ms returning and retaining 600,014
+  rows / 600,008 acoustic digests (38,400,512 B); final 8.21–9.66 ms returning
+  7 rows / 1 digest (64 B). Baseline bounded eight-Release dry-run
+  15,806.8–16,363.8 ms retaining 4,800,057 digests (307,203,648 B); final
+  374.7–396.4 ms retaining 1 digest. The scoped query returns the same
+  cross-Release match; three samples per case per side.
+
+## 10.2 Final-only production-path measurement
+
+**Identity reconciliation at 600K (RM-09 / PERF-004).** The pre-remediation
+revision has no scoped candidate methods, so no baseline pair exists. On the
+final source, inside the production drainer with an augmented identity graph:
+strong Artist 6.53 ms scoped vs 59.72 ms global; same-Release Track Artist
+15.78 vs 2,963.83 ms; repeated credit 6.32 vs 1,365.02 ms; strong Release 2.24
+vs 17.90 ms; name proposal 5.68 vs 718.75 ms. One bounded drain turn took
+3,188.3 ms over 8 durable seeds (3 Artist merges, 1 Release merge, 68
+follow-ups) and closure was quiescent after one further 32.1 ms turn.
+
+## 10.3 Benchmark defects fixed (not production behavior)
+
+The representative policy benchmark assumed its own eight seeded Releases were
+the earliest `catalog_imports` rows; after the fixture gained ACL publication
+placeholders it panicked at representative size. The benchmark now discovers
+the actual bounded scope through the production loader and measures a subject
+provably inside it. The fixture gained `--without-acl-placeholders` so a
+bounded policy dry-run scope covers workload Releases rather than publication
+placeholders; a Python regression covers the option. Production policy and
+search code are unchanged by these edits.
+
+## 10.4 Still outstanding in RM-00
+
+Ten of the thirteen required workload rows were not executed in this round:
+single-album import, 200-album import, unchanged reimport, media processing,
+concurrent genre imports, incremental indexing, concurrent interactive load,
+streaming during ingestion, worker scheduling, and merge/split. Their existing
+artifacts are intermediate and must not be presented as final-source
+before/after evidence. RM-00 therefore remains PARTIAL.

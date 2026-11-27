@@ -22,6 +22,19 @@ SPEC.loader.exec_module(MODULE)
 
 
 class RepresentativeFixtureTests(unittest.TestCase):
+    def test_acl_placeholder_option_controls_the_earliest_catalog_imports(self):
+        # The policy dry-run loader measures the earliest catalog_imports rows.
+        # The ACL placeholders occupy those rows, so the opt-out must actually
+        # remove them or a bounded policy benchmark silently measures fixture
+        # placeholders instead of the workload's own Releases.
+        with_acl = MODULE.fixture_sql(2, 2, 1)
+        without_acl = MODULE.fixture_sql(2, 2, 1, acl_placeholders=False)
+        self.assertIn("bench_acl_releases", with_acl)
+        self.assertIn("INSERT INTO catalog_imports", with_acl)
+        self.assertNotIn("bench_acl_releases", without_acl)
+        self.assertNotIn("INSERT INTO catalog_imports", without_acl)
+        self.assertIn("INSERT INTO tracks", without_acl)
+
     def test_rejects_invalid_sizes(self):
         for sizes in [(0, 1, 1), (1, -1, 1), (1, 1, 0)]:
             with self.assertRaises(ValueError):
