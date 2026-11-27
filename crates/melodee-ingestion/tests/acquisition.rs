@@ -1745,7 +1745,7 @@ async fn traversal_source_paths_are_rejected_before_io() {
     let worker = WorkerId::new();
     let now = T0 + Duration::seconds(2);
 
-    for malicious in ["../escape", "/etc/absolute", "nested/child"] {
+    for malicious in ["../escape", "/etc/absolute"] {
         let item = ReleaseWorkItem::discovered(malicious.to_owned(), None, Uuid::now_v7(), T0);
         let id = item.id;
         WorkItemStore
@@ -1782,6 +1782,48 @@ async fn traversal_source_paths_are_rejected_before_io() {
         );
         assert!(!scenario.staged_source(id).exists());
     }
+    // A well-formed nested path is not traversal: missing bytes fail at the
+    // verified no-follow directory open before any durable intent or staging
+    // exists, while a present nested candidate (see the alias test above) is
+    // acquired.
+    let nested_missing =
+        ReleaseWorkItem::discovered("nested/child".to_owned(), None, Uuid::now_v7(), T0);
+    let nested_id = nested_missing.id;
+    WorkItemStore
+        .create(&scenario.pool, &nested_missing)
+        .await
+        .expect("create");
+    WorkItemStore
+        .system_transition(
+            &scenario.pool,
+            nested_id,
+            IngestionState::Settling,
+            Some("test"),
+            T0,
+        )
+        .await
+        .expect("settling");
+    WorkItemStore
+        .system_transition(
+            &scenario.pool,
+            nested_id,
+            IngestionState::Ready,
+            Some("test"),
+            T0,
+        )
+        .await
+        .expect("ready");
+    let nested_claim = scenario.claim_one(&worker, now).await;
+    let nested_result = scenario.acquire(&worker, &nested_claim, now).await;
+    assert!(
+        matches!(
+            &nested_result,
+            Err(melodee_ingestion::AcquisitionError::Filesystem { .. })
+        ),
+        "a missing well-formed nested candidate fails only on I/O: {nested_result:?}"
+    );
+    assert!(scenario.handoff(nested_id).await.is_none());
+    assert!(!scenario.staged_source(nested_id).exists());
     assert_eq!(
         1,
         fs::read_dir(&scenario.root).expect("inbound").count(),
@@ -2458,8 +2500,9 @@ async fn retained_baseline_pages_yield_to_other_due_occurrences() {
             .expect("freeze fixture");
         sqlx::query("INSERT INTO release_work_item_staging_handoffs(work_item_id,staging_relative_path,source_generation,status,method,tree_hash,intended_at,staged_at,retained_source) VALUES($1,'fixture','fixture','staged','verified_copy',$2,clock_timestamp(),clock_timestamp(),true)")
             .bind(item.id).bind("a".repeat(64)).execute(&db.pool).await.expect("synthetic retained handoff");
-        sqlx::query("UPDATE inbound_retained_baselines SET state='authoritative' WHERE id=$1")
-            .bind(baseline)
+        let lock_name = format!("stage-{}.lock", baseline.simple());
+        sqlx::query("UPDATE inbound_retained_baselines SET state='authoritative',lifecycle_lock_name=$2,lifecycle_root_generation='unix:1:1',lifecycle_lock_generation='unix:1:2' WHERE id=$1")
+            .bind(baseline).bind(&lock_name)
             .execute(&db.pool)
             .await
             .expect("publish fixture");
@@ -2627,8 +2670,9 @@ async fn retained_missing_baseline_file_signals_and_yields_before_later_file() {
     .expect("freeze");
     sqlx::query("INSERT INTO release_work_item_staging_handoffs(work_item_id,staging_relative_path,source_generation,status,method,tree_hash,intended_at,staged_at,retained_source) VALUES($1,'fixture','fixture','staged','verified_copy',$2,clock_timestamp(),clock_timestamp(),true)")
         .bind(item.id).bind("a".repeat(64)).execute(&db.pool).await.expect("synthetic retained handoff");
-    sqlx::query("UPDATE inbound_retained_baselines SET state='authoritative' WHERE id=$1")
-        .bind(baseline)
+    let lock_name = format!("stage-{}.lock", baseline.simple());
+    sqlx::query("UPDATE inbound_retained_baselines SET state='authoritative',lifecycle_lock_name=$2,lifecycle_root_generation='unix:1:1',lifecycle_lock_generation='unix:1:2' WHERE id=$1")
+        .bind(baseline).bind(&lock_name)
         .execute(&db.pool)
         .await
         .expect("publish fixture");

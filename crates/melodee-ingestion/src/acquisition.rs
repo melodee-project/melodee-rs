@@ -876,15 +876,15 @@ fn cleanup_inbound(
     expected_generation: &str,
     expected_tree_hash: &str,
 ) -> Result<CleanupResult, AcquisitionError> {
-    if !inbound.starts_with(inbound_root)
-        || inbound.parent() != Some(inbound_root)
-        || inbound.file_name().is_none()
-    {
+    if !inbound.starts_with(inbound_root) || inbound.file_name().is_none() {
         return Err(AcquisitionError::InvalidSourcePath(format!(
-            "refusing cleanup outside direct inbound root: {}",
+            "refusing cleanup outside the inbound root: {}",
             inbound.display()
         )));
     }
+    // Nested candidates are legitimate: discovery produces them and the
+    // generation/hash re-verification below plus the descriptor-relative
+    // removal keep a replaced parent from redirecting cleanup.
     let metadata = match fs::symlink_metadata(inbound) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -1304,9 +1304,11 @@ fn resolve_candidate(
         return Err(AcquisitionError::InvalidSourcePath(source_path.to_owned()));
     }
     let path = source.root.join(relative);
-    if path.parent() != Some(source.root.as_path()) {
-        return Err(AcquisitionError::InvalidSourcePath(source_path.to_owned()));
-    }
+    // Nested release directories are legitimate candidates: discovery yields
+    // them, and every tree operation below the root opens each component with
+    // O_NOFOLLOW, so a replaced or symlinked parent fails closed instead of
+    // redirecting an acquire. Component validation above already excludes
+    // absolute paths and traversal.
     Ok(path)
 }
 

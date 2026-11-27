@@ -1890,3 +1890,21 @@ Additional current execution state:
   `cargo fmt --check`, strict workspace clippy, and `cargo deny` (advisories,
   bans, licenses, sources). The release-readiness `make check-nightly` tier
   remains the only unexecuted gate this session.
+- Handoff restart (cont.): the first nightly run found three coherent wip-era
+  defects and they are fixed. (1) `RuntimeDefinitions` lacked the two
+  documented `MELODEE__INGEST__RETAINED_RECHECK_*` settings; added with the
+  documented defaults/ranges. (2) `resolve_candidate`/`cleanup_inbound`
+  rejected nested all-Normal candidates that discovery legitimately produces
+  (the authored alias-nested candidate test and the authored traversal test
+  were contradictory); nested candidates are now acquired and cleaned through
+  the same no-follow per-component verification, `../`/absolute/traversal
+  stays rejected before any I/O, and a missing well-formed nested path fails
+  only at the verified directory open with no durable intent. (3) the
+  retained-baseline scheduling fixtures seeded `authoritative` rows without
+  the lifecycle-lock identity the 0071 guard now requires (CHECK pattern
+  `stage-<baseline>.lock`); fixtures provide synthetic identity values with a
+  comment that a real receipt still requires the protected-stage publisher.
+  Evidence on fresh owned databases: ingestion `acquisition` 38/38,
+  `environment_faults` 5/7 (rerun later in the nightly tier),
+  `inspection` 7/7, `normalization` 15/15, persistence runtime_settings 24/24,
+  server admin_config_api 6/6.
