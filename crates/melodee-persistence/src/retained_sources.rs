@@ -648,7 +648,11 @@ impl WorkItemStore {
             // Ordinary ingestion is permitted to rename a source. Until a
             // copy-only retained-origin intake exists, retain the obligation
             // and its source and persist only a request for fresh intake.
-            sqlx::query("UPDATE inbound_retained_sources SET baseline_change_pending=true,updated_at=clock_timestamp() WHERE work_item_id=$1")
+            // The pending request and its durable reason are one atomic
+            // transition: observers may stop, restart, or crash between this
+            // commit and the scheduler's retry deferral, and the recorded
+            // disposition must not lag the sticky signal.
+            sqlx::query("UPDATE inbound_retained_sources SET baseline_change_pending=true,last_retry_reason='awaiting_intake',updated_at=clock_timestamp() WHERE work_item_id=$1")
                 .bind(lease.item_id).execute(&mut *tx).await?;
             ensure_original_expiry_live(&mut tx, lease.item_id, original_expiry).await?;
             tx.commit().await?;
