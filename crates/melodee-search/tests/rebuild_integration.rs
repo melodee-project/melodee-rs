@@ -1934,11 +1934,11 @@ async fn migration_0045_refreshes_artist_status_in_an_existing_generation() {
             MIGRATOR
                 .migrations
                 .iter()
-                // The pre-repair fixture defers 0045's status repair, but the
-                // current worker code needs the performance-remediation
-                // tables that every deployed schema receives at startup. They
-                // are independent of 0045, so include them in the base.
-                .filter(|migration| migration.version <= 44 || migration.version >= 60)
+                // The pre-repair fixture defers only 0045's repair; every
+                // later migration is additive and independent, and the
+                // current worker code (including remediation migrations like
+                // 0071) requires the 0046-0059 schema.
+                .filter(|migration| migration.version != 45)
                 .cloned()
                 .collect(),
         ),

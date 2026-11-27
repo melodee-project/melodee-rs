@@ -1829,3 +1829,21 @@ Additional current execution state:
   no-handoff regressions on a fresh owned database. The production-wide
   occurrence protocol for non-empty inbound removals (bytes verification,
   retained-source reobservation) remains PARTIAL and is unchanged by this.
+- Handoff restart (cont.): converged the working tree on the repository strict
+  quality gates and reran the claimed intermediate suites on fresh owned
+  databases with the final integrated sources. Strict workspace
+  `cargo clippy --workspace --all-targets --all-features -D warnings` is clean
+  (previously numerous disconnected custody warnings; three in an ingestion
+  test build), `cargo fmt --check` is clean, and `python3 scripts/check.py
+  fast` passes (repo validation, requirements index, fmt, clippy, script-worker
+  build). Fresh-database reruns: `melodee-catalog identity_scoped_oracle` 2/2
+  (scoped/global oracle equivalence, review decisions), `melodee-search
+  rebuild_integration` 13/13 after correcting the 0045-deferral fixture base to
+  skip only migration 0045 (the new 0071 depends on the 0046-0059 additive
+  schema; the old <=44 base predates 0071), ingestion `inspection` 7/7,
+  `environment_faults` 7/7, `normalization` 15/15,
+  `publication_worker_resilience` 5/5, `reconciliation` 46/46, media
+  `normalization_real` 14/14, persistence `custody_hash_spool` 8/8,
+  `inbound_custody` 2/2, `retained_baseline` 4/4, `retained_sources` 8/8, and
+  the full `catalog_hard_delete` binary 23/23 including the extended recovery
+  authority test.
