@@ -325,18 +325,38 @@ async fn purge_one(
         .await
         .map_err(|error| failure("store_error", error.to_string()))?;
 
-    // A pathname can be replaced by a producer after an identity check.
-    // Until occurrence-bound removal exists, refuse a purge that would drain
-    // an inbound path, before deleting any of the other storage trees.
-    if handoff.is_none()
-        && let Some((root, relative)) = inbound_path(state, &item).await?
-    {
+    // Resolve the inbound occurrence and pre-check that it is an empty
+    // directory before creating a durable guard. The binding protocol
+    // re-verifies both properties under the guard; this only avoids leaking
+    // a guard for the common non-empty refusal.
+    let pending_inbound = if handoff.is_none() {
+        inbound_path(state, &item).await?
+    } else {
+        None
+    };
+    if let Some((root, relative)) = &pending_inbound {
         match tokio::fs::symlink_metadata(root.join(relative)).await {
-            Ok(_) => {
-                return Err(failure(
-                    "source_custody_required",
-                    "inbound source removal requires an occurrence-bound custody operation",
-                ));
+            Ok(metadata) => {
+                if !metadata.is_dir() {
+                    return Err(failure(
+                        "source_custody_required",
+                        "the inbound occurrence is not a directory",
+                    ));
+                }
+                let mut entries = tokio::fs::read_dir(root.join(relative))
+                    .await
+                    .map_err(|error| failure("storage_unavailable", error.to_string()))?;
+                if entries
+                    .next_entry()
+                    .await
+                    .map_err(|error| failure("storage_unavailable", error.to_string()))?
+                    .is_some()
+                {
+                    return Err(failure(
+                        "source_custody_required",
+                        "inbound source removal requires an occurrence-bound custody operation",
+                    ));
+                }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(failure("storage_unavailable", error.to_string())),
@@ -397,6 +417,27 @@ async fn purge_one(
     }
 
     let mut paths = serde_json::Map::new();
+    if let Some((root, relative)) = &pending_inbound {
+        // The guarded, occurrence-bound removal runs before any other storage
+        // change: a refusal here leaves canonical, staging, and work-area
+        // storage and the work item unchanged for a later attempt.
+        melodee_ingestion::delete_purged_inbound_occurrence(root, relative)
+            .await
+            .map_err(|error| match &error {
+                melodee_ingestion::ReleaseDeletionError::InboundNotEmpty { .. } => failure(
+                    "source_custody_required",
+                    "inbound source is no longer an empty occurrence; refusing removal",
+                ),
+                melodee_ingestion::ReleaseDeletionError::InboundIdentityChanged { .. } => {
+                    failure("source_custody_mismatch", error.to_string())
+                }
+                melodee_ingestion::ReleaseDeletionError::InvalidPath { .. } => {
+                    failure("unsafe_path", error.to_string())
+                }
+                _ => failure("storage_delete_failed", error.to_string()),
+            })?;
+        paths.insert("inbound".to_owned(), json!(relative));
+    }
     if let Some(publication) = &publication {
         let Some(root) = state.canonical_root.as_deref() else {
             return Err(failure(

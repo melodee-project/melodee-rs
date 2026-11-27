@@ -81,6 +81,19 @@ pub(crate) async fn lock_fence(
         .bind(&fence.owner).bind(fence.token).bind(quiesced).fetch_optional(&mut **tx).await?.flatten();
     expiry.ok_or_else(invalid)
 }
+/// Fencing for read-only recovery observation only: a live fence that is
+/// either generically quiesced or bound to exactly this recovery reservation.
+/// Mutation paths must use [`lock_fence`], which never accepts the recovery
+/// binding, so a recovery attestation cannot authorize adoption or deletion.
+pub(crate) async fn lock_fence_recovery(
+    tx: &mut Transaction<'_, Postgres>,
+    fence: &LifecycleMaintenance,
+    reservation_id: Uuid,
+) -> Result<OffsetDateTime, WorkStoreError> {
+    let expiry:Option<OffsetDateTime>=sqlx::query_scalar("SELECT lease_expires_at FROM work_item_lifecycle_maintenance WHERE singleton AND owner=$1 AND token=$2 AND lease_expires_at>clock_timestamp() AND (quiesced OR (recovery_reservation_id=$3 AND NOT quiesced)) FOR UPDATE")
+        .bind(&fence.owner).bind(fence.token).bind(reservation_id).fetch_optional(&mut **tx).await?.flatten();
+    expiry.ok_or_else(invalid)
+}
 pub(crate) async fn finish(
     tx: &mut Transaction<'_, Postgres>,
     expiry: OffsetDateTime,
@@ -185,7 +198,7 @@ impl WorkItemStore {
         }
         let mut tx = pool.begin().await?;
         let token = Uuid::now_v7();
-        let expiry:Option<OffsetDateTime>=sqlx::query_scalar("UPDATE work_item_lifecycle_maintenance SET owner=$1,token=$2,lease_expires_at=clock_timestamp()+($3::bigint*interval '1 millisecond'),quiesced=false WHERE singleton AND owner IS NOT NULL AND lease_expires_at<=clock_timestamp() RETURNING lease_expires_at")
+        let expiry:Option<OffsetDateTime>=sqlx::query_scalar("UPDATE work_item_lifecycle_maintenance SET owner=$1,token=$2,lease_expires_at=clock_timestamp()+($3::bigint*interval '1 millisecond'),quiesced=false,recovery_reservation_id=NULL,recovery_reservation_token=NULL WHERE singleton AND owner IS NOT NULL AND lease_expires_at<=clock_timestamp() RETURNING lease_expires_at")
             .bind(owner).bind(token).bind(ms).fetch_optional(&mut *tx).await?;
         let expiry = expiry.ok_or_else(invalid)?;
         finish(&mut tx, expiry).await?;
@@ -210,7 +223,9 @@ impl WorkItemStore {
     /// Record a fresh external stop-all-writers attestation for recovery of
     /// exactly one reclaimed reservation. A database lease is not proof that
     /// earlier filesystem workers have stopped, and this method grants no
-    /// authority to adopt, delete, or acknowledge their filesystem work.
+    /// authority to adopt, delete, or acknowledge their filesystem work. It
+    /// keeps generic quiescence unset and binds the attestation to the exact
+    /// reservation, so generic maintenance stays unavailable.
     pub async fn confirm_lifecycle_recovery_quiescence(
         &self,
         pool: &PgPool,
@@ -273,9 +288,38 @@ impl WorkItemStore {
             sqlx::query("INSERT INTO work_item_lifecycle_attestations(token,actor,reason,backup_reference,recovery_reservation_id,recovery_reservation_token,stop_all_writers,inspection_complete) VALUES($1,$2,$3,$4,$5,$6,true,true)")
                 .bind(fence.token).bind(&fence.owner).bind(attestation.reason).bind(attestation.backup_reference).bind(recovery_id).bind(recovery_token).execute(&mut *tx).await?;
         }
-        sqlx::query("UPDATE work_item_lifecycle_maintenance SET quiesced=true WHERE singleton")
-            .execute(&mut *tx)
-            .await?;
+        // Recovery and generic quiescence are mutually exclusive fence states:
+        // constraint (2) on the maintenance table forbids a recovery binding
+        // together with quiesced=true, so a recovery attestation can never be
+        // mistaken for authorization of unrelated generic maintenance pages,
+        // acknowledgements, or a second reservation.
+        match recovery {
+            Some(reservation) => {
+                let bound_id: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT recovery_reservation_id FROM work_item_lifecycle_maintenance WHERE singleton",
+                )
+                .fetch_one(&mut *tx)
+                .await?;
+                let bound_token: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT recovery_reservation_token FROM work_item_lifecycle_maintenance WHERE singleton",
+                )
+                .fetch_one(&mut *tx)
+                .await?;
+                if bound_id.is_some() && (bound_id != Some(reservation.id) || bound_token != Some(reservation.token)) {
+                    return Err(invalid());
+                }
+                sqlx::query("UPDATE work_item_lifecycle_maintenance SET quiesced=false,recovery_reservation_id=$1,recovery_reservation_token=$2 WHERE singleton")
+                    .bind(reservation.id)
+                    .bind(reservation.token)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            None => {
+                sqlx::query("UPDATE work_item_lifecycle_maintenance SET quiesced=true,recovery_reservation_id=NULL,recovery_reservation_token=NULL WHERE singleton")
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
         finish(&mut tx, expiry).await?;
         if let Some(expiry) = recovery_expiry {
             crate::admin_media_reservation::check_expiry(&mut tx, expiry).await?;
@@ -463,7 +507,7 @@ impl WorkItemStore {
         if !complete {
             return Err(invalid());
         }
-        sqlx::query("UPDATE work_item_lifecycle_maintenance SET owner=NULL,token=NULL,lease_expires_at=NULL,quiesced=false,cursor_id=NULL,pass_complete=false WHERE singleton").execute(&mut *tx).await?;
+        sqlx::query("UPDATE work_item_lifecycle_maintenance SET owner=NULL,token=NULL,lease_expires_at=NULL,quiesced=false,recovery_reservation_id=NULL,recovery_reservation_token=NULL,cursor_id=NULL,pass_complete=false WHERE singleton").execute(&mut *tx).await?;
         finish(&mut tx, expiry).await?;
         tx.commit().await?;
         Ok(())

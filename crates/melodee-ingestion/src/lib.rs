@@ -80,9 +80,10 @@ pub use custody::{
     test_custody_producers_quiescent,
 };
 pub use deletion::{
-    DeletedReleasePaths, ReleaseDeletionError, delete_release_storage,
-    delete_release_storage_with_holds, delete_storage_files, delete_storage_files_with_holds,
-    delete_unpublished_storage, delete_unpublished_storage_with_holds,
+    DeletedReleasePaths, ReleaseDeletionError, delete_purged_inbound_occurrence,
+    delete_release_storage, delete_release_storage_with_holds, delete_storage_files,
+    delete_storage_files_with_holds, delete_unpublished_storage,
+    delete_unpublished_storage_with_holds,
 };
 
 pub use error::{IngestionError, Result};

@@ -2901,6 +2901,69 @@ async fn maintenance_page_intent_is_exact_immutable_and_never_adopted_by_new_epo
             .is_err(),
         "attestation and lookup do not authorize adoption"
     );
+    // Recovery quiescence binds the fence to exactly one reservation and never
+    // claims generic quiescence, so no unrelated maintenance path may proceed.
+    let fenced: (bool, Option<Uuid>) = sqlx::query_as(
+        "SELECT quiesced,recovery_reservation_id FROM work_item_lifecycle_maintenance WHERE singleton",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(fenced, (false, Some(current.id())));
+    assert!(
+        store
+            .next_lifecycle_provision_item(&db.pool, &fresh_fence)
+            .await
+            .is_err(),
+        "recovery attestation must not authorize unrelated maintenance"
+    );
+    assert!(
+        store
+            .prepare_maintenance_deletion_page(
+                &db.pool,
+                &fresh_fence,
+                &current,
+                melodee_persistence::AdminDeletionPageKind::Media,
+                Uuid::now_v7()
+            )
+            .await
+            .is_err(),
+        "recovery attestation must not authorize new page creation"
+    );
+    assert!(
+        store
+            .acknowledge_maintenance_media_page(
+                &db.pool,
+                &fresh_fence,
+                &current,
+                Uuid::now_v7(),
+                &[e.object_id]
+            )
+            .await
+            .is_err(),
+        "recovery attestation must not authorize acknowledgement"
+    );
+    assert!(
+        store
+            .quarantine_maintenance_deletion_page(&db.pool, &fresh_fence, &current, &intent)
+            .await
+            .is_err(),
+        "recovery attestation must not authorize page unlink disposition changes"
+    );
+    assert!(
+        store
+            .begin_maintenance_admin_media_reservation(
+                &db.pool,
+                &[],
+                &[other.internal_id],
+                "operator",
+                time::Duration::minutes(1),
+                &fresh_fence
+            )
+            .await
+            .is_err(),
+        "recovery attestation must not authorize a second reservation"
+    );
     let (intents, entries): (i64, i64) = sqlx::query_as(
         "SELECT intents,entries FROM admin_media_page_intent_budget WHERE singleton",
     )

@@ -4,11 +4,11 @@
 //! paths below the configured staging and canonical roots. The underlying
 //! descriptor-relative operation refuses symlinks and special files.
 
-use std::path::{Component, Path, PathBuf};
+use std::{io, path::{Component, Path, PathBuf}};
 
 use thiserror::Error;
 
-use crate::secure_fs::remove_directory_tree;
+use crate::secure_fs;
 
 // Match the persistence reservation's maximum work-item scope.
 const MAX_LIFECYCLE_HOLDS: usize = 128;
@@ -38,6 +38,10 @@ pub enum ReleaseDeletionError {
     Admission(#[from] tokio::sync::AcquireError),
     #[error("too many protected lifecycle holds for one deletion")]
     TooManyLifecycleHolds,
+    #[error("the inbound source occurrence {path} is not empty; nothing was removed")]
+    InboundNotEmpty { path: PathBuf },
+    #[error("the inbound source occurrence {path} changed identity during removal; moved bytes retained")]
+    InboundIdentityChanged { path: PathBuf },
 }
 
 /// Removes the canonical bundle and optional retained staging tree.
@@ -278,8 +282,48 @@ fn owned_path(
     Ok(root.join(path))
 }
 
+/// Removes one empty producer-owned inbound occurrence directory after a
+/// durable (`begin_pre_catalog_purge`) reservation. The operation is
+/// descriptor-relative and no-follow: the leaf must be an empty directory; it
+/// is moved to a unique no-replace quarantine sibling, re-verified against
+/// the pinned occurrence, re-checked for emptiness, and only then removed.
+/// A producer that adds bytes in any window therefore cannot lose them: the
+/// moved directory stays under its quarantine name and the error retains the
+/// reservation for reviewed recovery. A missing leaf is idempotent success.
+pub async fn delete_purged_inbound_occurrence(
+    root: &Path,
+    relative: &str,
+) -> Result<(), ReleaseDeletionError> {
+    let root = root.to_path_buf();
+    let relative = relative.to_owned();
+    run_with_lifecycle_holds(Vec::new(), move || {
+        let path = owned_path(&root, &relative, "inbound")?;
+        match secure_fs::remove_empty_occurrence_tree(&root, &relative) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(source) => {
+                let kind = source.kind();
+                Err(match kind {
+                    io::ErrorKind::DirectoryNotEmpty => {
+                        ReleaseDeletionError::InboundNotEmpty { path }
+                    }
+                    io::ErrorKind::InvalidData => {
+                        ReleaseDeletionError::InboundIdentityChanged { path }
+                    }
+                    _ => ReleaseDeletionError::Remove {
+                        kind: "inbound",
+                        path,
+                        source,
+                    },
+                })
+            }
+        }
+    })
+    .await
+}
+
 fn remove_owned_tree(path: &Path, kind: &'static str) -> Result<(), ReleaseDeletionError> {
-    match remove_directory_tree(path) {
+    match secure_fs::remove_directory_tree(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(source) => Err(ReleaseDeletionError::Remove {
@@ -466,5 +510,62 @@ mod tests {
             Err(ReleaseDeletionError::InvalidPath { .. })
         ));
         assert!(outside.exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn removes_only_verified_empty_inbound_occurrences() {
+        let root = tempfile::tempdir().expect("root");
+        let occurrence = root.path().join("releases").join("never acquired");
+        std::fs::create_dir_all(&occurrence).expect("empty occurrence");
+
+        delete_purged_inbound_occurrence(root.path(), "releases/never acquired")
+            .await
+            .expect("removed empty occurrence");
+        assert!(!occurrence.exists());
+        assert!(root.path().join("releases").exists());
+
+        // A missing leaf is idempotent success.
+        delete_purged_inbound_occurrence(root.path(), "releases/never acquired")
+            .await
+            .expect("idempotent");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn refuses_nonempty_inbound_occurrences_and_retains_bytes() {
+        let root = tempfile::tempdir().expect("root");
+        let occurrence = root.path().join("producer");
+        std::fs::create_dir(&occurrence).expect("occurrence");
+        std::fs::write(occurrence.join("track.flac"), b"producer bytes").expect("bytes");
+
+        let result = delete_purged_inbound_occurrence(root.path(), "producer").await;
+        assert!(matches!(result, Err(ReleaseDeletionError::InboundNotEmpty { .. })));
+        assert_eq!(
+            std::fs::read(occurrence.join("track.flac")).expect("bytes retained"),
+            b"producer bytes"
+        );
+        // Nothing was moved or removed; the occurrence keeps its exact name.
+        assert!(occurrence.is_dir());
+        // After the producer clears its content, removal succeeds.
+        std::fs::remove_file(occurrence.join("track.flac")).expect("clear content");
+        delete_purged_inbound_occurrence(root.path(), "producer")
+            .await
+            .expect("removed after cleared");
+        assert!(!occurrence.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn refuses_inbound_occurrence_leaf_symlinks() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().expect("root");
+        let outside = root.path().join("outside");
+        std::fs::create_dir(&outside).expect("outside");
+        let link = root.path().join("alias");
+        symlink(&outside, &link).expect("link");
+
+        let result = delete_purged_inbound_occurrence(root.path(), "alias").await;
+        assert!(matches!(result, Err(ReleaseDeletionError::Remove { .. })));
+        assert!(outside.exists());
+        assert!(link.exists());
     }
 }

@@ -1785,3 +1785,47 @@ Additional current execution state:
   exact allowlisted schema and test injection: the fix passed 14 Python tests
   and independent static re-review. A fresh build proof and owned diagnostic
   rerun remain pending; the earlier failed evidence must be retained.
+- Handoff restart (2026-11-27, main `9b6a9e4`): completed the interrupted
+  recovery-specific quiescence isolation. `confirm_lifecycle_quiescence_inner`
+  now persists the exact recovery reservation in
+  `work_item_lifecycle_maintenance.recovery_reservation_id/token` and keeps
+  `quiesced=false` (matching migration 0071 CHECK 2), while a generic
+  confirmation still sets `quiesced=true` and clears any recovery binding;
+  `reclaim` and `finish` clear stale bindings. The read-only recovery locator
+  (`inspect_admin_quarantine_recovery`, `read_admin_quarantine_binding`) gained
+  a dedicated `fences_readonly_recovery`/`lock_fence_recovery` path that
+  accepts either generic quiescence or the exact live recovery reservation;
+  every mutating page/acknowledgement/leaf fence is unchanged and still
+  requires generic quiescence. A database lease expiry remains explicitly
+  non-proofs of worker termination. Focused evidence on a fresh owned
+  database: `catalog_hard_delete::maintenance_page_intent_is_exact_immutable_
+  and_never_adopted_by_new_epoch` now additionally asserts the persisted
+  binding state `(quiesced=false, recovery_reservation_id=current)`, that a
+  recovery attestation cannot authorize `next_lifecycle_provision_item`, new
+  page creation, `acknowledge_maintenance_media_page`, quarantine disposition
+  changes, or a second reservation, plus the preexisting wrong/stale/incomplete
+  and double-attestation cases; pass 1/1. The full binary passed 23/23
+  (1 ignored). With `--features test-support`, all 135 ingestion lib tests
+  passed again after the fence change.
+- Handoff restart (cont.): implemented the guarded no-handoff admin purge path
+  so `purge_removes_inbound_source_when_no_staging_handoff_exists` passes
+  without restoring the unsafe baseline unlink. New production primitive
+  `melodee_ingestion::delete_purged_inbound_occurrence` (secure_fs
+  `remove_empty_occurrence_tree`): pins the configured inbound root and every
+  intermediate directory no-follow, requires a directory leaf, refuses a
+  non-empty occurrence, moves the leaf to a unique no-replace dot-quarantine
+  sibling within the pinned parent, fsyncs the parent, re-opens the moved
+  name and compares `dev/ino` against the pinned occurrence, re-verifies
+  emptiness, unlinks only the verified empty directory, and fsyncs again.
+  Missing leaves are idempotent; any observed change leaves moved bytes under
+  the quarantine name and fails closed. The purge route resolves the inbound
+  path and pre-checks directory/emptiness before creating the durable guard
+  (avoiding guard leaks on the common refusal), then performs the bounded,
+  admitted removal under `begin_pre_catalog_purge` before other storage
+  deletions and the fenced DB completion. Evidence: ingestion lib
+  `deletion::tests` 9/9 (new: empty-occurrence removal+idempotency,
+  non-empty refusal with retained bytes and later success, leaf symlink
+  refusal); `melodee-server --test admin_purge_api` 11/11 including both
+  no-handoff regressions on a fresh owned database. The production-wide
+  occurrence protocol for non-empty inbound removals (bytes verification,
+  retained-source reobservation) remains PARTIAL and is unchanged by this.

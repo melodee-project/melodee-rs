@@ -15,9 +15,10 @@ mod platform {
     use rustix::{
         fd::OwnedFd,
         fs::{
-            AtFlags, CWD, Dir, FileType, Mode, OFlags, RenameFlags, fstat, linkat, mkdirat, openat,
-            renameat_with, statat, unlinkat,
+            AtFlags, CWD, Dir, FileType, Mode, OFlags, RenameFlags, fstat, fsync, linkat, mkdirat,
+            openat, renameat_with, statat, unlinkat,
         },
+        io::Errno,
     };
 
     use super::*;
@@ -290,6 +291,149 @@ mod platform {
         drop(directory);
         unlinkat(&parent, name.as_bytes(), AtFlags::REMOVEDIR).map_err(io_error)
     }
+
+    /// Removes one verified-empty producer-owned inbound occurrence from a
+    /// configured root through descriptor-relative operations. The leaf must
+    /// be an empty directory. It is moved (no-follow, no-replace) to a unique
+    /// quarantine sibling, the moved identity is re-opened and compared
+    /// against the pinned occurrence, emptiness is re-verified, and only then
+    /// the emptied directory is unlinked and the parent fsynced. Any observed
+    /// change fails without deleting anything: bytes moved so far stay under
+    /// the quarantine name for operator review.
+    pub fn remove_empty_occurrence_tree(root: &Path, relative: &str) -> io::Result<()> {
+        const MAX_COMPONENTS: usize = 64;
+        let mut names: Vec<&OsStr> = Vec::new();
+        for component in Path::new(relative).components() {
+            match component {
+                Component::Normal(name) => names.push(name),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "inbound occurrence relative path contains a non-normal component",
+                    ));
+                }
+            }
+        }
+        let Some(leaf_name) = names.pop() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "inbound occurrence relative path is empty",
+            ));
+        };
+        if names.len() > MAX_COMPONENTS {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "inbound occurrence relative path is too deep",
+            ));
+        }
+        let mut parent = open_directory(root)?;
+        for name in &names {
+            match open_child_directory(&parent, name) {
+                Ok(child) => parent = child,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(error),
+            }
+        }
+        let leaf = match openat(
+            &parent,
+            leaf_name.as_bytes(),
+            OFlags::RDONLY
+                | OFlags::DIRECTORY
+                | OFlags::CLOEXEC
+                | OFlags::NOFOLLOW
+                | OFlags::NONBLOCK,
+            Mode::empty(),
+        ) {
+            Ok(leaf) => leaf,
+            Err(error) if error == Errno::NOENT => return Ok(()),
+            Err(error) => return Err(io_error(error)),
+        };
+        let pinned = fstat(&leaf).map_err(io_error)?;
+        let mut entries = Dir::read_from(&leaf).map_err(io_error)?;
+        for entry in &mut entries {
+            let entry = entry.map_err(io_error)?;
+            let name = entry.file_name();
+            if name.to_bytes() == b"." || name.to_bytes() == b".." {
+                continue;
+            }
+            // Producer content appeared in the pinned occurrence: removing it
+            // would destroy bytes. Refuse and retain everything.
+            return Err(io::Error::new(
+                io::ErrorKind::DirectoryNotEmpty,
+                format!(
+                    "inbound occurrence still contains {}",
+                    std::ffi::OsStr::from_bytes(name.to_bytes()).to_string_lossy()
+                ),
+            ));
+        }
+        let mut renamed = false;
+        let mut quarantine_name = std::ffi::OsString::new();
+        for attempt in 0..5 {
+            quarantine_name = format!(".melodee-purge-{}", uuid::Uuid::now_v7().simple()).into();
+            match renameat_with(
+                &parent,
+                leaf_name.as_bytes(),
+                &parent,
+                quarantine_name.as_bytes(),
+                RenameFlags::NOREPLACE,
+            ) {
+                Ok(()) => {
+                    renamed = true;
+                    break;
+                }
+                Err(error) if error == Errno::NOENT => return Ok(()),
+                Err(error) if error == Errno::EXIST && attempt + 1 < 5 => {}
+                Err(error) => return Err(io_error(error)),
+            }
+        }
+        if !renamed {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a quarantine name",
+            ));
+        }
+        fsync(&parent).map_err(io_error)?;
+        let moved = openat(
+            &parent,
+            quarantine_name.as_bytes(),
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map_err(io_error)?;
+        let moved_stat = fstat(&moved).map_err(io_error)?;
+        if (moved_stat.st_dev, moved_stat.st_ino) != (pinned.st_dev, pinned.st_ino) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "quarantined inbound occurrence identity changed; moved bytes retained",
+            ));
+        }
+        // Only this process knows the quarantine name; re-verify that the
+        // exact moved occurrence is still empty before unlinking it.
+        let mut moved_entries = Dir::read_from(&moved).map_err(io_error)?;
+        for entry in &mut moved_entries {
+            let entry = entry.map_err(io_error)?;
+            let name = entry.file_name();
+            if name.to_bytes() == b"." || name.to_bytes() == b".." {
+                continue;
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::DirectoryNotEmpty,
+                format!(
+                    "quarantined inbound occurrence still contains {}",
+                    std::ffi::OsStr::from_bytes(name.to_bytes()).to_string_lossy()
+                ),
+            ));
+        }
+        // unlinkat does not accept REMOVEDIR together with NOFOLLOW; the
+        // pinned parent descriptor already provides the no-follow guarantee.
+        match unlinkat(&parent, quarantine_name.as_bytes(), AtFlags::REMOVEDIR) {
+            Ok(()) => {}
+            Err(error) if error == Errno::NOENT => {}
+            Err(error) => return Err(io_error(error)),
+        }
+        fsync(&parent).map_err(io_error)?;
+        Ok(())
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
@@ -361,12 +505,16 @@ mod platform {
     pub fn remove_directory_tree(_path: &Path) -> io::Result<()> {
         Err(unsupported())
     }
+
+    pub fn remove_empty_occurrence_tree(_root: &Path, _relative: &str) -> io::Result<()> {
+        Err(unsupported())
+    }
 }
 
 pub(crate) use platform::{
     create_directory_tree, link_new, mkdir_new, mkdir_private_child, open_child_directory,
     open_directory, open_lock, open_read, open_write, open_write_new, remove_directory_tree,
-    rename_child_noreplace, rename_noreplace, unlink_file,
+    remove_empty_occurrence_tree, rename_child_noreplace, rename_noreplace, unlink_file,
 };
 
 #[cfg(all(

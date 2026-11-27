@@ -141,6 +141,22 @@ async fn fences(
         admin_media_reservation::verify_lease(tx, reservation).await?,
     ))
 }
+/// Read-only recovery fencing: the same owner plus either generic quiescence
+/// or an exact recovery-reservation binding. Deliberately does not grant the
+/// mutation paths any authority; they keep using [`fences`].
+async fn fences_readonly_recovery(
+    tx: &mut Transaction<'_, Postgres>,
+    fence: &LifecycleMaintenance,
+    reservation: &AdminMediaReservation,
+) -> Result<(time::OffsetDateTime, time::OffsetDateTime), WorkStoreError> {
+    if fence.owner != reservation.owner {
+        return Err(invalid());
+    }
+    Ok((
+        work_item_lifecycle::lock_fence_recovery(tx, fence, reservation.id).await?,
+        admin_media_reservation::verify_lease(tx, reservation).await?,
+    ))
+}
 async fn finish(
     tx: &mut Transaction<'_, Postgres>,
     expiry: (time::OffsetDateTime, time::OffsetDateTime),
@@ -166,7 +182,7 @@ impl WorkItemStore {
         id: Uuid,
     ) -> Result<AdminQuarantineRecovery, WorkStoreError> {
         let mut tx = pool.begin().await?;
-        let expiry = fences(&mut tx, fence, reservation).await?;
+        let expiry = fences_readonly_recovery(&mut tx, fence, reservation).await?;
         let page_id: Option<Uuid> = sqlx::query_scalar("SELECT p.id FROM admin_media_quarantine_intents q JOIN admin_media_page_intents p ON p.id=q.intent_id JOIN admin_media_snapshots s ON s.reservation_id=p.reservation_id AND s.revision=p.snapshot_revision AND s.root_set_revision=p.root_set_revision JOIN admin_media_root_sets r ON r.revision=p.root_set_revision AND r.reservation_id=p.reservation_id WHERE q.id=$1 AND p.reservation_id=$2 AND q.root_set_revision=p.root_set_revision AND q.maintenance_token=p.maintenance_token AND q.reservation_token=p.reservation_token AND r.maintenance_token=p.maintenance_token AND r.reservation_token=p.reservation_token AND p.state IN ('intent','uncertain') AND s.state='frozen' FOR SHARE OF q,p,s,r")
             .bind(id).bind(reservation.id).fetch_optional(&mut *tx).await?;
         let page_id = page_id.ok_or_else(invalid)?;
@@ -206,7 +222,7 @@ impl WorkItemStore {
         id: Uuid,
     ) -> Result<AdminQuarantineBinding, WorkStoreError> {
         let mut tx = pool.begin().await?;
-        let expiry = fences(&mut tx, fence, reservation).await?;
+        let expiry = fences_readonly_recovery(&mut tx, fence, reservation).await?;
         let binding:Option<AdminQuarantineBinding>=sqlx::query_as("SELECT q.id,q.ordinal,q.root_set_revision,q.source_generation,q.source_parent_generation,q.quarantine_root_role,q.quarantine_parent_relative_hex,q.quarantine_parent_generation,q.mount_id,q.leaf_name,q.state FROM admin_media_quarantine_intents q JOIN admin_media_page_intents p ON p.id=q.intent_id JOIN admin_media_snapshots s ON s.reservation_id=p.reservation_id AND s.revision=p.snapshot_revision AND s.root_set_revision=p.root_set_revision JOIN admin_media_root_sets r ON r.revision=p.root_set_revision AND r.reservation_id=p.reservation_id WHERE q.id=$1 AND q.intent_id=$2 AND p.reservation_id=$3 AND q.root_set_revision=$4 AND q.maintenance_token=$5 AND q.reservation_token=$6 AND p.maintenance_token=$5 AND p.reservation_token=$6 AND r.maintenance_token=$5 AND r.reservation_token=$6 AND p.snapshot_revision=$7 AND p.state IN ('intent','uncertain') AND s.state='frozen' FOR SHARE OF q,p,s,r")
             .bind(id).bind(page.id).bind(reservation.id).bind(page.root_set_revision.ok_or_else(invalid)?).bind(fence.token).bind(reservation.token).bind(page.snapshot_revision).fetch_optional(&mut *tx).await?;
         let binding = binding.ok_or_else(invalid)?;
