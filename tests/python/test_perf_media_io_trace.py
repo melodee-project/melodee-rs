@@ -108,6 +108,24 @@ class MediaIoTraceTests(unittest.TestCase):
             if status.exists():
                 self.assertIn("Z (zombie)", status.read_text())
 
+    @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "pidfd_open")
+                         and hasattr(os, "P_PIDFD") and hasattr(signal, "pidfd_send_signal"), "Linux pidfd required")
+    def test_exited_leader_does_not_leave_live_descendant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pid_file = root / "child.pid"
+            child = "import os,sys,time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(60)"
+            parent = ("import pathlib,subprocess,sys,time; "
+                      "subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2]],process_group=0); "
+                      "deadline=time.monotonic()+5; "
+                      "exec(\"while not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(0.01)\")")
+            perf.run_child([sys.executable, "-c", parent, child, str(pid_file)], root,
+                           perf.clean_environment(root), 10)
+            pid = int(pid_file.read_text())
+            status = Path(f"/proc/{pid}/status")
+            if status.exists():
+                self.assertIn("Z (zombie)", status.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

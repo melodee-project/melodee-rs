@@ -27,10 +27,10 @@ impl<S: tracing::Subscriber> Layer<S> for SqlStatementCounter {
     }
 }
 
-fn peak_rss_kib() -> Option<u64> {
+fn rss_kib(field: &str) -> Option<u64> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
     status.lines().find_map(|line| {
-        line.strip_prefix("VmHWM:")
+        line.strip_prefix(field)
             .and_then(|value| value.split_whitespace().next())
             .and_then(|value| value.parse().ok())
     })
@@ -134,7 +134,12 @@ async fn representative_incremental_search_outbox() {
         .expect("select probe Track");
     // Each trial writes matching revision changes and mixed outbox obligations
     // atomically; production workers perform all timed drain operations.
-    for trial in 1..=3 {
+    // Mirror the sweep to reduce (not eliminate) systematic warm-cache and
+    // growing-index order bias. Each trial still reuses the same generation.
+    for (trial_index, batch_size) in [16, 64, 256, 512, 512, 256, 64, 16].into_iter().enumerate() {
+        let trial = trial_index + 1;
+        let mut trial_config = config.clone();
+        trial_config.claim_batch_size = batch_size;
         let previous_id = sqlx::query_scalar::<_, i64>(
             "SELECT coalesce(max(id), 0) FROM catalog_projection_outbox",
         )
@@ -172,7 +177,8 @@ async fn representative_incremental_search_outbox() {
         .expect("seed bounded mixed outbox")
         .rows_affected();
         assert!(expected > 0);
-        let peak_before_kib = peak_rss_kib();
+        let peak_before_kib = rss_kib("VmHWM:");
+        let current_before_kib = rss_kib("VmRSS:");
         println!("BEGIN_INCREMENTAL_OUTBOX_MEASUREMENT trial={trial}");
         SQL_STATEMENTS.store(0, Ordering::Relaxed);
         COUNT_SQL.store(true, Ordering::Relaxed);
@@ -183,7 +189,7 @@ async fn representative_incremental_search_outbox() {
         let mut acknowledged = 0_u64;
         while acknowledged < expected {
             let pass_started = Instant::now();
-            let pass = apply_outbox_once(&config, &pool)
+            let pass = apply_outbox_once(&trial_config, &pool)
                 .await
                 .expect("drain outbox pass");
             samples_ms.push(pass_started.elapsed().as_secs_f64() * 1000.0);
@@ -245,12 +251,13 @@ async fn representative_incremental_search_outbox() {
                 "build_debug_assertions":cfg!(debug_assertions),
                 "fixture":{"artists":artists, "releases":releases, "tracks":tracks},
                 "events":expected, "artist_events":artist_events, "release_events":release_events,
-                "track_events":track_events, "batches":samples_ms.len(), "batch_size":config.claim_batch_size,
+                "track_events":track_events, "batches":samples_ms.len(), "batch_size":trial_config.claim_batch_size,
                 "elapsed_seconds":elapsed, "events_per_second":expected as f64 / elapsed,
                 "sqlx_statement_events":statement_count, "max_end_to_end_outbox_lag_ms":lag_ms,
                 "batch_elapsed_ms":samples_ms, "query_elapsed_ms":query_samples_ms,
-                "peak_process_rss_before_kib":peak_before_kib, "peak_process_rss_after_kib":peak_rss_kib(),
-                "limitations":"three consecutive trials on one process and catalog; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS is process high-water including the full rebuild"
+                "peak_process_rss_before_kib":peak_before_kib, "peak_process_rss_after_kib":rss_kib("VmHWM:"),
+                "current_process_rss_before_kib":current_before_kib, "current_process_rss_after_kib":rss_kib("VmRSS:"),
+                "limitations":"eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials"
             })
         );
     }

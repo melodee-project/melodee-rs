@@ -250,9 +250,10 @@ async fn normalize_one(
             .map(|_| NormalizationOutcome::Failed);
         }
     };
+    let owned = crate::acquisition::GuardedOwnedSource::existing(owned);
     let task_owned = owned.clone();
     let verification = normalization_filesystem(
-        move || verify_owned_source(&task_owned),
+        move || verify_owned_source(&task_owned.source),
         &cancellation,
         &shutdown,
     )
@@ -272,7 +273,7 @@ async fn normalize_one(
         .await
         .map(|_| NormalizationOutcome::Failed);
     }
-    let source_root = owned.root.clone();
+    let source_root = owned.source.root.clone();
 
     let stored = store.get_manifest(pool, item.id).await?;
     let Some(manifest_row) = stored else {
@@ -295,9 +296,13 @@ async fn normalize_one(
             IngestionError::Inspection(melodee_media::InspectionError::Serialization(e))
         })?;
     let task_root = source_root.clone();
+    let task_owned = owned.clone();
     let ready_marker = ingestion.ready_marker_name.clone();
     let before_snapshot = match normalization_filesystem(
-        move || snapshot_release_directory(&task_root, &ready_marker),
+        move || {
+            let _stage_ownership = task_owned;
+            snapshot_release_directory(&task_root, &ready_marker)
+        },
         &cancellation,
         &shutdown,
     )
@@ -339,6 +344,7 @@ async fn normalize_one(
     };
 
     let normalization_root = source_root.clone();
+    let normalization_owned = owned.clone();
     let admission = crate::admission::heavy_ingestion();
     tokio::pin!(admission);
     let mut cancel_poll = time::interval(TokioDuration::from_millis(100));
@@ -362,6 +368,7 @@ async fn normalize_one(
     };
     let normalization_result = tokio::task::spawn_blocking(move || {
         let _permit = permit;
+        let _stage_ownership = normalization_owned;
         normalize_release(&mut manifest, &normalization_root, &options)
     })
     .await;
@@ -405,9 +412,13 @@ async fn normalize_one(
         normalization.provenance.worker_id = Some(worker.as_str().to_owned());
     }
     let task_root = source_root.clone();
+    let task_owned = owned.clone();
     let ready_marker = ingestion.ready_marker_name.clone();
     let after_snapshot = match normalization_filesystem(
-        move || snapshot_release_directory(&task_root, &ready_marker),
+        move || {
+            let _stage_ownership = task_owned;
+            snapshot_release_directory(&task_root, &ready_marker)
+        },
         &cancellation,
         &shutdown,
     )
@@ -435,7 +446,7 @@ async fn normalize_one(
     } else {
         let task_owned = owned.clone();
         normalization_filesystem(
-            move || verify_owned_source(&task_owned),
+            move || verify_owned_source(&task_owned.source),
             &cancellation,
             &shutdown,
         )

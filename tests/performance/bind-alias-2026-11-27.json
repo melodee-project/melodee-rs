@@ -1,0 +1,18 @@
+{
+  "build_provenance_sha256": "ddcc816b1dbb5e26d9fec63a14f97823c477622c32b40cfb5ce1090d025834eb",
+  "exact_test_passed": false,
+  "exit_code": 1,
+  "fixture_basename": ".melodee-bind-alias-6ddd1ybr",
+  "fixture_cleanup": "retained_for_operator_inspection",
+  "fixture_entry_unchanged": true,
+  "launcher_sha256": "6c7832a842ceeadb69c8a98162d858e1b990863bfe699ba8722e0e4b9ca0e12b",
+  "limitations": [
+    "test-only namespace topology check, not production custody",
+    "fixture is retained to avoid pathname replacement cleanup races"
+  ],
+  "parent_mount_namespace_unchanged": true,
+  "parent_pid_namespace_unchanged": true,
+  "parent_user_namespace_unchanged": true,
+  "status": "failed",
+  "test_binary_sha256": "f3e483f4f579a0bd797e54d7896a7437c3a8e8dc29e3c57e8c4df528756aedf4"
+}

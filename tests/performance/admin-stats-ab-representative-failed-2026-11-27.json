@@ -1,0 +1,19 @@
+{
+  "baseline_proof_sha256": "0b7bfe210f79e2852741875b7def2882c291c22fd2b00b05996c224f1a4c5dfd",
+  "candidate_proof_sha256": "5c4c3ea8857e718e1b45d31564d435925848b74fcec24af8f452a3cf1b795083",
+  "cli_proof_sha256": "f60b66bbf5696faa728f2e87d16bd66c50d77e547209ced2380ca151d2671d01",
+  "error": "RuntimeError",
+  "fixture": {
+    "artists": 35000,
+    "releases": 50000,
+    "tracks": 600000
+  },
+  "limitations": [
+    "no output result or per-route performance measurements were retained",
+    "synthetic fixture; in-process route; uncontrolled warm cache and shared host"
+  ],
+  "performance_samples_recorded": false,
+  "reason": "not captured; original collector intentionally suppressed raw output",
+  "seed_seconds": 189.1,
+  "status": "failed_before_result"
+}

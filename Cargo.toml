@@ -6,6 +6,7 @@ members = [
   "crates/melodee-auth",
   "crates/melodee-application",
   "crates/melodee-catalog",
+  "crates/melodee-custody",
   "crates/melodee-domain",
   "crates/melodee-persistence",
   "crates/melodee-ingestion",
@@ -23,6 +24,7 @@ license = "MIT"
 authors = ["Melodee Project contributors"]
 
 [workspace.dependencies]
+composefs-ioctls = { version = "=0.10.0", default-features = false }
 cap-std = "=4.0.3"
 cap-fs-ext = "=4.0.3"
 axum = { version = "=0.8.9", features = ["http1", "json", "multipart", "tokio"] }

@@ -13,7 +13,9 @@ mod common;
 use std::sync::Arc;
 
 use common::TestDb;
-use melodee_ingestion::{CandidateSnapshot, DirectoryGateOutcome, DirectoryProcessingGate};
+use melodee_ingestion::{
+    CandidateSnapshot, DirectoryGateOutcome, DirectoryProcessingGate, test_stage_lifetime_hold,
+};
 use melodee_persistence::{
     ScriptRegistryStore, ScriptRunOutcome, ScriptRunStore, ScriptUpsert, SettingsStore,
 };
@@ -263,7 +265,11 @@ async fn gate_maps_deny_to_skip_with_the_script_message() {
     std::fs::create_dir_all(&root).expect("temp root");
     let snapshot = snapshot_of(&[("01 - a.mp3", 1024), ("02 - b.mp3", 1024)]);
 
-    let outcome = gate.evaluate(&root, &snapshot).await;
+    let legacy_outcome = gate.evaluate(&root, &snapshot).await;
+    let outcome = gate
+        .evaluate_guarded(&root, &snapshot, test_stage_lifetime_hold(Arc::new(())))
+        .await;
+    assert_eq!(legacy_outcome, outcome);
     assert_eq!(
         outcome,
         DirectoryGateOutcome::Skip {
@@ -274,8 +280,8 @@ async fn gate_maps_deny_to_skip_with_the_script_message() {
         .list_recent(&db.pool, None, 50, 0)
         .await
         .expect("runs");
-    assert_eq!(runs.len(), 1);
-    assert_eq!(runs[0].outcome, "deny");
+    assert_eq!(runs.len(), 2);
+    assert!(runs.iter().all(|run| run.outcome == "deny"));
     std::fs::remove_dir_all(&root).ok();
     db.drop().await;
 }
@@ -294,7 +300,11 @@ async fn gate_allows_when_the_ctx_satisfies_the_script() {
     std::fs::create_dir_all(&root).expect("temp root");
     let snapshot = snapshot_of(&[("01 - a.mp3", 2 * 1024 * 1024)]);
 
-    let outcome = gate.evaluate(&root, &snapshot).await;
+    let legacy_outcome = gate.evaluate(&root, &snapshot).await;
+    let outcome = gate
+        .evaluate_guarded(&root, &snapshot, test_stage_lifetime_hold(Arc::new(())))
+        .await;
+    assert_eq!(legacy_outcome, outcome);
     assert_eq!(outcome, DirectoryGateOutcome::Allow);
     assert_eq!(
         ScriptRunStore::new()
@@ -329,7 +339,17 @@ async fn gate_is_inert_while_scripting_is_disabled() {
     std::fs::create_dir_all(&root).expect("temp root");
     let snapshot = snapshot_of(&[("01 - a.mp3", 2048)]);
 
-    let outcome = gate.evaluate(&root, &snapshot).await;
+    assert_eq!(
+        gate.evaluate(&root, &snapshot).await,
+        DirectoryGateOutcome::Allow
+    );
+    let outcome = gate
+        .evaluate_guarded(
+            &root.join("missing"),
+            &snapshot,
+            test_stage_lifetime_hold(Arc::new(())),
+        )
+        .await;
     assert_eq!(outcome, DirectoryGateOutcome::Allow);
     assert!(
         ScriptRunStore::new()
@@ -341,6 +361,53 @@ async fn gate_is_inert_while_scripting_is_disabled() {
     );
     std::fs::remove_dir_all(&root).ok();
     db.drop().await;
+}
+
+#[tokio::test]
+async fn guarded_gate_without_enabled_hook_does_not_read_stage() {
+    let db = TestDb::create("scripting_guarded_empty").await;
+    enable_scripting(&db).await;
+    let gate = ScriptingDirectoryGate::new(Arc::new(ScriptingService::new(db.pool.clone())));
+    let missing = std::env::temp_dir().join(format!("melodee-absent-{}", uuid::Uuid::now_v7()));
+    let snapshot = snapshot_of(&[("track.mp3", 1)]);
+    let outcome = gate
+        .evaluate_guarded(&missing, &snapshot, test_stage_lifetime_hold(Arc::new(())))
+        .await;
+    assert_eq!(outcome, DirectoryGateOutcome::Allow);
+    assert!(!missing.exists());
+    assert!(
+        ScriptRunStore::new()
+            .list_recent(&db.pool, None, 50, 0)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn legacy_gate_defaults_to_refusing_protected_paths() {
+    struct LegacyGate(std::sync::atomic::AtomicBool);
+    impl DirectoryProcessingGate for LegacyGate {
+        fn evaluate<'a>(
+            &'a self,
+            _root: &'a std::path::Path,
+            _snapshot: &'a CandidateSnapshot,
+        ) -> melodee_ingestion::DirectoryGateFuture<'a> {
+            self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async { DirectoryGateOutcome::Allow })
+        }
+    }
+    let gate = LegacyGate(std::sync::atomic::AtomicBool::new(false));
+    let result = gate
+        .evaluate_guarded(
+            std::path::Path::new("/unavailable-protected-stage"),
+            &snapshot_of(&[]),
+            test_stage_lifetime_hold(Arc::new(())),
+        )
+        .await;
+    assert!(matches!(result, DirectoryGateOutcome::Skip { .. }));
+    assert!(!gate.0.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test]

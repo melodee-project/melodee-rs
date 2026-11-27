@@ -325,6 +325,77 @@ async fn purge_one(
         .await
         .map_err(|error| failure("store_error", error.to_string()))?;
 
+    // A pathname can be replaced by a producer after an identity check.
+    // Until occurrence-bound removal exists, refuse a purge that would drain
+    // an inbound path, before deleting any of the other storage trees.
+    if handoff.is_none()
+        && let Some((root, relative)) = inbound_path(state, &item).await?
+    {
+        match tokio::fs::symlink_metadata(root.join(relative)).await {
+            Ok(_) => {
+                return Err(failure(
+                    "source_custody_required",
+                    "inbound source removal requires an occurrence-bound custody operation",
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(failure("storage_unavailable", error.to_string())),
+        }
+    }
+    // Validate deterministic configuration and path failures before creating
+    // a durable intent. Once a filesystem operation starts, errors retain it.
+    if let Some(publication) = &publication {
+        if state.canonical_root.is_none() {
+            return Err(failure(
+                "storage_unavailable",
+                "canonical storage is not configured; refusing a partial purge",
+            ));
+        }
+        if safe_relative(&publication.plan.target_relative_path).is_none() {
+            return Err(failure(
+                "unsafe_path",
+                "publication storage path is not a safe relative directory",
+            ));
+        }
+    }
+    if let Some(handoff) = &handoff {
+        if state.staging_root.is_none() {
+            return Err(failure(
+                "storage_unavailable",
+                "staging storage is not configured; refusing a partial purge",
+            ));
+        }
+        if safe_relative(&handoff.staging_relative_path).is_none() {
+            return Err(failure(
+                "unsafe_path",
+                "staging storage path is not a safe relative directory",
+            ));
+        }
+    }
+    let guard = WorkItemStore
+        .begin_pre_catalog_purge(&state.admin.pool, item.id, &admin.public_api_id.to_string())
+        .await
+        .map_err(|error| match error {
+            WorkStoreError::RetainedFreshIntakeRequired => failure(
+                "source_retained",
+                "an active retained source prevents this purge",
+            ),
+            WorkStoreError::Cataloged(_) => failure(
+                "cataloged",
+                "this work item is bound to a catalog Release; use Release Review deletion instead",
+            ),
+            other => failure("purge_guard_failed", other.to_string()),
+        })?;
+    if guard.item().source_library_id != item.source_library_id
+        || guard.item().source_path != item.source_path
+        || guard.item().current_path != item.current_path
+    {
+        return Err(failure(
+            "purge_guard_failed",
+            "work item path changed while reserving purge",
+        ));
+    }
+
     let mut paths = serde_json::Map::new();
     if let Some(publication) = &publication {
         let Some(root) = state.canonical_root.as_deref() else {
@@ -353,20 +424,10 @@ async fn purge_one(
     delete_owned(&state.work_area_base, &work_relative).await?;
     paths.insert("workArea".to_owned(), json!(work_relative));
 
-    // Once a staging handoff exists, the inbound path may have been released
-    // for a new arrival; deleting it could remove an unrelated active source.
-    // The durable staging tree is the authoritative copy in that case.
-    if handoff.is_none()
-        && let Some((root, relative)) = inbound_path(state, &item).await?
-    {
-        delete_owned(&root, &relative).await?;
-        paths.insert("inbound".to_owned(), json!(relative));
-    }
-
     WorkItemStore
-        .purge_pre_catalog_work_item(
+        .purge_pre_catalog_work_item_guarded(
             &state.admin.pool,
-            item.id,
+            &guard,
             &admin.public_api_id.to_string(),
             reason,
             serde_json::Value::Object(paths.clone()),

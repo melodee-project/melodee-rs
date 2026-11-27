@@ -1,0 +1,22 @@
+{
+  "build_provenance_sha256": "9ca942a7e35bd79da00076243482ad2ac8469aea35b3f52a3b8c930826158e23",
+  "exit_code": 0,
+  "known_failure_reasons": [],
+  "limitations": [
+    "test-only adapter, not production custody",
+    "not a performance benchmark",
+    "namespace exit removes private mounts; SIGKILL may leave owned directories"
+  ],
+  "mount_failure": null,
+  "panic_locations": [],
+  "parent_mount_namespace_unchanged": true,
+  "parent_pid_namespace_unchanged": true,
+  "parent_user_namespace_unchanged": true,
+  "sealed_tree_success_marker": true,
+  "sealed_tree_unsupported_marker": false,
+  "status": "verified",
+  "test_binary_sha256": "9a2346ac2215d529b0efb039fd5118248c1b06820954374c76266964858d9089",
+  "test_filter": "sealed-tree",
+  "test_functions_passed": 1,
+  "unsupported_branch_messages": 0
+}

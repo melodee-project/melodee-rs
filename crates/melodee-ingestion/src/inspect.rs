@@ -225,8 +225,9 @@ async fn inspect_one(
             .map(|_| InspectionOutcome::Failed);
         }
     };
+    let owned = crate::acquisition::GuardedOwnedSource::existing(owned);
     let task_owned = owned.clone();
-    let verification = crate::admission::run(move || verify_owned_source(&task_owned))
+    let verification = crate::admission::run(move || verify_owned_source(&task_owned.source))
         .await
         .map_err(IngestionError::InspectionTask)?;
     if let Err(error) = verification {
@@ -244,31 +245,34 @@ async fn inspect_one(
         .await
         .map(|_| InspectionOutcome::Failed);
     }
-    let root = owned.root.clone();
+    let root = owned.source.root.clone();
     let task_root = root.clone();
+    let task_owned = owned.clone();
     let ready_marker = ingestion.ready_marker_name.clone();
-    let before =
-        match crate::admission::run(move || snapshot_release_directory(&task_root, &ready_marker))
+    let before = match crate::admission::run(move || {
+        let _stage_ownership = task_owned;
+        snapshot_release_directory(&task_root, &ready_marker)
+    })
+    .await
+    .map_err(IngestionError::InspectionTask)?
+    {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return record_inspection_failure(
+                store,
+                pool,
+                worker,
+                item.id,
+                work_config,
+                "inspection.staged_source_unreadable",
+                &error.to_string(),
+                FailureClass::Permanent,
+                now + started.elapsed(),
+            )
             .await
-            .map_err(IngestionError::InspectionTask)?
-        {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                return record_inspection_failure(
-                    store,
-                    pool,
-                    worker,
-                    item.id,
-                    work_config,
-                    "inspection.staged_source_unreadable",
-                    &error.to_string(),
-                    FailureClass::Permanent,
-                    now + started.elapsed(),
-                )
-                .await
-                .map(|_| InspectionOutcome::SourceChanged);
-            }
-        };
+            .map(|_| InspectionOutcome::SourceChanged);
+        }
+    };
     // `directoryProcessingStart` hook: the candidate is stable (the
     // snapshot signature was just re-verified) and about to enter media
     // inspection — the Rust pipeline point equivalent to the legacy
@@ -279,7 +283,11 @@ async fn inspect_one(
     // (durable decision contract); legacy `delete` stays rewritten
     // to deny.
     if let Some(gate) = gate {
-        match gate.evaluate(&root, &before).await {
+        let verdict = match owned.lifecycle_hold() {
+            Some(hold) => gate.evaluate_guarded(&root, &before, hold).await,
+            None => gate.evaluate(&root, &before).await,
+        };
+        match verdict {
             DirectoryGateOutcome::Allow => {}
             DirectoryGateOutcome::Skip { reason } => {
                 info!(
@@ -317,6 +325,7 @@ async fn inspect_one(
     let source_snapshot_id = expected.as_ref().map(|snapshot| snapshot.id);
     let source_signature = expected.as_ref().map(|snapshot| snapshot.signature.clone());
     let inspection_root = root.clone();
+    let inspection_owned = owned.clone();
     let inspection_signature = source_signature.clone();
     let inspection_started = Instant::now();
     let permit = crate::admission::heavy_ingestion()
@@ -324,6 +333,7 @@ async fn inspect_one(
         .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
     let report_result = tokio::task::spawn_blocking(move || {
         let _permit = permit;
+        let _stage_ownership = inspection_owned;
         inspect_release(
             work_item_id,
             source_library_id,
@@ -373,34 +383,37 @@ async fn inspect_one(
     };
 
     let task_root = root.clone();
+    let task_owned = owned.clone();
     let ready_marker = ingestion.ready_marker_name.clone();
-    let after =
-        match crate::admission::run(move || snapshot_release_directory(&task_root, &ready_marker))
+    let after = match crate::admission::run(move || {
+        let _stage_ownership = task_owned;
+        snapshot_release_directory(&task_root, &ready_marker)
+    })
+    .await
+    .map_err(IngestionError::InspectionTask)?
+    {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return record_inspection_failure(
+                store,
+                pool,
+                worker,
+                item.id,
+                work_config,
+                "inspection.staged_source_unreadable",
+                &error.to_string(),
+                FailureClass::Permanent,
+                now + started.elapsed(),
+            )
             .await
-            .map_err(IngestionError::InspectionTask)?
-        {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                return record_inspection_failure(
-                    store,
-                    pool,
-                    worker,
-                    item.id,
-                    work_config,
-                    "inspection.staged_source_unreadable",
-                    &error.to_string(),
-                    FailureClass::Permanent,
-                    now + started.elapsed(),
-                )
-                .await
-                .map(|_| InspectionOutcome::SourceChanged);
-            }
-        };
+            .map(|_| InspectionOutcome::SourceChanged);
+        }
+    };
     let source_changed = if after.signature != before.signature {
         true
     } else {
         let task_owned = owned.clone();
-        crate::admission::run(move || verify_owned_source(&task_owned))
+        crate::admission::run(move || verify_owned_source(&task_owned.source))
             .await
             .map_err(IngestionError::InspectionTask)?
             .is_err()

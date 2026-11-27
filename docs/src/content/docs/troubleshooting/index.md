@@ -132,6 +132,63 @@ Implemented normalization checks:
   diagnosing a worker. A target conflict is never overwritten; inspect the durable work-item and
   publication journal evidence before correcting the external filesystem state.
 
+## Interrupted pre-catalog purge
+
+A purge interrupted after its guard was recorded can leave the affected inbound occurrence
+blocked. The guard does not establish which filesystem operations completed. Preserve the source,
+staging, work, and canonical media and do not repeat a purge to clear it.
+
+1. Enter a maintenance window. Stop and fence **all** Melodee servers and workers, including
+   processes on other hosts; verify they cannot resume during recovery. An expired database lease
+   alone does not prove an old process has stopped.
+2. Back up the database and affected media, then inspect the source, staging, work, and canonical
+   locations and the work-item history. If the result is ambiguous, keep the guard and investigate.
+3. Run `melodee-cli ingest purge-guards`. The output includes work item IDs, guard owners, fencing
+   tokens, source identities, and intent times. Continue with `--after <last-work-item-id>` when
+   the page contains 100 entries. Protect this output because it contains media paths.
+4. After reviewing the exact guard and deciding that releasing it is safe, run:
+
+   ```text
+   melodee-cli ingest recover-purge-guard --work-item-id <id> --fence-token <token> --guard-owner <owner> --actor <operator> --reason '<inspection and decision>' --stopped-all-writers --inspected-media --backup-verified --confirm
+   ```
+
+The command requires every attestation and rejects a changed guard or a live processing lease. It
+records the supplied operator and reason in the database audit and releases only the matching
+guard; it does not delete media or work-item data or repeat the purge. The operator name is an
+assertion by the local administrator, not a verified login. The command cannot prove remote
+processes have stopped; maintain the fence until the evidence is reviewed and recovery is complete.
+
+The current pre-catalog purge also refuses an existing inbound source when there is no staging
+handoff, reporting `source_custody_required` before deleting any storage. This temporary
+restriction remains until occurrence-bound source removal is available. Preserve the source and
+do not bypass the restriction by deleting it manually.
+
+## Retained inbound sources awaiting verification
+
+Run `melodee-cli ingest retained-obligations` from an authorized administrative
+shell to list active retained-source obligations. The command is read-only and
+returns at most 100 entries by default; `--limit` accepts 1–128. For another
+page, pass the previous response's `nextAfter` value as `--after <work-item-id>`.
+When the last page has been read, start again from the beginning if a complete
+current view is needed: new entries can arrive before a previously read cursor.
+
+Each entry identifies the work item, source library when present, exact stored
+source path and path format, verification state, retry or unreadable reason and
+count, any unsupported-directory reason and retry time, next due time, and
+lease state. The JSON output may contain sensitive media paths;
+restrict access to it. Non-Unicode names are represented by their reversible
+`//melodee-unix-hex:` or `//melodee-windows-u16:` encoding. Preserve the exact
+JSON value rather than decoding it through a lossy display. Historical format-0
+paths containing the replacement character are ambiguous and require review;
+do not guess the original bytes.
+
+`baseline_change_pending` or an `awaiting_intake` reason means the changed
+source remains held for further safe intake. Listing it does not create a new
+work item, verify the source, or authorize deletion or movement. Preserve the
+source and its evidence; safe copy-only intake for this case is still under
+development. A lease or due time is database evidence and does not prove an
+old process is running or stopped.
+
 ## Policy evaluation checks
 
 - Run `melodee-cli policy config` and `melodee-cli policy rules` to confirm the configured immutable

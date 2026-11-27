@@ -24,6 +24,63 @@ use crate::config::WorkEngineConfig;
 use crate::error::WorkStoreError;
 use crate::worker::WorkerId;
 
+/// A processing claim and its opaque epoch, captured by the claim transaction.
+#[derive(Debug)]
+pub struct ProtectedClaim {
+    item: ReleaseWorkItem,
+    epoch: ProtectedClaimEpoch,
+}
+impl ProtectedClaim {
+    pub fn item(&self) -> &ReleaseWorkItem {
+        &self.item
+    }
+    pub fn into_parts(self) -> (ReleaseWorkItem, ProtectedClaimEpoch) {
+        (self.item, self.epoch)
+    }
+}
+/// An unforgeable-in-process token for one particular processing lease.
+#[derive(Debug, Clone)]
+pub struct ProtectedClaimEpoch {
+    pub(crate) item_id: Uuid,
+    pub(crate) owner: String,
+    pub(crate) epoch: Uuid,
+}
+
+/// An exclusive durable intent fencing destructive purge of an occurrence.
+/// Its token is opaque and cannot be reconstructed by an unrelated caller.
+#[derive(Debug)]
+pub struct InboundPurgeGuard {
+    item: ReleaseWorkItem,
+    token: Uuid,
+}
+
+impl InboundPurgeGuard {
+    /// Work item captured under the same lock as the purge intent.
+    pub fn item(&self) -> &ReleaseWorkItem {
+        &self.item
+    }
+}
+
+/// Durable purge intent visible to an administrator during maintenance.
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+pub struct InboundPurgeGuardInfo {
+    pub work_item_id: Uuid,
+    pub source_library_id: Option<Uuid>,
+    pub source_path: String,
+    pub guard_owner: String,
+    pub fence_token: Uuid,
+    #[serde(with = "time::serde::rfc3339")]
+    pub intent_at: OffsetDateTime,
+}
+
+/// Operator assertions required before releasing an interrupted purge intent.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub struct PurgeGuardRecoveryAttestation {
+    pub writers_stopped: bool,
+    pub storage_inspected: bool,
+    pub backup_verified: bool,
+}
+
 /// Rolling-window failure/completion counts for dashboard aggregation
 ///. Durable facts only: a "failed in window" item is one
 /// currently in `failed` whose last update is inside the window; a
@@ -205,6 +262,9 @@ pub struct StagingHandoff {
     pub intended_at: OffsetDateTime,
     pub staged_at: Option<OffsetDateTime>,
     pub inbound_removed_at: Option<OffsetDateTime>,
+    /// Source bytes are intentionally retained and must never be drained by
+    /// the ordinary staging cleanup path.
+    pub retained_source: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -263,6 +323,7 @@ struct StagingHandoffRow {
     intended_at: OffsetDateTime,
     staged_at: Option<OffsetDateTime>,
     inbound_removed_at: Option<OffsetDateTime>,
+    retained_source: bool,
 }
 
 impl TryFrom<StagingHandoffRow> for StagingHandoff {
@@ -283,6 +344,7 @@ impl TryFrom<StagingHandoffRow> for StagingHandoff {
             intended_at: row.intended_at,
             staged_at: row.staged_at,
             inbound_removed_at: row.inbound_removed_at,
+            retained_source: row.retained_source,
         })
     }
 }
@@ -305,6 +367,8 @@ pub(crate) struct WorkItemRow {
     lease_owner: Option<String>,
     lease_acquired_at: Option<OffsetDateTime>,
     lease_expires_at: Option<OffsetDateTime>,
+    #[sqlx(default)]
+    protected_attempt_lease_epoch: Option<Uuid>,
     latest_settling_snapshot_id: Option<i64>,
     stable_since: Option<OffsetDateTime>,
     last_observed_at: Option<OffsetDateTime>,
@@ -628,7 +692,209 @@ pub(crate) async fn inbound_path_is_unambiguous(
     ).bind(id).fetch_one(&mut **tx).await?)
 }
 
+async fn lock_inbound_occurrence(
+    tx: &mut Transaction<'_, Postgres>,
+    library: Option<Uuid>,
+    path: &str,
+) -> Result<(), WorkStoreError> {
+    sqlx::query("SELECT lock_inbound_occurrence($1,$2)")
+        .bind(library)
+        .bind(path)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn active_retained_occurrence(
+    tx: &mut Transaction<'_, Postgres>,
+    library: Option<Uuid>,
+    path: &str,
+) -> Result<bool, WorkStoreError> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbound_retained_sources WHERE source_library_id IS NOT DISTINCT FROM $1 AND status='active' AND ((ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\") OR (source_path_format=0 AND strpos(source_path,chr(65533))>0)))")
+        .bind(library).bind(path).fetch_one(&mut **tx).await?)
+}
+
+pub(crate) async fn active_purge_guard(
+    tx: &mut Transaction<'_, Postgres>,
+    library: Option<Uuid>,
+    path: &str,
+) -> Result<bool, WorkStoreError> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbound_occurrence_purge_guards WHERE source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\") OR EXISTS(SELECT 1 FROM admin_media_reservation_items WHERE source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\")")
+        .bind(library).bind(path).fetch_one(&mut **tx).await?)
+}
+
+pub(crate) async fn try_lock_unguarded_occurrence(
+    tx: &mut Transaction<'_, Postgres>,
+    item: &ReleaseWorkItem,
+) -> Result<(), WorkStoreError> {
+    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(1869834357,hashtext(COALESCE($1::uuid::text,'__default__') || '|' || $2::text))")
+        .bind(item.source_library_id).bind(&item.source_path).fetch_one(&mut **tx).await?;
+    if !locked {
+        return Err(WorkStoreError::InvalidRequest("inbound occurrence is busy"));
+    }
+    if active_purge_guard(tx, item.source_library_id, &item.source_path).await? {
+        return Err(WorkStoreError::InvalidRequest(
+            "inbound occurrence purge is active",
+        ));
+    }
+    Ok(())
+}
+
+/// Lock the occurrence before the item, matching retained-obligation creation.
+async fn lock_item_with_occurrence(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<ReleaseWorkItem, WorkStoreError> {
+    let hint: Option<(Option<Uuid>, String)> =
+        sqlx::query_as("SELECT source_library_id,source_path FROM release_work_items WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let (library, path) = hint.ok_or(WorkStoreError::NotFound(id))?;
+    lock_inbound_occurrence(tx, library, &path).await?;
+    let item = lock_for_update(tx, id).await?;
+    if item.source_library_id != library || item.source_path != path {
+        return Err(WorkStoreError::InvalidRequest(
+            "inbound occurrence binding changed",
+        ));
+    }
+    Ok(item)
+}
+
 impl WorkItemStore {
+    /// Reserve an inbound occurrence before any purge filesystem operation.
+    /// An interrupted intent remains durable and requires explicit repair.
+    pub async fn begin_pre_catalog_purge(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<InboundPurgeGuard, WorkStoreError> {
+        if actor.trim().is_empty() || actor.len() > 512 {
+            return Err(WorkStoreError::InvalidRequest("invalid purge actor"));
+        }
+        let mut tx = pool.begin().await?;
+        let item = lock_item_with_occurrence(&mut tx, id).await?;
+        ensure_ordinary_custody(&mut tx, id).await?;
+        if inbound_path_requires_review(&item.source_path) {
+            return Err(WorkStoreError::InvalidRequest(
+                "legacy or encoded inbound path history requires audited retention",
+            ));
+        }
+        if active_retained_occurrence(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::RetainedFreshIntakeRequired);
+        }
+        if active_purge_guard(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence purge is already active",
+            ));
+        }
+        let others: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM release_work_items WHERE id<>$3 AND inbound_active AND source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\")")
+            .bind(item.source_library_id).bind(&item.source_path).bind(id).fetch_one(&mut *tx).await?;
+        if others {
+            return Err(WorkStoreError::InvalidRequest(
+                "multiple work items share this inbound occurrence",
+            ));
+        }
+        let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM release_work_items WHERE (id=$3 OR inbound_active) AND source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\" AND lease_expires_at>clock_timestamp())")
+            .bind(item.source_library_id).bind(&item.source_path).bind(id).fetch_one(&mut *tx).await?;
+        if live {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence has active processing",
+            ));
+        }
+        let cataloged: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM catalog_imports WHERE work_item_id=$1)",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if cataloged {
+            return Err(WorkStoreError::Cataloged(id));
+        }
+        let token = Uuid::now_v7();
+        sqlx::query("INSERT INTO inbound_occurrence_purge_guards(work_item_id,source_library_id,source_path,guard_owner,fence_token) VALUES($1,$2,$3,$4,$5)")
+            .bind(id).bind(item.source_library_id).bind(&item.source_path).bind(actor).bind(token).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(InboundPurgeGuard { item, token })
+    }
+
+    /// List at most 100 durable purge intents for maintenance review.
+    pub async fn list_pre_catalog_purge_guards(
+        &self,
+        pool: &PgPool,
+        after: Option<Uuid>,
+    ) -> Result<Vec<InboundPurgeGuardInfo>, WorkStoreError> {
+        Ok(sqlx::query_as::<_, InboundPurgeGuardInfo>("SELECT work_item_id,source_library_id,source_path,guard_owner,fence_token,intent_at FROM inbound_occurrence_purge_guards WHERE ($1::uuid IS NULL OR work_item_id>$1) ORDER BY work_item_id LIMIT 100")
+            .bind(after).fetch_all(pool).await?)
+    }
+
+    /// Release only a specifically reviewed guard. Callers must first stop all
+    /// writers and inspect affected storage: the database cannot establish
+    /// whether a crashed process already performed filesystem mutations.
+    pub async fn recover_pre_catalog_purge_guard(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        fence_token: Uuid,
+        expected_guard_owner: &str,
+        actor: &str,
+        reason: &str,
+        attestation: PurgeGuardRecoveryAttestation,
+    ) -> Result<(), WorkStoreError> {
+        if expected_guard_owner.trim().is_empty()
+            || actor.trim().is_empty()
+            || reason.trim().is_empty()
+            || expected_guard_owner.len() > 512
+            || actor.len() > 512
+            || reason.len() > 4096
+            || !attestation.writers_stopped
+            || !attestation.storage_inspected
+            || !attestation.backup_verified
+        {
+            return Err(WorkStoreError::InvalidRequest(
+                "invalid purge guard recovery evidence",
+            ));
+        }
+        let mut tx = pool.begin().await?;
+        let hint: Option<InboundPurgeGuardInfo> = sqlx::query_as("SELECT work_item_id,source_library_id,source_path,guard_owner,fence_token,intent_at FROM inbound_occurrence_purge_guards WHERE work_item_id=$1")
+            .bind(work_item_id).fetch_optional(&mut *tx).await?;
+        let hint = hint.ok_or(WorkStoreError::NotFound(work_item_id))?;
+        lock_inbound_occurrence(&mut tx, hint.source_library_id, &hint.source_path).await?;
+        let guard: Option<InboundPurgeGuardInfo> = sqlx::query_as("SELECT work_item_id,source_library_id,source_path,guard_owner,fence_token,intent_at FROM inbound_occurrence_purge_guards WHERE work_item_id=$1 FOR UPDATE")
+            .bind(work_item_id).fetch_optional(&mut *tx).await?;
+        let guard = guard.ok_or(WorkStoreError::NotFound(work_item_id))?;
+        if guard.fence_token != fence_token
+            || guard.guard_owner != expected_guard_owner
+            || guard.source_library_id != hint.source_library_id
+            || guard.source_path != hint.source_path
+        {
+            return Err(WorkStoreError::InvalidRequest(
+                "purge guard recovery evidence changed",
+            ));
+        }
+        let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM release_work_items WHERE (id=$3 OR inbound_active) AND source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\" AND lease_expires_at>clock_timestamp())")
+            .bind(guard.source_library_id).bind(&guard.source_path).bind(work_item_id).fetch_one(&mut *tx).await?;
+        if live {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence has active processing",
+            ));
+        }
+        sqlx::query("INSERT INTO catalog_audit_events(event_id,entity_type,entity_id,event_type,actor,reason,payload,created_at) VALUES($1,'release_work_item',$2,'work_item_purge_guard_released',$3,$4,$5,clock_timestamp())")
+            .bind(Uuid::now_v7()).bind(work_item_id).bind(actor).bind(reason)
+            .bind(serde_json::json!({"guard_owner":guard.guard_owner,"fence_token":guard.fence_token,"intent_at":guard.intent_at.to_string(),"attestation":attestation}))
+            .execute(&mut *tx).await?;
+        let removed = sqlx::query("DELETE FROM inbound_occurrence_purge_guards WHERE work_item_id=$1 AND fence_token=$2 AND guard_owner=$3")
+            .bind(work_item_id).bind(fence_token).bind(expected_guard_owner).execute(&mut *tx).await?;
+        if removed.rows_affected() != 1 {
+            return Err(WorkStoreError::InvalidRequest(
+                "purge guard recovery evidence changed",
+            ));
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Persists a newly discovered work item plus its `created` event,
     /// atomically.
     #[instrument(skip_all, fields(work_item_id = %item.id, correlation_id = %item.correlation_id))]
@@ -638,6 +904,16 @@ impl WorkItemStore {
         item: &ReleaseWorkItem,
     ) -> Result<(), WorkStoreError> {
         let mut tx = pool.begin().await?;
+        crate::work_item_lifecycle::admit_runtime(&mut tx).await?;
+        lock_inbound_occurrence(&mut tx, item.source_library_id, &item.source_path).await?;
+        if active_purge_guard(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence purge is active",
+            ));
+        }
+        if active_retained_occurrence(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::RetainedFreshIntakeRequired);
+        }
         sqlx::query(
             "INSERT INTO release_work_items (
                 id, api_key, source_library_id, target_library_id, source_path,
@@ -719,14 +995,19 @@ impl WorkItemStore {
         fence: Option<&crate::DiscoveryScanFence>,
     ) -> Result<(ReleaseWorkItem, bool), WorkStoreError> {
         let mut tx = pool.begin().await?;
+        crate::work_item_lifecycle::admit_runtime(&mut tx).await?;
         crate::discovery_scan::lock_fence(&mut tx, fence).await?;
         // Serialize exact occurrence identity before INSERT. The hash index
         // accelerates lookup but never substitutes for full path equality.
-        sqlx::query("SELECT lock_inbound_occurrence($1, $2)")
-            .bind(item.source_library_id)
-            .bind(&item.source_path)
-            .execute(&mut *tx)
-            .await?;
+        lock_inbound_occurrence(&mut tx, item.source_library_id, &item.source_path).await?;
+        if active_purge_guard(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence purge is active",
+            ));
+        }
+        if active_retained_occurrence(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::RetainedFreshIntakeRequired);
+        }
         if let Some(existing) = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items WHERE source_library_id IS NOT DISTINCT FROM $1
              AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2)
@@ -879,9 +1160,94 @@ impl WorkItemStore {
         source_generation: &str,
         now: OffsetDateTime,
     ) -> Result<StagingHandoff, WorkStoreError> {
+        self.begin_staging_handoff_inner(
+            pool,
+            id,
+            worker,
+            staging_relative_path,
+            source_generation,
+            now,
+            None,
+        )
+        .await
+    }
+
+    /// Atomically enter durable protected custody before filesystem work.
+    pub async fn begin_protected_staging_handoff(
+        &self,
+        pool: &PgPool,
+        claim: &ProtectedClaimEpoch,
+        worker: &WorkerId,
+        staging_relative_path: &str,
+        source_generation: &str,
+        now: OffsetDateTime,
+    ) -> Result<StagingHandoff, WorkStoreError> {
+        self.begin_staging_handoff_inner(
+            pool,
+            claim.item_id,
+            worker,
+            staging_relative_path,
+            source_generation,
+            now,
+            Some(claim),
+        )
+        .await
+    }
+
+    async fn begin_staging_handoff_inner(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        staging_relative_path: &str,
+        source_generation: &str,
+        now: OffsetDateTime,
+        protected: Option<&ProtectedClaimEpoch>,
+    ) -> Result<StagingHandoff, WorkStoreError> {
         let mut tx = pool.begin().await?;
-        let item = lock_for_update(&mut tx, id).await?;
+        let item = lock_item_with_occurrence(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_item_not_admin_reserved(&mut tx, id).await?;
+        let protected_expiry = if let Some(claim) = protected {
+            if claim.item_id != id || claim.owner != worker.as_str() {
+                return Err(WorkStoreError::LeaseExpired(id));
+            }
+            let row: Option<(bool,OffsetDateTime)> = sqlx::query_as("SELECT protected_custody_required,lease_expires_at FROM release_work_items WHERE id=$1 AND lease_owner=$2 AND protected_attempt_lease_epoch=$3 AND lease_expires_at>clock_timestamp()")
+                .bind(id).bind(worker.as_str()).bind(claim.epoch).fetch_optional(&mut *tx).await?;
+            let (marked, expiry) = row.ok_or(WorkStoreError::LeaseExpired(id))?;
+            if !marked {
+                let prior: bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM release_work_item_staging_handoffs WHERE work_item_id=$1) OR EXISTS(SELECT 1 FROM inbound_custody_claims WHERE work_item_id=$1)").bind(id).fetch_one(&mut *tx).await?;
+                if prior {
+                    return Err(WorkStoreError::InvalidRequest(
+                        "existing custody must be resolved before protected staging",
+                    ));
+                }
+                sqlx::query(
+                    "UPDATE release_work_items SET protected_custody_required=true WHERE id=$1",
+                )
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            }
+            Some(expiry)
+        } else {
+            ensure_ordinary_custody(&mut tx, id).await?;
+            None
+        };
+        if active_purge_guard(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence purge is active",
+            ));
+        }
+        let retained =
+            active_retained_occurrence(&mut tx, item.source_library_id, &item.source_path).await?;
+        if retained {
+            let own_verified: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbound_retained_sources r JOIN release_work_item_staging_handoffs h ON h.work_item_id=r.work_item_id WHERE r.work_item_id=$1 AND r.status='active' AND h.retained_source AND h.status IN ('staged','inbound_removed'))")
+                .bind(id).fetch_one(&mut *tx).await?;
+            if !own_verified {
+                return Err(WorkStoreError::RetainedFreshIntakeRequired);
+            }
+        }
         if !inbound_path_is_unambiguous(&mut tx, id).await? {
             return Err(WorkStoreError::InvalidRequest(
                 "legacy inbound path is ambiguous and requires operator review",
@@ -913,6 +1279,15 @@ impl WorkItemStore {
             return Err(WorkStoreError::CorruptState(format!(
                 "staging path mismatch for work item {id}"
             )));
+        }
+        if let Some(expiry) = protected_expiry {
+            let live: bool = sqlx::query_scalar("SELECT $1::timestamptz>clock_timestamp()")
+                .bind(expiry)
+                .fetch_one(&mut *tx)
+                .await?;
+            if !live {
+                return Err(WorkStoreError::LeaseExpired(id));
+            }
         }
         tx.commit().await?;
         StagingHandoff::try_from(row)
@@ -1060,19 +1435,23 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, id).await?;
         let row = sqlx::query_as::<_, StagingHandoffRow>(
             "UPDATE release_work_item_staging_handoffs
              SET status = 'staged', method = $2, tree_hash = $3,
                  staged_at = COALESCE(staged_at, $4)
-             WHERE work_item_id = $1
+             WHERE work_item_id = $1 AND (NOT retained_source OR (method=$2 AND tree_hash=$3))
              RETURNING *",
         )
         .bind(id)
         .bind(method.as_str())
         .bind(tree_hash)
         .bind(now)
-        .fetch_one(&mut *tx)
-        .await?;
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(WorkStoreError::InvalidRequest(
+            "retained staging receipt conflicts",
+        ))?;
         tx.commit().await?;
         StagingHandoff::try_from(row)
     }
@@ -1110,18 +1489,24 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
-        sqlx::query(
+        ensure_ordinary_custody(&mut tx, id).await?;
+        let updated = sqlx::query(
             "UPDATE release_work_item_staging_handoffs
              SET status = $2,
                  inbound_removed_at = CASE WHEN $2 = 'inbound_removed'
                      THEN COALESCE(inbound_removed_at, $3) ELSE inbound_removed_at END
-             WHERE work_item_id = $1",
+             WHERE work_item_id = $1 AND NOT retained_source",
         )
         .bind(id)
         .bind(status)
         .bind(now)
         .execute(&mut *tx)
         .await?;
+        if updated.rows_affected() != 1 {
+            return Err(WorkStoreError::InvalidRequest(
+                "retained source cannot be marked removed or replaced",
+            ));
+        }
         sqlx::query(
             "UPDATE release_work_items SET inbound_active = false, updated_at = $2 WHERE id = $1",
         )
@@ -1167,6 +1552,16 @@ impl WorkItemStore {
     ) -> Result<bool, WorkStoreError> {
         let mut tx = pool.begin().await?;
         crate::discovery_scan::lock_fence(&mut tx, fence).await?;
+        lock_inbound_occurrence(&mut tx, source_library_id, source_path).await?;
+        if active_purge_guard(&mut tx, source_library_id, source_path).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence purge is active",
+            ));
+        }
+        if active_retained_occurrence(&mut tx, source_library_id, source_path).await? {
+            tx.commit().await?;
+            return Ok(true);
+        }
         let row = sqlx::query_as::<_, (Uuid, String)>(
             "SELECT w.id, h.source_generation
              FROM release_work_items w
@@ -1332,9 +1727,66 @@ impl WorkItemStore {
         generation_duration_ms: i64,
         now: OffsetDateTime,
     ) -> Result<(), WorkStoreError> {
+        self.publish_manifest_inner(
+            pool,
+            id,
+            worker,
+            manifest,
+            manifest_hash,
+            source_snapshot_id,
+            source_signature,
+            generation_duration_ms,
+            now,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn publish_manifest_protected(
+        &self,
+        pool: &PgPool,
+        claim: &ProtectedClaimEpoch,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        manifest_hash: &str,
+        source_snapshot_id: Option<i64>,
+        source_signature: Option<&str>,
+        generation_duration_ms: i64,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        self.publish_manifest_inner(
+            pool,
+            claim.item_id,
+            worker,
+            manifest,
+            manifest_hash,
+            source_snapshot_id,
+            source_signature,
+            generation_duration_ms,
+            now,
+            Some(claim),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn publish_manifest_inner(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        manifest_hash: &str,
+        source_snapshot_id: Option<i64>,
+        source_signature: Option<&str>,
+        generation_duration_ms: i64,
+        now: OffsetDateTime,
+        claim: Option<&ProtectedClaimEpoch>,
+    ) -> Result<(), WorkStoreError> {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
-        ensure_active_lease(&item, worker, now)?;
+        let fence_expiry = fence_stage_mutation(&mut tx, &item, worker, now, claim).await?;
         if item.state != IngestionState::Inspecting {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -1412,6 +1864,7 @@ impl WorkItemStore {
             })),
         )
         .await?;
+        finish_stage_fence(&mut tx, id, fence_expiry).await?;
         tx.commit().await?;
         info!(work_item_id = %id, manifest_hash, "manifest published");
         Ok(())
@@ -1428,19 +1881,66 @@ impl WorkItemStore {
         config: &WorkEngineConfig,
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
+        Ok(self
+            .claim_normalizing_mode(pool, worker, config, now, false)
+            .await?
+            .into_iter()
+            .map(|claim| claim.item)
+            .collect())
+    }
+
+    /// Return epochs atomically while excluding protected custody items.
+    pub async fn claim_ordinary_normalizing_with_epoch(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
+        self.claim_normalizing_mode(pool, worker, config, now, false)
+            .await
+    }
+
+    /// Atomically return the epoch for a normalization claim that may include
+    /// protected custody work. Callers must carry it through every operation.
+    pub async fn claim_normalizing_with_protected_epoch(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
+        self.claim_normalizing_mode(pool, worker, config, now, true)
+            .await
+    }
+
+    async fn claim_normalizing_mode(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+        protected_allowed: bool,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
         // Select candidates with row locks (skipped when locked by rivals).
         // Only normalizing items with expired/no leases are eligible.
-        let candidates =
-            crate::processing::claim_candidates(&mut tx, "normalization", config, now).await?;
+        let candidates = crate::processing::claim_candidates(
+            &mut tx,
+            "normalization",
+            config,
+            now,
+            protected_allowed,
+        )
+        .await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let row = sqlx::query_as::<_, WorkItemRow>(
                 "UPDATE release_work_items w
                  SET lease_owner = $1,
-                     lease_acquired_at = $2,
+                     lease_acquired_at = $2, protected_attempt_lease_epoch = gen_random_uuid(),
                      lease_expires_at = $3,
                      first_started_at = COALESCE(w.first_started_at, $2),
                      updated_at = $2
@@ -1464,6 +1964,9 @@ impl WorkItemStore {
             .bind(now)
             .execute(&mut *tx)
             .await?;
+            let epoch = row.protected_attempt_lease_epoch.ok_or_else(|| {
+                WorkStoreError::CorruptState("normalization claim has no epoch".to_owned())
+            })?;
             let item = ReleaseWorkItem::try_from(row)?;
             insert_event(
                 &mut tx,
@@ -1478,7 +1981,14 @@ impl WorkItemStore {
                 Some(serde_json::json!({ "lease_expires_at": lease_expiry.to_string() })),
             )
             .await?;
-            items.push(item);
+            items.push(ProtectedClaim {
+                epoch: ProtectedClaimEpoch {
+                    item_id: item.id,
+                    owner: worker.as_str().to_owned(),
+                    epoch,
+                },
+                item,
+            });
         }
         tx.commit().await?;
         if items.is_empty() {
@@ -1503,13 +2013,13 @@ impl WorkItemStore {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
         let candidates =
-            crate::processing::claim_candidates(&mut tx, "validation", config, now).await?;
+            crate::processing::claim_candidates(&mut tx, "validation", config, now, false).await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let row = sqlx::query_as::<_, WorkItemRow>(
                 "UPDATE release_work_items
-                 SET lease_owner = $1, lease_acquired_at = $2,
+                 SET lease_owner = $1, lease_acquired_at = $2, protected_attempt_lease_epoch = gen_random_uuid(),
                      lease_expires_at = $3, updated_at = $2
                  WHERE id = $4
                  RETURNING *",
@@ -1559,6 +2069,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Validating {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -1611,9 +2122,62 @@ impl WorkItemStore {
         duration_ms: u64,
         now: OffsetDateTime,
     ) -> Result<(), WorkStoreError> {
+        self.publish_normalization_inner(
+            pool,
+            id,
+            worker,
+            manifest,
+            manifest_hash,
+            source_file,
+            duration_ms,
+            now,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn publish_normalization_protected(
+        &self,
+        pool: &PgPool,
+        claim: &ProtectedClaimEpoch,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        manifest_hash: &str,
+        source_file: &str,
+        duration_ms: u64,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        self.publish_normalization_inner(
+            pool,
+            claim.item_id,
+            worker,
+            manifest,
+            manifest_hash,
+            source_file,
+            duration_ms,
+            now,
+            Some(claim),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn publish_normalization_inner(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        manifest_hash: &str,
+        source_file: &str,
+        duration_ms: u64,
+        now: OffsetDateTime,
+        claim: Option<&ProtectedClaimEpoch>,
+    ) -> Result<(), WorkStoreError> {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
-        ensure_active_lease(&item, worker, now)?;
+        let fence_expiry = fence_stage_mutation(&mut tx, &item, worker, now, claim).await?;
         if item.state != IngestionState::Normalizing {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -1695,6 +2259,7 @@ impl WorkItemStore {
             })),
         )
         .await?;
+        finish_stage_fence(&mut tx, id, fence_expiry).await?;
         tx.commit().await?;
         info!(work_item_id = %id, manifest_hash, "normalization published");
         Ok(())
@@ -1792,6 +2357,12 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, item.id).await?;
+        crate::admin_media_reservation::ensure_release_unreserved(
+            &mut tx,
+            publication.release_id.into_uuid(),
+        )
+        .await?;
         if item.state != IngestionState::Validating {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -1928,7 +2499,7 @@ impl WorkItemStore {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
         let candidates =
-            crate::processing::claim_candidates(&mut tx, "publication", config, now).await?;
+            crate::processing::claim_candidates(&mut tx, "publication", config, now, false).await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
@@ -1940,7 +2511,7 @@ impl WorkItemStore {
             let row = sqlx::query_as::<_, WorkItemRow>(
                 "UPDATE release_work_items
                  SET state = 'publishing', state_reason = $1,
-                     lease_owner = $2, lease_acquired_at = $3,
+                     lease_owner = $2, lease_acquired_at = $3, protected_attempt_lease_epoch = gen_random_uuid(),
                      lease_expires_at = $4, updated_at = $3
                  WHERE id = $5
                  RETURNING *",
@@ -2024,6 +2595,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Publishing {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -2119,6 +2691,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Publishing {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -2263,6 +2836,7 @@ impl WorkItemStore {
         }
 
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Publishing {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -2357,6 +2931,52 @@ impl WorkItemStore {
         deleted_paths: serde_json::Value,
         now: OffsetDateTime,
     ) -> Result<(), WorkStoreError> {
+        self.purge_pre_catalog_work_item_inner(
+            pool,
+            work_item_id,
+            actor,
+            reason,
+            deleted_paths,
+            now,
+            None,
+        )
+        .await
+    }
+
+    /// Finalize a filesystem purge only for its still-owned durable intent.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn purge_pre_catalog_work_item_guarded(
+        &self,
+        pool: &PgPool,
+        guard: &InboundPurgeGuard,
+        actor: &str,
+        reason: &str,
+        deleted_paths: serde_json::Value,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        self.purge_pre_catalog_work_item_inner(
+            pool,
+            guard.item.id,
+            actor,
+            reason,
+            deleted_paths,
+            now,
+            Some(guard),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn purge_pre_catalog_work_item_inner(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        actor: &str,
+        reason: &str,
+        deleted_paths: serde_json::Value,
+        now: OffsetDateTime,
+        guard: Option<&InboundPurgeGuard>,
+    ) -> Result<(), WorkStoreError> {
         if actor.trim().is_empty() || reason.trim().is_empty() {
             return Err(WorkStoreError::InvalidRequest("purge actor or reason"));
         }
@@ -2364,17 +2984,22 @@ impl WorkItemStore {
             return Err(WorkStoreError::InvalidRequest("purge path evidence"));
         }
         let mut tx = pool.begin().await?;
-        let row = sqlx::query_as::<_, (String, String)>(
-            "SELECT state, source_path FROM release_work_items WHERE id = $1 FOR UPDATE",
-        )
-        .bind(work_item_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        let Some((state, source_path)) = row else {
-            tx.rollback().await?;
-            return Err(WorkStoreError::NotFound(work_item_id));
-        };
-        if inbound_path_requires_review(&source_path) {
+        let item = lock_item_with_occurrence(&mut tx, work_item_id).await?;
+        if active_retained_occurrence(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::RetainedFreshIntakeRequired);
+        }
+        if let Some(guard) = guard {
+            let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbound_occurrence_purge_guards WHERE work_item_id=$1 AND fence_token=$2 AND guard_owner=$3 AND source_library_id IS NOT DISTINCT FROM $4 AND source_path COLLATE \"C\"=$5 COLLATE \"C\")")
+                .bind(work_item_id).bind(guard.token).bind(actor).bind(item.source_library_id).bind(&item.source_path).fetch_one(&mut *tx).await?;
+            if !valid {
+                return Err(WorkStoreError::InvalidRequest("purge guard changed"));
+            }
+        } else if active_purge_guard(&mut tx, item.source_library_id, &item.source_path).await? {
+            return Err(WorkStoreError::InvalidRequest(
+                "inbound occurrence purge is active",
+            ));
+        }
+        if inbound_path_requires_review(&item.source_path) {
             return Err(WorkStoreError::InvalidRequest(
                 "legacy or encoded inbound path history requires audited retention",
             ));
@@ -2384,8 +3009,6 @@ impl WorkItemStore {
         // value; the row lock above fences a concurrent transition, and the
         // catalog binding check below still refuses to remove a Release's
         // processing record through this path.
-        let _state = IngestionState::parse(&state)
-            .ok_or_else(|| WorkStoreError::CorruptState(state.clone()))?;
         let cataloged = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM catalog_imports WHERE work_item_id = $1)",
         )
@@ -2429,6 +3052,13 @@ impl WorkItemStore {
         if deleted.rows_affected() != 1 {
             tx.rollback().await?;
             return Err(WorkStoreError::NotFound(work_item_id));
+        }
+        if let Some(guard) = guard {
+            let cleared = sqlx::query("DELETE FROM inbound_occurrence_purge_guards WHERE work_item_id=$1 AND fence_token=$2")
+                .bind(work_item_id).bind(guard.token).execute(&mut *tx).await?;
+            if cleared.rows_affected() != 1 {
+                return Err(WorkStoreError::InvalidRequest("purge guard changed"));
+            }
         }
         tx.commit().await?;
         info!(work_item_id = %work_item_id, actor, "pre-catalog work item purged");
@@ -2519,7 +3149,6 @@ impl WorkItemStore {
     /// the same transaction. Items with active leases are never claimed.
     ///
     /// Returns only work actually owned by this worker.
-    #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
     pub async fn claim(
         &self,
         pool: &PgPool,
@@ -2527,6 +3156,45 @@ impl WorkItemStore {
         config: &WorkEngineConfig,
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
+        Ok(self
+            .claim_with_mode(pool, worker, config, now, false)
+            .await?
+            .into_iter()
+            .map(|claim| claim.item)
+            .collect())
+    }
+    /// Return inspection epochs atomically while excluding protected custody items.
+    pub async fn claim_ordinary_with_epoch(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
+        self.claim_with_mode(pool, worker, config, now, false).await
+    }
+
+    /// Claim and return the epoch from the same atomic transaction. A later
+    /// lookup cannot distinguish stale work after same-owner reclamation.
+    #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
+    pub async fn claim_with_protected_epoch(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
+        self.claim_with_mode(pool, worker, config, now, true).await
+    }
+
+    async fn claim_with_mode(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+        protected_allowed: bool,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
         let acquire_started = std::time::Instant::now();
         let _hold;
@@ -2543,8 +3211,14 @@ impl WorkItemStore {
         // then update each within the same transaction. Two steps so the
         // pre-update state is known for the failed->ready requeue event.
         // A continuous flow of fresh Ready work must not starve a recovered inspection.
-        let candidates =
-            crate::processing::claim_candidates(&mut tx, "inspection", config, now).await?;
+        let candidates = crate::processing::claim_candidates(
+            &mut tx,
+            "inspection",
+            config,
+            now,
+            protected_allowed,
+        )
+        .await?;
 
         let mut items = Vec::with_capacity(candidates.len());
         for candidate in candidates {
@@ -2555,7 +3229,7 @@ impl WorkItemStore {
                      state_reason = CASE WHEN w.state = 'failed' THEN NULL ELSE w.state_reason END,
                      next_attempt_at = NULL,
                      lease_owner = $1,
-                     lease_acquired_at = $2,
+                     lease_acquired_at = $2, protected_attempt_lease_epoch = gen_random_uuid(),
                      lease_expires_at = $3,
                      first_started_at = COALESCE(w.first_started_at, $2),
                      updated_at = $2
@@ -2568,6 +3242,11 @@ impl WorkItemStore {
             .bind(candidate.id)
             .fetch_one(&mut *tx)
             .await?;
+            let epoch = row.protected_attempt_lease_epoch.ok_or_else(|| {
+                WorkStoreError::CorruptState(
+                    "new processing claim has no protected attempt epoch".to_owned(),
+                )
+            })?;
             let item = ReleaseWorkItem::try_from(row)?;
             if was_failed {
                 insert_event(
@@ -2597,7 +3276,12 @@ impl WorkItemStore {
                 Some(serde_json::json!({ "lease_expires_at": lease_expiry.to_string() })),
             )
             .await?;
-            items.push(item);
+            let token = ProtectedClaimEpoch {
+                item_id: item.id,
+                owner: worker.as_str().to_owned(),
+                epoch,
+            };
+            items.push(ProtectedClaim { item, epoch: token });
         }
         tx.commit().await?;
         drop(connection);
@@ -2639,6 +3323,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         crate::discovery_scan::lock_fence(&mut tx, fence).await?;
         let item = lock_for_update(&mut tx, id).await?;
+        ensure_ordinary_custody(&mut tx, item.id).await?;
         if matches!(
             item.state,
             IngestionState::Cataloging | IngestionState::Cataloged
@@ -2697,6 +3382,43 @@ impl WorkItemStore {
         reason: Option<&str>,
         now: OffsetDateTime,
     ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        self.transition_inner(pool, id, worker, kind, to, reason, now, None)
+            .await
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub async fn transition_protected(
+        &self,
+        pool: &PgPool,
+        claim: &ProtectedClaimEpoch,
+        worker: &WorkerId,
+        to: IngestionState,
+        reason: Option<&str>,
+        now: OffsetDateTime,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        self.transition_inner(
+            pool,
+            claim.item_id,
+            Some(worker),
+            TransitionKind::Worker,
+            to,
+            reason,
+            now,
+            Some(claim),
+        )
+        .await
+    }
+    #[allow(clippy::too_many_arguments)]
+    async fn transition_inner(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: Option<&WorkerId>,
+        kind: TransitionKind,
+        to: IngestionState,
+        reason: Option<&str>,
+        now: OffsetDateTime,
+        claim: Option<&ProtectedClaimEpoch>,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
 
@@ -2724,6 +3446,14 @@ impl WorkItemStore {
         ) {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
+
+        let fence_expiry = if let Some(claim) = claim {
+            let worker = worker.ok_or(WorkStoreError::InvalidState(id, item.state))?;
+            fence_stage_mutation(&mut tx, &item, worker, now, Some(claim)).await?
+        } else {
+            ensure_ordinary_custody(&mut tx, item.id).await?;
+            None
+        };
 
         // Ownership rules: workers must hold an active lease; operators must
         // not race someone else's active lease.
@@ -2811,6 +3541,7 @@ impl WorkItemStore {
             )
             .await?;
         }
+        finish_stage_fence(&mut tx, id, fence_expiry).await?;
         tx.commit().await?;
         info!(work_item_id = %id, from_state = %from.as_str(), to_state = %to.as_str(), "state transitioned");
         ReleaseWorkItem::try_from(row)
@@ -2945,9 +3676,52 @@ impl WorkItemStore {
         policy: &RetryPolicy,
         now: OffsetDateTime,
     ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        self.record_failure_inner(pool, id, worker, code, message, class, policy, now, None)
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn record_failure_protected(
+        &self,
+        pool: &PgPool,
+        claim: &ProtectedClaimEpoch,
+        worker: &WorkerId,
+        code: WorkErrorCode,
+        message: &str,
+        class: FailureClass,
+        policy: &RetryPolicy,
+        now: OffsetDateTime,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        self.record_failure_inner(
+            pool,
+            claim.item_id,
+            worker,
+            code,
+            message,
+            class,
+            policy,
+            now,
+            Some(claim),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn record_failure_inner(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        code: WorkErrorCode,
+        message: &str,
+        class: FailureClass,
+        policy: &RetryPolicy,
+        now: OffsetDateTime,
+        claim: Option<&ProtectedClaimEpoch>,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
-        ensure_active_lease(&item, worker, now)?;
+        let fence_expiry = fence_stage_mutation(&mut tx, &item, worker, now, claim).await?;
         if !item.state.can_fail() {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -3029,6 +3803,7 @@ impl WorkItemStore {
             )
             .await?;
         }
+        finish_stage_fence(&mut tx, id, fence_expiry).await?;
         tx.commit().await?;
         warn!(
             work_item_id = %id,
@@ -3052,11 +3827,37 @@ impl WorkItemStore {
         worker: &WorkerId,
         now: OffsetDateTime,
     ) -> Result<(), WorkStoreError> {
+        self.release_lease_inner(pool, id, worker, now, None).await
+    }
+    pub async fn release_protected_lease(
+        &self,
+        pool: &PgPool,
+        claim: &ProtectedClaimEpoch,
+        worker: &WorkerId,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        self.release_lease_inner(pool, claim.item_id, worker, now, Some(claim))
+            .await
+    }
+    async fn release_lease_inner(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        now: OffsetDateTime,
+        claim: Option<&ProtectedClaimEpoch>,
+    ) -> Result<(), WorkStoreError> {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
         if item.lease_owner.as_deref() != Some(worker.as_str()) {
             return Err(WorkStoreError::NotLeaseOwner(id));
         }
+        let fence_expiry = if claim.is_some() {
+            fence_stage_mutation(&mut tx, &item, worker, now, claim).await?
+        } else {
+            ensure_ordinary_custody(&mut tx, id).await?;
+            None
+        };
         sqlx::query(
             "UPDATE release_work_items
              SET lease_owner = NULL, lease_acquired_at = NULL, lease_expires_at = NULL, updated_at = $2
@@ -3079,6 +3880,7 @@ impl WorkItemStore {
             None,
         )
         .await?;
+        finish_stage_fence(&mut tx, id, fence_expiry).await?;
         tx.commit().await?;
         info!(work_item_id = %id, "lease released");
         Ok(())
@@ -3104,7 +3906,9 @@ impl WorkItemStore {
         crate::metrics::observe(crate::metrics::Metric::HeartbeatAcquire, acquire_duration);
         let mut tx = (&mut *connection).begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
+        try_lock_unguarded_occurrence(&mut tx, &item).await?;
         ensure_active_lease(&item, worker, now)?;
+        ensure_ordinary_custody(&mut tx, id).await?;
         let new_expiry = now + lease_duration;
         sqlx::query(
             "UPDATE release_work_items
@@ -3221,7 +4025,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let rows = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items
-             WHERE state = 'inspecting' AND lease_expires_at <= $1
+             WHERE state = 'inspecting' AND lease_expires_at <= $1 AND NOT protected_custody_required
              ORDER BY lease_expires_at, id LIMIT $2 FOR UPDATE SKIP LOCKED",
         )
         .bind(now)
@@ -3229,6 +4033,94 @@ impl WorkItemStore {
         .fetch_all(&mut *tx)
         .await?;
         Self::recover_locked_leases(tx, rows, &config.retry_policy, now).await
+    }
+
+    /// Reclaim a bounded page of interrupted protected inspections without
+    /// trusting an old worker or changing their processing state. The returned
+    /// claim grants database authority only: callers must still acquire and
+    /// revalidate the private filesystem lifecycle lock before touching media.
+    pub async fn claim_interrupted_protected_inspections(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+    ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
+        let ms = i64::try_from(config.lease_duration.whole_milliseconds())
+            .map_err(|_| WorkStoreError::InvalidRequest("protected lease duration invalid"))?;
+        if ms <= 0 || config.claim_batch_size == 0 || config.claim_batch_size > 128 {
+            return Err(WorkStoreError::InvalidRequest(
+                "protected recovery limit or duration invalid",
+            ));
+        }
+        let mut tx = pool.begin().await?;
+        crate::work_item_lifecycle::admit_runtime(&mut tx).await?;
+        let (last_expiry,last_id):(Option<OffsetDateTime>,Option<Uuid>)=sqlx::query_as("SELECT last_expiry,last_id FROM protected_inspection_recovery_cursor WHERE singleton FOR UPDATE").fetch_one(&mut *tx).await?;
+        let rows:Vec<WorkItemRow>=sqlx::query_as("SELECT * FROM release_work_items w WHERE protected_custody_required AND state='inspecting' AND (NOT (SELECT enforcement_enabled FROM work_item_lifecycle_maintenance WHERE singleton) OR EXISTS(SELECT 1 FROM work_item_lifecycle_locks l WHERE l.work_item_id=w.id AND l.state='ready' AND NOT EXISTS(SELECT 1 FROM work_item_lifecycle_quarantine q WHERE q.work_item_id=l.work_item_id) AND l.source_library_id IS NOT DISTINCT FROM w.source_library_id AND l.source_path COLLATE \"C\"=w.source_path COLLATE \"C\" AND l.source_path_format=w.discovery_path_format)) AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp()) AND ($1::timestamptz IS NULL OR (COALESCE(lease_expires_at,'0001-01-01 00:00:00+00'::timestamptz),id)>($1,$2)) ORDER BY COALESCE(lease_expires_at,'0001-01-01 00:00:00+00'::timestamptz),id LIMIT $3 FOR UPDATE SKIP LOCKED")
+            .bind(last_expiry).bind(last_id).bind(i64::from(config.claim_batch_size)).fetch_all(&mut *tx).await?;
+        if rows.is_empty() {
+            sqlx::query("UPDATE protected_inspection_recovery_cursor SET last_expiry=NULL,last_id=NULL WHERE singleton").execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(Vec::new());
+        }
+        let mut claims = Vec::new();
+        for row in rows {
+            let original_expiry = row.lease_expires_at;
+            let item = ReleaseWorkItem::try_from(row)?;
+            let cursor_expiry: OffsetDateTime = match original_expiry {
+                Some(value) => value,
+                None => {
+                    sqlx::query_scalar("SELECT '0001-01-01 00:00:00+00'::timestamptz")
+                        .fetch_one(&mut *tx)
+                        .await?
+                }
+            };
+            sqlx::query("UPDATE protected_inspection_recovery_cursor SET last_expiry=$1,last_id=$2 WHERE singleton").bind(cursor_expiry).bind(item.id).execute(&mut *tx).await?;
+            match try_lock_unguarded_occurrence(&mut tx, &item).await {
+                Ok(()) => {}
+                Err(WorkStoreError::InvalidRequest(_)) => continue,
+                Err(error) => return Err(error),
+            }
+            let row:WorkItemRow=sqlx::query_as("UPDATE release_work_items SET lease_owner=$2,lease_acquired_at=clock_timestamp(),lease_expires_at=clock_timestamp()+($3::bigint*interval '1 millisecond'),protected_attempt_lease_epoch=gen_random_uuid(),updated_at=clock_timestamp() WHERE id=$1 AND protected_custody_required AND state='inspecting' AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp()) RETURNING *")
+                .bind(item.id).bind(worker.as_str()).bind(ms).fetch_one(&mut *tx).await?;
+            let epoch = row.protected_attempt_lease_epoch.ok_or_else(|| {
+                WorkStoreError::CorruptState("protected recovery has no epoch".to_owned())
+            })?;
+            let item = ReleaseWorkItem::try_from(row)?;
+            let claimed_at: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
+                .fetch_one(&mut *tx)
+                .await?;
+            insert_event(
+                &mut tx,
+                item.id,
+                WorkEventType::Claimed,
+                None,
+                None,
+                Some("protected recovery"),
+                Some(worker.as_str()),
+                item.correlation_id,
+                claimed_at,
+                None,
+            )
+            .await?;
+            claims.push(ProtectedClaim {
+                epoch: ProtectedClaimEpoch {
+                    item_id: item.id,
+                    owner: worker.as_str().to_owned(),
+                    epoch,
+                },
+                item,
+            });
+        }
+        // A blocked statement cannot commit already-expired recovery claims.
+        for claim in &claims {
+            let expiry = claim
+                .item
+                .lease_expires_at
+                .ok_or(WorkStoreError::LeaseExpired(claim.item.id))?;
+            finish_stage_fence(&mut tx, claim.item.id, Some(expiry)).await?;
+        }
+        tx.commit().await?;
+        Ok(claims)
     }
 
     /// Recovers items whose leases expired mid-processing: marks them failed
@@ -3244,7 +4136,7 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let rows = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items
-             WHERE lease_expires_at IS NOT NULL AND lease_expires_at <= $1
+             WHERE lease_expires_at IS NOT NULL AND lease_expires_at <= $1 AND NOT protected_custody_required
              FOR UPDATE SKIP LOCKED",
         )
         .bind(now)
@@ -3871,6 +4763,83 @@ fn has_complete_publication_evidence(
 }
 
 /// Locks a work item row for update inside a transaction.
+/// Worker-only custody APIs cannot act after a work item enters protected mode.
+/// The caller already holds the item row lock, preventing a concurrent transition.
+pub(crate) async fn ensure_item_not_admin_reserved(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<(), WorkStoreError> {
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM admin_media_reservation_items WHERE work_item_id=$1)",
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if blocked {
+        return Err(WorkStoreError::InvalidRequest(
+            "administrative media reservation is active",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn ensure_ordinary_custody(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<(), WorkStoreError> {
+    let protected: bool =
+        sqlx::query_scalar("SELECT protected_custody_required OR EXISTS(SELECT 1 FROM admin_media_reservation_items WHERE work_item_id=$1) FROM release_work_items WHERE id=$1")
+            .bind(id)
+            .fetch_one(&mut **tx)
+            .await?;
+    if protected {
+        return Err(WorkStoreError::InvalidRequest(
+            "protected custody requires a claim epoch",
+        ));
+    }
+    Ok(())
+}
+
+// The item row is already locked. Protected mutations carry the claim token
+// from the original atomic claim and retain its original expiry until commit.
+async fn fence_stage_mutation(
+    tx: &mut Transaction<'_, Postgres>,
+    item: &ReleaseWorkItem,
+    worker: &WorkerId,
+    now: OffsetDateTime,
+    claim: Option<&ProtectedClaimEpoch>,
+) -> Result<Option<OffsetDateTime>, WorkStoreError> {
+    if let Some(claim) = claim {
+        ensure_item_not_admin_reserved(tx, item.id).await?;
+        if claim.item_id != item.id || claim.owner != worker.as_str() {
+            return Err(WorkStoreError::LeaseExpired(item.id));
+        }
+        let expiry:Option<OffsetDateTime>=sqlx::query_scalar("SELECT lease_expires_at FROM release_work_items WHERE id=$1 AND protected_custody_required AND lease_owner=$2 AND protected_attempt_lease_epoch=$3 AND lease_expires_at>clock_timestamp()")
+            .bind(item.id).bind(worker.as_str()).bind(claim.epoch).fetch_optional(&mut **tx).await?.flatten();
+        Ok(Some(expiry.ok_or(WorkStoreError::LeaseExpired(item.id))?))
+    } else {
+        ensure_active_lease(item, worker, now)?;
+        ensure_ordinary_custody(tx, item.id).await?;
+        Ok(None)
+    }
+}
+async fn finish_stage_fence(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    expiry: Option<OffsetDateTime>,
+) -> Result<(), WorkStoreError> {
+    if let Some(expiry) = expiry {
+        let live: bool = sqlx::query_scalar("SELECT $1::timestamptz>clock_timestamp()")
+            .bind(expiry)
+            .fetch_one(&mut **tx)
+            .await?;
+        if !live {
+            return Err(WorkStoreError::LeaseExpired(id));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) async fn lock_for_update(
     tx: &mut Transaction<'_, Postgres>,
     id: Uuid,

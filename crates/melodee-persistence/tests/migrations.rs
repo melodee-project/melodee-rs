@@ -2293,3 +2293,49 @@ async fn migration_0070_preserves_existing_inbound_state() {
     migrate(&db.pool).await.expect("repeat upgrade");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn migration_0071_preserves_populated_custody_and_initializes_budget() {
+    use melodee_domain::ReleaseWorkItem;
+    use melodee_persistence::WorkItemStore;
+    use uuid::Uuid;
+
+    let db = TestDb::create_unmigrated("migration_0071_populated").await;
+    let prior: Vec<_> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|m| m.version <= 70)
+        .cloned()
+        .collect();
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("pre-0071 migrations");
+    let item = ReleaseWorkItem::discovered("existing".to_owned(), None, Uuid::now_v7(), common::T0);
+    WorkItemStore.create(&db.pool, &item).await.expect("item");
+    let claim_name = format!(".melodee-custody-{}", item.id);
+    let native_hash = format!("v2:{}", "a".repeat(64));
+    sqlx::query("INSERT INTO inbound_custody_claims (work_item_id,source_path,custody_name,source_root_generation,source_generation,preclaim_tree_hash,preclaim_legacy_tree_hash,status,created_at,updated_at) VALUES ($1,'existing',$2,'unix:1:1','unix:1:2',$3,$4,'intent',$5,$5)")
+        .bind(item.id).bind(&claim_name).bind(&native_hash).bind("a".repeat(64)).bind(common::T0)
+        .execute(&db.pool).await.expect("existing custody");
+    migrate(&db.pool).await.expect("upgrade through 0071");
+    let retained: (String, String) = sqlx::query_as(
+        "SELECT custody_name,preclaim_tree_hash FROM inbound_custody_claims WHERE work_item_id=$1",
+    )
+    .bind(item.id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("retained custody");
+    assert_eq!(retained, (claim_name, native_hash));
+    let budget: (i64, i64) =
+        sqlx::query_as("SELECT captures,entries FROM custody_hash_spool_budget WHERE singleton")
+            .fetch_one(&db.pool)
+            .await
+            .expect("spool budget");
+    assert_eq!(budget, (0, 0));
+    migrate(&db.pool).await.expect("repeat upgrade");
+    db.drop().await;
+}

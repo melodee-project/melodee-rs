@@ -61,6 +61,292 @@ pub(crate) fn retain_result(results: &mut Vec<ReconcileResult>, result: Reconcil
     results.push(result);
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[derive(Clone)]
+struct RetainedScheduleOptions {
+    next_check: ::time::Duration,
+    retry_after: ::time::Duration,
+    idle_delay: TokioDuration,
+    hook: Option<Arc<crate::custody::RetainedObservationHook>>,
+    #[cfg(feature = "test-support")]
+    force_unsupported_directory: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+impl Default for RetainedScheduleOptions {
+    fn default() -> Self {
+        Self {
+            next_check: ::time::Duration::minutes(5),
+            retry_after: ::time::Duration::seconds(30),
+            idle_delay: TokioDuration::from_secs(5),
+            hook: None,
+            #[cfg(feature = "test-support")]
+            force_unsupported_directory: false,
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+#[derive(Default)]
+struct RetainedScheduleOptions;
+
+/// One independently budgeted retained-source turn.
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+pub(crate) async fn retained_recheck_turn(
+    config: &IngestionConfig,
+    pool: &PgPool,
+    store: &WorkItemStore,
+    worker: &melodee_persistence::WorkerId,
+) -> Result<bool, melodee_persistence::WorkStoreError> {
+    retained_recheck_turn_inner(
+        config,
+        pool,
+        store,
+        worker,
+        &RetainedScheduleOptions::default(),
+    )
+    .await
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+async fn retained_recheck_turn_inner(
+    config: &IngestionConfig,
+    pool: &PgPool,
+    store: &WorkItemStore,
+    worker: &melodee_persistence::WorkerId,
+    options: &RetainedScheduleOptions,
+) -> Result<bool, melodee_persistence::WorkStoreError> {
+    let duration = ::time::Duration::minutes(2);
+    let mut leases = store
+        .claim_due_retained_sources(pool, worker, 1, duration)
+        .await?;
+    let Some(lease) = leases.pop() else {
+        return Ok(false);
+    };
+    let observation = if lease.baseline_id().is_some() {
+        if lease.baseline_directory_turn() {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                #[cfg(feature = "test-support")]
+                let unsupported = options.force_unsupported_directory;
+                #[cfg(not(feature = "test-support"))]
+                let unsupported = false;
+                if unsupported {
+                    defer_unsupported_directory(store, pool, &lease, options.next_check).await
+                } else {
+                    crate::custody::reobserve_retained_directory_page(
+                        config,
+                        pool,
+                        store,
+                        &lease,
+                        duration,
+                        options.next_check,
+                    )
+                    .await
+                }
+            }
+            #[cfg(target_vendor = "apple")]
+            {
+                defer_unsupported_directory(store, pool, &lease, options.next_check).await
+            }
+        } else {
+            crate::custody::reobserve_retained_baseline_page(
+                config,
+                pool,
+                store,
+                &lease,
+                duration,
+                options.next_check,
+            )
+            .await
+        }
+    } else {
+        crate::custody::reobserve_retained_source(
+            config,
+            pool,
+            store,
+            worker,
+            &lease,
+            duration,
+            options.next_check,
+            options.hook.as_deref(),
+        )
+        .await
+        .map(|_| ())
+    };
+    if let Err(error) = observation {
+        let reason = match &error {
+            crate::custody::RetainedReobserveError::Missing
+            | crate::custody::RetainedReobserveError::Acquisition(
+                crate::acquisition::AcquisitionError::SourceNotConfigured,
+            ) => melodee_persistence::RetainedRetryReason::Missing,
+            crate::custody::RetainedReobserveError::Ambiguous => {
+                melodee_persistence::RetainedRetryReason::Ambiguous
+            }
+            crate::custody::RetainedReobserveError::Acquisition(
+                crate::acquisition::AcquisitionError::SourceChanged,
+            ) => melodee_persistence::RetainedRetryReason::Unstable,
+            crate::custody::RetainedReobserveError::Acquisition(
+                crate::acquisition::AcquisitionError::Persistence(
+                    melodee_persistence::WorkStoreError::CustodyHashBudgetExhausted
+                    | melodee_persistence::WorkStoreError::RetainedSourceBudgetExhausted,
+                ),
+            ) => melodee_persistence::RetainedRetryReason::Capacity,
+            crate::custody::RetainedReobserveError::Acquisition(
+                crate::acquisition::AcquisitionError::Persistence(
+                    melodee_persistence::WorkStoreError::RetainedFreshIntakeRequired,
+                ),
+            ) => melodee_persistence::RetainedRetryReason::AwaitingIntake,
+            _ => melodee_persistence::RetainedRetryReason::Other,
+        };
+        warn!(error = %error, "retained source reobservation deferred");
+        store
+            .defer_retained_source(pool, &lease, options.retry_after, reason)
+            .await?;
+    }
+    Ok(true)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+async fn defer_unsupported_directory(
+    store: &WorkItemStore,
+    pool: &PgPool,
+    lease: &melodee_persistence::RetainedSourceLease,
+    retry_after: ::time::Duration,
+) -> Result<(), crate::custody::RetainedReobserveError> {
+    store
+        .defer_unsupported_retained_directories(
+            pool,
+            lease,
+            retry_after,
+            ::time::Duration::seconds(1),
+        )
+        .await
+        .map_err(|error| crate::custody::RetainedReobserveError::Acquisition(error.into()))
+}
+
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+#[doc(hidden)]
+pub async fn test_retained_recheck_turn(
+    config: &IngestionConfig,
+    pool: &PgPool,
+    store: &WorkItemStore,
+    worker: &melodee_persistence::WorkerId,
+) -> Result<bool, melodee_persistence::WorkStoreError> {
+    retained_recheck_turn(config, pool, store, worker).await
+}
+
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+#[doc(hidden)]
+pub async fn test_retained_recheck_turn_without_directory_support(
+    config: &IngestionConfig,
+    pool: &PgPool,
+    store: &WorkItemStore,
+    worker: &melodee_persistence::WorkerId,
+) -> Result<bool, melodee_persistence::WorkStoreError> {
+    let options = RetainedScheduleOptions {
+        force_unsupported_directory: true,
+        ..RetainedScheduleOptions::default()
+    };
+    retained_recheck_turn_inner(config, pool, store, worker, &options).await
+}
+
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+#[doc(hidden)]
+pub async fn test_retained_recheck_turn_with_mutation(
+    config: &IngestionConfig,
+    pool: &PgPool,
+    store: &WorkItemStore,
+    worker: &melodee_persistence::WorkerId,
+    path: &std::path::Path,
+    replacement: &[u8],
+) -> Result<bool, melodee_persistence::WorkStoreError> {
+    let path = path.to_owned();
+    let replacement = replacement.to_owned();
+    let hook = move || {
+        std::fs::write(&path, &replacement)
+            .map_err(|error| crate::acquisition::AcquisitionError::Task(error.to_string()))
+    };
+    let options = RetainedScheduleOptions {
+        hook: Some(Arc::new(hook)),
+        ..RetainedScheduleOptions::default()
+    };
+    retained_recheck_turn_inner(config, pool, store, worker, &options).await
+}
+
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+#[doc(hidden)]
+pub async fn test_retained_recheck_turn_with_root_replacement(
+    config: &IngestionConfig,
+    pool: &PgPool,
+    store: &WorkItemStore,
+    worker: &melodee_persistence::WorkerId,
+    root: &std::path::Path,
+    parked: &std::path::Path,
+    replacement: &std::path::Path,
+) -> Result<bool, melodee_persistence::WorkStoreError> {
+    let root = root.to_owned();
+    let parked = parked.to_owned();
+    let replacement = replacement.to_owned();
+    let hook = move || {
+        std::fs::rename(&root, &parked)
+            .and_then(|()| std::fs::rename(&replacement, &root))
+            .map_err(|error| crate::acquisition::AcquisitionError::Task(error.to_string()))
+    };
+    let options = RetainedScheduleOptions {
+        hook: Some(Arc::new(hook)),
+        ..RetainedScheduleOptions::default()
+    };
+    retained_recheck_turn_inner(config, pool, store, worker, &options).await
+}
+
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+#[doc(hidden)]
+pub fn test_start_retained_scheduler(
+    config: IngestionConfig,
+    pool: PgPool,
+    store: WorkItemStore,
+    mutation: Option<(std::path::PathBuf, Vec<u8>)>,
+) -> SchedulerHandle {
+    let hook = mutation.map(|(path, bytes)| {
+        let fired = AtomicBool::new(false);
+        Arc::new(move || {
+            if !fired.swap(true, Ordering::AcqRel) {
+                std::fs::write(&path, &bytes).map_err(|error| {
+                    crate::acquisition::AcquisitionError::Task(error.to_string())
+                })?;
+            }
+            Ok(())
+        }) as Arc<crate::custody::RetainedObservationHook>
+    });
+    let options = RetainedScheduleOptions {
+        next_check: ::time::Duration::seconds(1),
+        retry_after: ::time::Duration::seconds(1),
+        idle_delay: TokioDuration::from_millis(100),
+        hook,
+        ..RetainedScheduleOptions::default()
+    };
+    start_reconciliation_loop_inner(config, pool, store, options)
+}
+
 impl SchedulerHandle {
     pub(crate) const fn from_parts(
         join: tokio::task::JoinHandle<Vec<ReconcileResult>>,
@@ -82,6 +368,22 @@ pub fn start_reconciliation_loop(
     pool: PgPool,
     store: WorkItemStore,
 ) -> SchedulerHandle {
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    let options = RetainedScheduleOptions {
+        next_check: config.retained_recheck_interval,
+        ..RetainedScheduleOptions::default()
+    };
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    let options = RetainedScheduleOptions;
+    start_reconciliation_loop_inner(config, pool, store, options)
+}
+
+fn start_reconciliation_loop_inner(
+    config: IngestionConfig,
+    pool: PgPool,
+    store: WorkItemStore,
+    retained_options: RetainedScheduleOptions,
+) -> SchedulerHandle {
     let reconciler_running = Arc::new(AtomicBool::new(false));
     let stop = StopToken::new();
     let notifier = stop.signal.clone();
@@ -100,17 +402,48 @@ pub fn start_reconciliation_loop(
                         break;
                     };
                     prefer_expired = !prefer_expired;
+                    let mut page_found = false;
                     match cleanup_store
                         .cleanup_expired_staged_snapshot_page(&cleanup_pool, prefer_expired)
                         .await
                     {
-                        Ok(true) => found = true,
-                        Ok(false) => break,
+                        Ok(true) => page_found = true,
+                        Ok(false) => {}
                         Err(error) => {
                             error!(%error, "staged settling snapshot cleanup failed");
-                            break;
                         }
                     }
+                    match cleanup_store
+                        .cleanup_abandoned_custody_hash_spool_page(
+                            &cleanup_pool,
+                            ::time::OffsetDateTime::now_utc(),
+                        )
+                        .await
+                    {
+                        Ok(true) => page_found = true,
+                        Ok(false) => {}
+                        Err(error) => error!(%error, "custody hash spool cleanup failed"),
+                    }
+                    match cleanup_store
+                        .cleanup_retained_chunk_checkpoint(&cleanup_pool)
+                        .await
+                    {
+                        Ok(true) => page_found = true,
+                        Ok(false) => {}
+                        Err(error) => error!(%error, "retained chunk checkpoint cleanup failed"),
+                    }
+                    match cleanup_store
+                        .cleanup_abandoned_retained_baseline_page(&cleanup_pool)
+                        .await
+                    {
+                        Ok(true) => page_found = true,
+                        Ok(false) => {}
+                        Err(error) => error!(%error, "retained baseline cleanup failed"),
+                    }
+                    if !page_found {
+                        break;
+                    }
+                    found = true;
                 }
                 let delay = if found {
                     TokioDuration::from_millis(250)
@@ -120,6 +453,36 @@ pub fn start_reconciliation_loop(
                 time::sleep(delay).await;
             }
         });
+        #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+        if config.enabled() {
+            let retained_config = config.clone();
+            let retained_pool = pool.clone();
+            let retained_store = store.clone();
+            cleanup.spawn(async move {
+                let worker = melodee_persistence::WorkerId::new();
+                loop {
+                    let delay = match retained_recheck_turn_inner(
+                        &retained_config,
+                        &retained_pool,
+                        &retained_store,
+                        &worker,
+                        &retained_options,
+                    )
+                    .await
+                    {
+                        Ok(true) => TokioDuration::from_millis(250),
+                        Ok(false) => retained_options.idle_delay,
+                        Err(error) => {
+                            error!(%error, "retained source reobservation failed");
+                            retained_options.idle_delay
+                        }
+                    };
+                    time::sleep(delay).await;
+                }
+            });
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+        let _ = retained_options;
         let reconciler = crate::reconcile::Reconciler::new(config.clone(), store);
         let interval = TokioDuration::try_from(config.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));

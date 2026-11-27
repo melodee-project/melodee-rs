@@ -12,6 +12,13 @@ use uuid::Uuid;
 
 use super::common::pool;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RetainedObligationsPage {
+    items: Vec<melodee_persistence::RetainedObligationView>,
+    next_after: Option<Uuid>,
+}
+
 #[derive(Debug, Subcommand)]
 pub(crate) enum IngestCommands {
     /// Register a JSON array of inbound directory names before transfer. Use --manifest - for stdin.
@@ -52,6 +59,51 @@ pub(crate) enum IngestCommands {
         #[arg(long)]
         after: Option<Uuid>,
     },
+    /// List up to 100 interrupted pre-catalog purge guards for maintenance review.
+    PurgeGuards {
+        /// Continue after the last work-item id from the prior page.
+        #[arg(long)]
+        after: Option<Uuid>,
+    },
+    /// List active retained-source obligations without changing their state.
+    RetainedObligations {
+        /// Continue after the last work-item ID from a previous page.
+        #[arg(long)]
+        after: Option<Uuid>,
+        /// Maximum number of rows to return (1–128).
+        #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u16).range(1..=128))]
+        limit: u16,
+    },
+    /// Release one reviewed purge guard under an exclusive maintenance fence.
+    RecoverPurgeGuard {
+        /// Exact work item ID from purge-guards.
+        #[arg(long)]
+        work_item_id: Uuid,
+        /// Exact fencing token from purge-guards.
+        #[arg(long)]
+        fence_token: Uuid,
+        /// Exact guard owner from purge-guards.
+        #[arg(long, value_parser = parse_nonblank_exact)]
+        guard_owner: String,
+        /// Operator identity recorded in the audit event.
+        #[arg(long, value_parser = super::common::parse_nonblank)]
+        actor: String,
+        /// Inspection findings and reason for releasing this guard.
+        #[arg(long, value_parser = super::common::parse_nonblank)]
+        reason: String,
+        /// All Melodee servers and workers have been stopped and fenced.
+        #[arg(long, required = true, action = clap::ArgAction::SetTrue)]
+        stopped_all_writers: bool,
+        /// Source, staging, work, and canonical media were inspected.
+        #[arg(long, required = true, action = clap::ArgAction::SetTrue)]
+        inspected_media: bool,
+        /// Database and affected media backups were verified.
+        #[arg(long, required = true, action = clap::ArgAction::SetTrue)]
+        backup_verified: bool,
+        /// Confirm the reviewed decision to release only this guard.
+        #[arg(long, required = true, action = clap::ArgAction::SetTrue)]
+        confirm: bool,
+    },
     /// Re-read an owned staging tree and verify its durable receipt.
     VerifyStaged { id: Uuid },
     /// Bind an ambiguous historical item to explicitly reviewed staged evidence.
@@ -72,6 +124,14 @@ pub(crate) enum IngestCommands {
     },
 }
 
+fn parse_nonblank_exact(raw: &str) -> Result<String, String> {
+    if raw.trim().is_empty() {
+        Err("value must not be blank".to_owned())
+    } else {
+        Ok(raw.to_owned())
+    }
+}
+
 pub(crate) async fn run(command: IngestCommands) {
     let config = IngestionConfig::from_env().unwrap_or_else(|e| {
         eprintln!("error: invalid ingestion configuration: {e}");
@@ -84,6 +144,89 @@ pub(crate) async fn run(command: IngestCommands) {
     let store = WorkItemStore;
 
     match command {
+        IngestCommands::RetainedObligations { after, limit } => {
+            match store
+                .list_retained_obligations(&pool, after, usize::from(limit))
+                .await
+            {
+                Ok(rows) => {
+                    let next_after = if rows.len() == usize::from(limit) {
+                        rows.last().map(|row| row.work_item_id)
+                    } else {
+                        None
+                    };
+                    match serde_json::to_string_pretty(&RetainedObligationsPage {
+                        items: rows,
+                        next_after,
+                    }) {
+                        Ok(output) => println!("{output}"),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        IngestCommands::PurgeGuards { after } => {
+            match store.list_pre_catalog_purge_guards(&pool, after).await {
+                Ok(rows) => match serde_json::to_string_pretty(&rows) {
+                    Ok(output) => println!("{output}"),
+                    Err(error) => {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                },
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        IngestCommands::RecoverPurgeGuard {
+            work_item_id,
+            fence_token,
+            guard_owner,
+            actor,
+            reason,
+            stopped_all_writers,
+            inspected_media,
+            backup_verified,
+            confirm,
+        } => {
+            // Keep this check in addition to clap's required flags so a future
+            // caller constructing the enum directly cannot bypass attestations.
+            if !stopped_all_writers || !inspected_media || !backup_verified || !confirm {
+                eprintln!("error: maintenance and inspection attestations are required");
+                std::process::exit(2);
+            }
+            match store
+                .recover_pre_catalog_purge_guard(
+                    &pool,
+                    work_item_id,
+                    fence_token,
+                    &guard_owner,
+                    &actor,
+                    &reason,
+                    melodee_persistence::PurgeGuardRecoveryAttestation {
+                        writers_stopped: stopped_all_writers,
+                        storage_inspected: inspected_media,
+                        backup_verified,
+                    },
+                )
+                .await
+            {
+                Ok(()) => println!("purge guard released; no media or work item was deleted"),
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
         IngestCommands::LegacyPaths { after } => {
             match store.list_legacy_inbound_paths(&pool, after).await {
                 Ok(rows) => match serde_json::to_string_pretty(&rows) {

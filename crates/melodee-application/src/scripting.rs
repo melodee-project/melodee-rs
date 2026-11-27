@@ -647,6 +647,19 @@ impl ScriptingService {
         ctx: JsonValue,
         memory_bytes: i64,
     ) -> Result<Evaluation, ScriptingError> {
+        self.evaluate_offline_with_hold(script_source, event, timeout_ms, ctx, memory_bytes, None)
+            .await
+    }
+
+    async fn evaluate_offline_with_hold(
+        &self,
+        script_source: String,
+        event: String,
+        timeout_ms: i32,
+        ctx: JsonValue,
+        memory_bytes: i64,
+        hold: Option<melodee_ingestion::StageLifetimeHold>,
+    ) -> Result<Evaluation, ScriptingError> {
         let admission = WORKER_ADMISSION
             .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MAX_SCRIPT_WORKERS)))
             .clone()
@@ -663,6 +676,7 @@ impl ScriptingService {
         let _cancellation = Cancellation(cancelled.clone());
         tokio::task::spawn_blocking(move || {
             let _admission = admission;
+            let _stage_lifetime = hold;
             evaluate_process(
                 &script_source,
                 &event,
@@ -687,18 +701,28 @@ impl ScriptingService {
         event: &str,
         ctx: &JsonValue,
     ) -> Result<HookVerdict, ScriptingError> {
+        self.evaluate_event_with_hold(event, ctx, None).await
+    }
+
+    async fn evaluate_event_with_hold(
+        &self,
+        event: &str,
+        ctx: &JsonValue,
+        hold: Option<melodee_ingestion::StageLifetimeHold>,
+    ) -> Result<HookVerdict, ScriptingError> {
         let scripts = ScriptRegistryStore::new()
             .list_enabled_for_event(&self.pool, event)
             .await?;
         let mut verdict = HookVerdict::allow();
         for script in scripts {
             let evaluation = self
-                .evaluate_offline(
+                .evaluate_offline_with_hold(
                     script.source.clone(),
                     event.to_string(),
                     script.timeout_ms,
                     ctx.clone(),
                     script.memory_bytes,
+                    hold.clone(),
                 )
                 .await?;
             self.record_and_break(&script, &evaluation).await?;
@@ -855,6 +879,16 @@ impl ScriptingService {
         candidate_root: &Path,
         snapshot: &CandidateSnapshot,
     ) -> Result<HookVerdict, ScriptingError> {
+        self.evaluate_directory_processing_start_with_hold(candidate_root, snapshot, None)
+            .await
+    }
+
+    async fn evaluate_directory_processing_start_with_hold(
+        &self,
+        candidate_root: &Path,
+        snapshot: &CandidateSnapshot,
+        hold: Option<melodee_ingestion::StageLifetimeHold>,
+    ) -> Result<HookVerdict, ScriptingError> {
         if !self.global_enabled().await {
             return Ok(HookVerdict::allow());
         }
@@ -873,14 +907,16 @@ impl ScriptingService {
             .map_err(|_| ScriptingError::Join)?;
         let root = candidate_root.to_path_buf();
         let input = DirectoryContextInput::from_snapshot(snapshot)?;
+        let context_hold = hold.clone();
         let ctx = tokio::task::spawn_blocking(move || {
             // Cancellation of the async waiter does not stop a blocking task.
             let _permit = permit;
+            let _stage_lifetime = context_hold;
             build_directory_processing_context(&root, &input)
         })
         .await
         .map_err(|_| ScriptingError::Join)??;
-        self.evaluate_event(EVENT_DIRECTORY_PROCESSING_START, &ctx)
+        self.evaluate_event_with_hold(EVENT_DIRECTORY_PROCESSING_START, &ctx, hold)
             .await
     }
 }
@@ -910,6 +946,32 @@ impl DirectoryProcessingGate for ScriptingDirectoryGate {
             match self
                 .service
                 .evaluate_directory_processing_start(candidate_root, snapshot)
+                .await
+            {
+                Ok(verdict) if verdict.allow => DirectoryGateOutcome::Allow,
+                Ok(verdict) => DirectoryGateOutcome::Skip {
+                    reason: verdict
+                        .message
+                        .unwrap_or_else(|| "directoryProcessingStart denied".to_string()),
+                },
+                Err(error) => {
+                    warn!(%error, "directoryProcessingStart gate failed; fail-degraded to allow");
+                    DirectoryGateOutcome::Allow
+                }
+            }
+        })
+    }
+
+    fn evaluate_guarded<'a>(
+        &'a self,
+        candidate_root: &'a Path,
+        snapshot: &'a CandidateSnapshot,
+        hold: melodee_ingestion::StageLifetimeHold,
+    ) -> DirectoryGateFuture<'a> {
+        Box::pin(async move {
+            match self
+                .service
+                .evaluate_directory_processing_start_with_hold(candidate_root, snapshot, Some(hold))
                 .await
             {
                 Ok(verdict) if verdict.allow => DirectoryGateOutcome::Allow,

@@ -150,8 +150,17 @@ def signal_owned_session(session_id: int, sig: int) -> None:
 
 
 def terminate_owned(process: subprocess.Popen) -> None:
-    if process.poll() is None and os.getsid(process.pid) != process.pid:
-        raise RuntimeError("owned profiler session topology changed")
+    """Clean the owned session while its still-unreaped leader pins the SID.
+
+    Callers must not use poll()/wait() first. The leader, even if already a
+    zombie, keeps its numeric PID reserved until the final wait below. Each
+    live member is separately checked and signalled via pidfd.
+    """
+    try:
+        if os.getsid(process.pid) != process.pid or os.getpgid(process.pid) != process.pid:
+            raise RuntimeError("owned profiler session topology changed")
+    except ProcessLookupError as error:
+        raise RuntimeError("owned profiler leader disappeared before cleanup") from error
     if session_members(process.pid):
         signal_owned_session(process.pid, signal.SIGTERM)
         deadline = time.monotonic() + 5
@@ -159,16 +168,32 @@ def terminate_owned(process: subprocess.Popen) -> None:
             time.sleep(0.05)
         if session_members(process.pid):
             signal_owned_session(process.pid, signal.SIGKILL)
+            deadline = time.monotonic() + 5
+            while session_members(process.pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
+    if session_members(process.pid):
+        raise RuntimeError("owned profiler descendants remain")
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("owned profiler failed to terminate") from error
-    if session_members(process.pid):
-        raise RuntimeError("owned profiler descendants remain")
+
+
+def require_owned_session_support() -> None:
+    if (not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal")
+            or not hasattr(os, "waitid") or not hasattr(os, "P_PIDFD") or not hasattr(os, "WNOWAIT")
+            or signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL):
+        raise ValueError("Linux pidfd and unreaped-child cleanup required")
+
+
+def child_exited(leader_fd: int) -> bool:
+    """Observe exit without reaping or permitting session-ID reuse."""
+    return os.waitid(os.P_PIDFD, leader_fd, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
 
 
 def run_child(args: list[str], cwd: Path, env: dict[str, str], timeout: int,
               trace_prefix: Path | None = None) -> tuple[float, str]:
+    require_owned_session_support()
     started = time.monotonic()
     # The workload has a small controlled stdout; stderr is not retained.
     with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
@@ -179,11 +204,10 @@ def run_child(args: list[str], cwd: Path, env: dict[str, str], timeout: int,
         try:
             leader_fd = os.pidfd_open(process.pid)
         except BaseException:
-            if process.poll() is None:
-                terminate_owned(process)
+            terminate_owned(process)
             raise
         try:
-            while process.poll() is None:
+            while not child_exited(leader_fd):
                 if time.monotonic() - started > timeout:
                     raise TimeoutError("owned profiler timed out")
                 if trace_prefix is not None:
@@ -191,17 +215,17 @@ def run_child(args: list[str], cwd: Path, env: dict[str, str], timeout: int,
                     if total > TRACE_LIMIT:
                         raise RuntimeError("trace size limit exceeded")
                 time.sleep(0.1)
-            if process.returncode:
-                raise RuntimeError("owned child failed")
-            if stdout.tell() > 1024 * 1024:
-                raise RuntimeError("owned child output exceeded limit")
-            stdout.seek(0)
-            return time.monotonic() - started, stdout.read()
         finally:
             try:
                 terminate_owned(process)
             finally:
                 os.close(leader_fd)
+        if process.returncode:
+            raise RuntimeError("owned child failed")
+        if stdout.tell() > 1024 * 1024:
+            raise RuntimeError("owned child output exceeded limit")
+        stdout.seek(0)
+        return time.monotonic() - started, stdout.read()
 
 
 def validate_binary(binary: Path) -> Path:

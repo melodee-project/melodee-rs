@@ -20,6 +20,15 @@ pub enum WorkStoreError {
     )]
     SettlingCaptureBudgetExhausted,
 
+    #[error("custody hash spool quota exhausted; raise its configured limits and retry")]
+    CustodyHashBudgetExhausted,
+
+    #[error("retained source observation quota exhausted; raise its configured limits and retry")]
+    RetainedSourceBudgetExhausted,
+
+    #[error("retained source changed and requires a retention-safe fresh intake")]
+    RetainedFreshIntakeRequired,
+
     #[error("review identification merge failed")]
     ReviewMerge(#[source] Box<crate::CatalogStoreError>),
 

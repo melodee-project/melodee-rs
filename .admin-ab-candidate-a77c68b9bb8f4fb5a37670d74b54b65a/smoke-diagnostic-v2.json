@@ -1,0 +1,244 @@
+{
+  "base_commit": "37f29889fb05d1825faecb8b597387f0eb971b5e",
+  "baseline_binary_sha256": "8ce9be15e47746bfb4051b39035be64121b1e960315dc921e63ee5ae6eaf30aa",
+  "baseline_build_sha256": "0b7bfe210f79e2852741875b7def2882c291c22fd2b00b05996c224f1a4c5dfd",
+  "baseline_file_sha256": "773f238d0a9e4161f0329032dc684760d7ec28088478be8aeba017bb6f032623",
+  "baseline_source_tree_sha256": "8722ecc18a6bad32663e67352da159b752e751121c8167ef09e004835d81a7e5",
+  "baseline_worktree_dirty": true,
+  "candidate_binary_sha256": "e343543e4e9b528e270c5c7dd24bbf77c1bca5637a4d8fa147ae1c21eb75fad8",
+  "candidate_build_sha256": "5c4c3ea8857e718e1b45d31564d435925848b74fcec24af8f452a3cf1b795083",
+  "candidate_file_sha256": "f8da288e11c84541d82e38eac7bb3591e1fa17a427f45604103ebd0b15f3bd13",
+  "candidate_source_tree_sha256": "7139ebe03a525dfb07182c42ad0dea08580d01bce67539003d6e6854d0a34197",
+  "candidate_worktree_dirty": true,
+  "fixture": {
+    "artists": 35,
+    "releases": 50,
+    "tracks": 150
+  },
+  "limitations": [
+    "in-process authenticated router; no TCP or concurrent ingestion",
+    "ABBA on one fixture; cache not controlled, first sample per process is warmup",
+    "nearest-rank percentiles use only 16 samples per variant; p95 and p99 are coarse",
+    "normalized wire serialization compared exactly, excluding validated time-varying generatedAt",
+    "source and binary hashes do not attest dependency binaries or exclude transient edits"
+  ],
+  "migration_build_sha256": "f60b66bbf5696faa728f2e87d16bd66c50d77e547209ced2380ca151d2671d01",
+  "normalized_response_sha256": "1588b420505888cd124b536e49dda41e848e44a7f97dc34471ea2f7b512c1686",
+  "post_warmup_percentiles": {
+    "baseline": {
+      "count": 16,
+      "p50_ms": 12.315,
+      "p95_ms": 30.448,
+      "p99_ms": 30.448
+    },
+    "candidate": {
+      "count": 16,
+      "p50_ms": 10.81,
+      "p95_ms": 13.718,
+      "p99_ms": 13.718
+    }
+  },
+  "runs": [
+    {
+      "fixture": {
+        "artists": 35,
+        "releases": 50,
+        "tracks": 150
+      },
+      "samples": [
+        {
+          "elapsed_ms": 42.918,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 30.448,
+          "response_bytes": 2738
+        },
+        {
+          "elapsed_ms": 11.923,
+          "response_bytes": 2738
+        },
+        {
+          "elapsed_ms": 11.316,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 13.234,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 12.501,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 12.951,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.749,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 10.838,
+          "response_bytes": 2739
+        }
+      ],
+      "status": "complete",
+      "variant": "baseline"
+    },
+    {
+      "fixture": {
+        "artists": 35,
+        "releases": 50,
+        "tracks": 150
+      },
+      "samples": [
+        {
+          "elapsed_ms": 34.739,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.948,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 10.81,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 10.281,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.853,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.244,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 10.194,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 10.262,
+          "response_bytes": 2738
+        },
+        {
+          "elapsed_ms": 9.303,
+          "response_bytes": 2739
+        }
+      ],
+      "status": "complete",
+      "variant": "candidate"
+    },
+    {
+      "fixture": {
+        "artists": 35,
+        "releases": 50,
+        "tracks": 150
+      },
+      "samples": [
+        {
+          "elapsed_ms": 33.369,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 13.718,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 13.41,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.669,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 10.997,
+          "response_bytes": 2738
+        },
+        {
+          "elapsed_ms": 11.462,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 9.74,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 9.24,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 9.358,
+          "response_bytes": 2739
+        }
+      ],
+      "status": "complete",
+      "variant": "candidate"
+    },
+    {
+      "fixture": {
+        "artists": 35,
+        "releases": 50,
+        "tracks": 150
+      },
+      "samples": [
+        {
+          "elapsed_ms": 36.231,
+          "response_bytes": 2738
+        },
+        {
+          "elapsed_ms": 29.909,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 12.18,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 13.015,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 12.315,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 12.743,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 12.921,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.408,
+          "response_bytes": 2739
+        },
+        {
+          "elapsed_ms": 11.052,
+          "response_bytes": 2738
+        }
+      ],
+      "status": "complete",
+      "variant": "baseline"
+    }
+  ],
+  "script_sha256": {
+    "scripts/build_perf_cli.py": "2f1d014dee3e7082138a53cdfb626258c01673488818a94452193ca61734c203",
+    "scripts/build_perf_server.py": "908eacf53ba9c15fb490d7aa29b6e3e42ef9b6c821fa8c810929ac14f583c813",
+    "scripts/build_perf_test.py": "6ea3a0a3c9f33b48a75f5954a05c0a862b64c2879e87ce1c0c152e1ef0450cef",
+    "scripts/perf_jellyfin_audio_plan.py": "1b6b8f9e87816c1e69d9a877cc29a6aeb10e0a8934bd484a97c4c55aa768c17a",
+    "scripts/perf_media_io_trace.py": "17bd758972c6951a0cf7e2b4c4f09b385f5e15a211b2bcfb74e3e1ccf9187bcb",
+    "scripts/perf_representative.py": "4c2040cd92e335f6694fa9c3871255ade3d4ec84f70abdbc194f97ccc2107a4f",
+    "scripts/run_perf_admin_stats_ab.py": "86779aafe494689c58fb1b817658cf9c142b090c57d73064a8a775c45f1d961d",
+    "scripts/test_database.py": "4a4c43f6cb4552954eca6f5c84b35a0ba026242da14b56d10b1b8d5eb462e518"
+  },
+  "source_changed_file": "apps/melodee-server/src/admin_stats.rs",
+  "source_context": "fingerprinted snapshots based on commit; neither is assumed to be clean HEAD",
+  "status": "complete"
+}

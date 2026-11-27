@@ -175,6 +175,54 @@ async fn stats_require_an_administrator() {
 }
 
 #[tokio::test]
+async fn library_asset_totals_and_bounded_formats_match_independent_sql() {
+    let db = TestDb::create("stats_asset_groups").await;
+    let fixture = seed_users(&db).await;
+    let app = build_app(db.pool.clone());
+    let admin = token_for(fixture.admin_public, "stats-admin");
+
+    let (status, empty) = call(app.clone(), "/api/admin/v1/stats", Some(&admin)).await;
+    assert_eq!(status, StatusCode::OK, "{empty}");
+    assert_eq!(empty["library"]["mediaAssets"], 0);
+    assert_eq!(empty["library"]["totalBytes"], 0);
+    assert_eq!(empty["library"]["losslessTracks"], 0);
+    assert_eq!(empty["library"]["formats"], serde_json::json!([]));
+
+    // More than twelve tied groups exercise SQL ordering and truncation;
+    // NULL, mixed-case lossless and lossy codecs exercise display semantics.
+    sqlx::query("INSERT INTO media_assets(id,canonical_relative_path,byte_hash,byte_size,mime_type,container,codec,created_at)
+        SELECT uuidv7(),'stats-fixture-'||n,repeat('a',64),n,'audio/test',
+               CASE WHEN n=1 THEN NULL ELSE 'format-'||n END,
+               CASE WHEN n=2 THEN NULL WHEN n=3 THEN 'FLAC' WHEN n=4 THEN 'flac' ELSE 'codec-'||n END,now()
+          FROM generate_series(1,18) n")
+        .execute(&db.pool).await.expect("insert varied unreferenced assets");
+    sqlx::query("INSERT INTO media_assets(id,canonical_relative_path,byte_hash,byte_size,mime_type,container,codec,created_at)
+        SELECT uuidv7(),'stats-repeated-'||n,repeat('b',64),n*7,'audio/test','shared','FLAC',now()
+          FROM generate_series(1,3) n")
+        .execute(&db.pool).await.expect("insert repeated format group");
+    let expected_totals: (i64, i64, i64) = sqlx::query_as("SELECT count(*),COALESCE(sum(byte_size),0)::bigint,count(*) FILTER (WHERE codec IS NOT NULL AND lower(codec) IN ('flac','alac','wav','pcm_s16le','pcm_s24le','ape','wv')) FROM media_assets")
+        .fetch_one(&db.pool).await.expect("independent asset totals");
+    let expected_rows: Vec<(Option<String>, Option<String>, i64, i64)> = sqlx::query_as(
+        "SELECT container,codec,count(*),COALESCE(sum(byte_size),0)::bigint FROM media_assets GROUP BY container,codec ORDER BY count(*) DESC,container,codec LIMIT 12",
+    ).fetch_all(&db.pool).await.expect("independent ordered formats");
+    let expected_formats: Vec<Value> = expected_rows.into_iter().map(|(container, codec, tracks, bytes)| {
+        let codec = codec.unwrap_or_else(|| "unknown".to_owned());
+        let lossless = matches!(codec.to_ascii_lowercase().as_str(), "flac"|"alac"|"wav"|"pcm_s16le"|"pcm_s24le"|"ape"|"wv");
+        serde_json::json!({"container":container.unwrap_or_else(|| "unknown".to_owned()),"codec":codec,"tracks":tracks,"bytes":bytes,"lossless":lossless})
+    }).collect();
+    let (status, body) = call(app, "/api/admin/v1/stats", Some(&admin)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["library"]["mediaAssets"], expected_totals.0);
+    assert_eq!(body["library"]["totalBytes"], expected_totals.1);
+    assert_eq!(body["library"]["losslessTracks"], expected_totals.2);
+    assert_eq!(
+        body["library"]["formats"],
+        serde_json::json!(expected_formats)
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn stats_report_library_listening_and_database_panels() {
     let db = TestDb::create("stats_panels").await;
     let fixture = seed_users(&db).await;

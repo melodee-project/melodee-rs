@@ -657,7 +657,8 @@ impl PolicyStore {
         now: OffsetDateTime,
     ) -> Result<Vec<PolicyClaim>, PolicyStoreError> {
         let mut tx = pool.begin().await?;
-        let selected = crate::processing::claim_candidates(&mut tx, "policy", config, now).await?;
+        let selected =
+            crate::processing::claim_candidates(&mut tx, "policy", config, now, false).await?;
         if selected.is_empty() {
             tx.commit().await?;
             return Ok(Vec::new());
@@ -671,7 +672,7 @@ impl PolicyStore {
         let lease_expires_at = now + config.lease_duration;
         let rows: Vec<WorkItemRow> = sqlx::query_as(
             r#"UPDATE release_work_items
-                  SET lease_owner = $1, lease_acquired_at = $2,
+                  SET lease_owner = $1, lease_acquired_at = $2, protected_attempt_lease_epoch = gen_random_uuid(),
                       lease_expires_at = $3, next_attempt_at = NULL,
                       last_attempt_at = $2, updated_at = $2
                 WHERE id = ANY($4) AND state = 'cataloged'
@@ -771,7 +772,7 @@ impl PolicyStore {
         let rows: Vec<(Uuid, Uuid, Option<String>)> = sqlx::query_as(
             r#"WITH candidates AS (
                    SELECT id, lease_owner FROM release_work_items
-                    WHERE state = 'cataloged' AND lease_expires_at <= $1
+                    WHERE state = 'cataloged' AND lease_expires_at <= $1 AND NOT protected_custody_required
                     ORDER BY lease_expires_at, id
                     LIMIT $2 FOR UPDATE SKIP LOCKED
                ), recovered AS (
@@ -1076,6 +1077,7 @@ impl PolicyStore {
             return Err(PolicyStoreError::NotCataloged(request.work_item_id));
         }
         ensure_active_lease(&item, worker, request.now)?;
+        crate::work_items::ensure_ordinary_custody(&mut tx, item.id).await?;
 
         // ADR-0213: the sealed payload is optional. Upgraded rows carry the
         // compact facts; pre-upgrade rows (and historical schemas) still carry
@@ -1507,6 +1509,7 @@ impl PolicyStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, work_item_id).await?;
         ensure_active_lease(&item, worker, now)?;
+        crate::work_items::ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Cataloged {
             return Err(PolicyStoreError::NotCataloged(work_item_id));
         }

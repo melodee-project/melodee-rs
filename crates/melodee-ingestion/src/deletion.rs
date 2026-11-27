@@ -10,6 +10,9 @@ use thiserror::Error;
 
 use crate::secure_fs::remove_directory_tree;
 
+// Match the persistence reservation's maximum work-item scope.
+const MAX_LIFECYCLE_HOLDS: usize = 128;
+
 /// Relative paths removed by one confirmed Release deletion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeletedReleasePaths {
@@ -33,6 +36,8 @@ pub enum ReleaseDeletionError {
     Task(#[from] tokio::task::JoinError),
     #[error("Release deletion admission failed")]
     Admission(#[from] tokio::sync::AcquireError),
+    #[error("too many protected lifecycle holds for one deletion")]
+    TooManyLifecycleHolds,
 }
 
 /// Removes the canonical bundle and optional retained staging tree.
@@ -46,6 +51,30 @@ pub async fn delete_release_storage(
     staging_root: Option<&Path>,
     staging_relative_path: Option<&str>,
 ) -> Result<DeletedReleasePaths, ReleaseDeletionError> {
+    delete_release_storage_with_holds(
+        canonical_root,
+        canonical_relative_path,
+        staging_root,
+        staging_relative_path,
+        Vec::new(),
+    )
+    .await
+}
+
+/// Retain caller-validated lifecycle holds in the actual blocking worker.
+/// The caller must independently authorize deletion and keep its own holds
+/// until the corresponding fenced database completion commits.
+#[doc(hidden)]
+pub async fn delete_release_storage_with_holds(
+    canonical_root: &Path,
+    canonical_relative_path: &str,
+    staging_root: Option<&Path>,
+    staging_relative_path: Option<&str>,
+    holds: Vec<crate::StageLifetimeHold>,
+) -> Result<DeletedReleasePaths, ReleaseDeletionError> {
+    if holds.len() > MAX_LIFECYCLE_HOLDS {
+        return Err(ReleaseDeletionError::TooManyLifecycleHolds);
+    }
     let canonical = owned_path(canonical_root, canonical_relative_path, "canonical")?;
     let staging = match (staging_root, staging_relative_path) {
         (Some(root), Some(relative)) => {
@@ -62,16 +91,14 @@ pub async fn delete_release_storage(
     let canonical_relative_path = canonical_relative_path.to_owned();
     let staging_relative_path = staging.as_ref().map(|(_, relative)| relative.clone());
 
-    let permit = crate::admission::heavy_ingestion().await?;
-    tokio::task::spawn_blocking(move || {
-        let _permit = permit;
+    run_with_lifecycle_holds(holds, move || {
         remove_owned_tree(&canonical, "canonical")?;
         if let Some((path, _)) = staging {
             remove_owned_tree(&path, "staging")?;
         }
         Ok::<(), ReleaseDeletionError>(())
     })
-    .await??;
+    .await?;
 
     Ok(DeletedReleasePaths {
         canonical_relative_path,
@@ -86,6 +113,20 @@ pub async fn delete_storage_files(
     root: &Path,
     relative_paths: &[String],
 ) -> Result<Vec<String>, ReleaseDeletionError> {
+    delete_storage_files_with_holds(root, relative_paths, Vec::new()).await
+}
+
+/// Retain caller-validated lifecycle holds through blocking file removal.
+/// Holds are not deletion authorization; callers keep originals until commit.
+#[doc(hidden)]
+pub async fn delete_storage_files_with_holds(
+    root: &Path,
+    relative_paths: &[String],
+    holds: Vec<crate::StageLifetimeHold>,
+) -> Result<Vec<String>, ReleaseDeletionError> {
+    if holds.len() > MAX_LIFECYCLE_HOLDS {
+        return Err(ReleaseDeletionError::TooManyLifecycleHolds);
+    }
     let mut owned = Vec::with_capacity(relative_paths.len());
     for relative in relative_paths {
         owned.push((relative.clone(), owned_path(root, relative, "media")?));
@@ -97,9 +138,7 @@ pub async fn delete_storage_files(
         .iter()
         .map(|(_, path)| path.clone())
         .collect::<Vec<_>>();
-    let permit = crate::admission::heavy_ingestion().await?;
-    tokio::task::spawn_blocking(move || {
-        let _permit = permit;
+    run_with_lifecycle_holds(holds, move || {
         for path in paths {
             match crate::secure_fs::unlink_file(&path) {
                 Ok(()) => {}
@@ -115,7 +154,7 @@ pub async fn delete_storage_files(
         }
         Ok(())
     })
-    .await??;
+    .await?;
     Ok(owned.into_iter().map(|(relative, _)| relative).collect())
 }
 
@@ -128,6 +167,33 @@ pub async fn delete_unpublished_storage(
     canonical_root: Option<&Path>,
     canonical_path: Option<&str>,
 ) -> Result<(), ReleaseDeletionError> {
+    delete_unpublished_storage_with_holds(
+        id,
+        work_root,
+        staging_root,
+        staging_path,
+        canonical_root,
+        canonical_path,
+        Vec::new(),
+    )
+    .await
+}
+
+/// Retain caller-validated lifecycle holds through unpublished cleanup.
+/// The caller must keep originals through the fenced database completion.
+#[doc(hidden)]
+pub async fn delete_unpublished_storage_with_holds(
+    id: uuid::Uuid,
+    work_root: &Path,
+    staging_root: Option<&Path>,
+    staging_path: Option<&str>,
+    canonical_root: Option<&Path>,
+    canonical_path: Option<&str>,
+    holds: Vec<crate::StageLifetimeHold>,
+) -> Result<(), ReleaseDeletionError> {
+    if holds.len() > MAX_LIFECYCLE_HOLDS {
+        return Err(ReleaseDeletionError::TooManyLifecycleHolds);
+    }
     let scratch = id.simple().to_string();
     let expected = format!("releases/{id}/source");
     if staging_path.is_some_and(|p| p != expected) {
@@ -150,9 +216,7 @@ pub async fn delete_unpublished_storage(
             trees.push((kind, root.to_owned(), owned_path(root, relative, kind)?));
         }
     }
-    let permit = crate::admission::heavy_ingestion().await?;
-    tokio::task::spawn_blocking(move || {
-        let _permit = permit;
+    run_with_lifecycle_holds(holds, move || {
         for (kind, root, _) in &trees {
             crate::secure_fs::open_directory(root).map_err(|source| {
                 ReleaseDeletionError::Remove {
@@ -166,6 +230,31 @@ pub async fn delete_unpublished_storage(
             remove_owned_tree(&path, kind)?;
         }
         Ok(())
+    })
+    .await
+}
+
+async fn run_with_lifecycle_holds<T: Send + 'static>(
+    holds: Vec<crate::StageLifetimeHold>,
+    work: impl FnOnce() -> Result<T, ReleaseDeletionError> + Send + 'static,
+) -> Result<T, ReleaseDeletionError> {
+    let (_, result) = run_with_owned_operation_scope(holds, move |_| work()).await?;
+    Ok(result)
+}
+
+// The operation scope moves into the actual worker and can only return after
+// it terminates. A cancelled waiter therefore cannot release exclusive locks
+// while a detached filesystem operation is still running. This is ownership
+// plumbing only: it does not itself authorize a filesystem operation.
+pub(crate) async fn run_with_owned_operation_scope<S: Send + 'static, T: Send + 'static>(
+    mut scope: S,
+    work: impl FnOnce(&mut S) -> Result<T, ReleaseDeletionError> + Send + 'static,
+) -> Result<(S, T), ReleaseDeletionError> {
+    let permit = crate::admission::heavy_ingestion().await?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let result = work(&mut scope)?;
+        Ok((scope, result))
     })
     .await?
 }
@@ -206,6 +295,107 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancelled_delete_keeps_lifecycle_hold_until_worker_exits() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        struct DropProbe(Arc<AtomicBool>);
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let dropped = Arc::new(AtomicBool::new(false));
+        let hold = crate::StageLifetimeHold::from_arc(Arc::new(DropProbe(dropped.clone())));
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let task = tokio::spawn(async move {
+            run_with_lifecycle_holds(vec![hold], move || {
+                started_tx.send(()).expect("started");
+                release_rx.recv().expect("release");
+                Ok(())
+            })
+            .await
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("started");
+        task.abort();
+        assert!(!dropped.load(Ordering::SeqCst));
+        release_tx.send(()).expect("release worker");
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !dropped.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("hold released");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancelled_worker_keeps_unique_operation_scope_until_termination() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        struct UniqueScope(Arc<AtomicBool>);
+        impl Drop for UniqueScope {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let dropped = Arc::new(AtomicBool::new(false));
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let scope = UniqueScope(dropped.clone());
+        let task = tokio::spawn(async move {
+            run_with_owned_operation_scope(scope, move |_| {
+                started_tx.send(()).expect("worker started");
+                release_rx.recv().expect("release worker");
+                Ok(())
+            })
+            .await
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("started");
+        task.abort();
+        assert!(!dropped.load(Ordering::SeqCst));
+        release_tx.send(()).expect("release worker");
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !dropped.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("unique scope released after worker");
+    }
+
+    #[tokio::test]
+    async fn too_many_holds_refuse_before_deleting_files() {
+        let root = tempfile::tempdir().expect("root");
+        std::fs::write(root.path().join("track"), b"preserve").expect("fixture");
+        let hold = crate::StageLifetimeHold::from_arc(std::sync::Arc::new(()));
+        let result = delete_storage_files_with_holds(
+            root.path(),
+            &["track".to_owned()],
+            vec![hold; MAX_LIFECYCLE_HOLDS + 1],
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ReleaseDeletionError::TooManyLifecycleHolds)
+        ));
+        assert_eq!(
+            std::fs::read(root.path().join("track")).expect("preserved"),
+            b"preserve"
+        );
+    }
 
     #[tokio::test]
     async fn removes_only_the_selected_owned_release_trees_and_is_idempotent() {

@@ -1136,6 +1136,7 @@ async fn scope_artist_counts(
             AND release.status='active'
             AND native_user_can_access_release($2,release.id)
            WHERE release_artist.role='primary'
+             AND release_artist.artist_id=ANY($1::uuid[])
            GROUP BY release_artist.artist_id
          ) releases ON releases.artist_id=artist.id
          LEFT JOIN (
@@ -1146,6 +1147,7 @@ async fn scope_artist_counts(
            JOIN releases release ON release.id=track.release_id
             AND release.status='active'
             AND native_user_can_access_release($2,release.id)
+           WHERE association.artist_id=ANY($1::uuid[])
            GROUP BY association.artist_id
          ) tracks ON tracks.artist_id=artist.id
          WHERE artist.id=ANY($1::uuid[]) ",

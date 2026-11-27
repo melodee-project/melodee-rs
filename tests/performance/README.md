@@ -16,14 +16,23 @@ can be reduced with `--artists`, `--releases` and `--tracks-per-release` for a
 smoke test. `MELODEE_TEST_DATABASE_URL` selects the administrator connection.
 
 This fixture currently supplies catalog rows, referenced assets, synthetic acoustic
-digests, a skewed genre distribution, and deterministic artist, release, and
-track ratings for 100 synthetic users. Usernames are `benchmark-1` through
+digests, a skewed genre distribution, deterministic artist, release, and
+track ratings for 100 synthetic users, and playable and alternate asset links.
+One generated PNG in the disposable asset root backs a subset of artist and
+release artwork references. Two access groups and four bound library IDs cover
+allowed and denied access for a subset of releases; their publication and
+manifest rows are synthetic placeholders, not actual ingestion receipts.
+Usernames are `benchmark-1` through
 `benchmark-100` and the publicly known fixture-only password is
 `benchmark-only-password`; user 1 is an administrator. These credentials are
-solely for the disposable database. It does not provide physical media,
-realistic identity relationships, ACLs, artwork or alternate assets,
-nor does it run a workload or record benchmark metadata. It must not be cited as the representative end-to-end benchmark until
-those gaps are closed.
+solely for the disposable database. Aside from the shared PNG, it does not
+provide physical media. It does not model realistic identity histories or
+publication provenance, run a workload, or by itself record benchmark metadata.
+The [full-size fixture smoke](fixture-verification-2026-11-27.md) verifies its
+observed cardinalities and basic data; it is not an end-to-end benchmark.
+Artwork installation currently requires POSIX descriptor-relative no-follow
+directory operations; hosts without them fail closed rather than following a
+possibly redirected asset path.
 
 ### Identity discovery and production drain (in progress)
 
@@ -43,11 +52,12 @@ not simulate realistic negative assertions, manual locks, redirect histories,
 multiple Track credits, or cross-catalog transitive clusters. A rerun on the
 same fixture is rejected; the enclosing fixture invocation removes its database.
 
-The test adds a shared trusted Artist external ID and a repeated Artist credit
-with two explicit observations, times all five
+The test adds a shared trusted Artist external ID, a repeated Artist credit
+with two explicit observations, and two Track-only Artists on the same Release. It times all five
 production scoped candidate queries and their global counterparts, compares
-returned candidate rows when the global query completes, and times one actual
-reconciliation drain. It captures each scoped statement from SQLx tracing and
+returned candidate rows when the global query completes, and times bounded
+production reconciliation turns until quiescence or a recorded limit. It
+captures each scoped and global statement from SQLx tracing and
 runs that exact SQL and bindings through `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`.
 Queries are capped at 20 seconds and report a timeout as censored. It prints
 fixture counts, seed counts and merged identities. This is
@@ -60,6 +70,36 @@ The benchmark also extracts the SELECT body of the scrobble Artist
 cursor from the production source and reports plans for an ordinary Track and
 one with up to 1,000 additional primary credits. Those plans execute the full
 SELECT and do not measure incremental cursor fetching or lock duration.
+
+For a controlled multi-cardinality comparison, build the `identity` target with
+`python3 scripts/build_perf_test.py --target identity --output <new-build-record.json>`.
+Build the native migration CLI with `python3 scripts/build_perf_cli.py --output
+<new-cli-record.json>` against the same unchanged source. This wrapper rejects
+`CARGO_BUILD_TARGET`; the benchmark CLI must run on the local host.
+The printed executable name selects the exact `target/release/deps` binary.
+Run two **sequential**, separately owned fixtures using the same executable and
+record, for example 3,500 Artists / 5,000 Releases / 60,000 Tracks and then
+35,000 / 50,000 / 600,000. Pass matching `--artists`, `--releases`, and
+`--tracks-per-release 12` options to `perf_representative.py`, and use the
+`--migration-cli <release-cli>` and `--migration-cli-provenance <new-cli-record.json>`
+options before `--`. Use the following command after `--` in each invocation:
+
+```text
+python3 scripts/run_perf_identity_case.py --test-binary <release-test-binary> --build-provenance <new-build-record.json> --migration-cli-provenance <new-cli-record.json> --output <new-case.json>
+```
+
+The case collector validates the direct owned-fixture parent, binary hash,
+current HEAD, fixture-validated migration CLI proof and all fingerprinted workspace sources; it bounds the child
+runtime and output and keeps only synthetic query timings, oracle outcomes,
+plans, and production-drain closure counts. Global-query and plan timeouts are
+censored. Do not compare a censored plan as a completed result. The synthetic
+affected graph has the same logical shape at each cardinality, but its UUIDs
+differ. Each size uses a fresh database and uncontrolled cache state; collect
+repeated trials and other distributions before generalizing scaling behavior.
+The collector attempts to terminate its owned child session on SIGINT, SIGTERM,
+timeout, or failure. SIGKILL or host failure can interrupt that cleanup; review
+any remaining fixture processes and temporary data by exact ownership before
+removing them. Do not signal or remove unrelated processes or data.
 
 ### Bounded connection measurements
 
@@ -78,8 +118,9 @@ millisecond upper bound and above the preceding bound; `bucket_overflow` is abov
 60 seconds. Acquisition metrics time successful pool checkout; hold metrics
 include transaction start, queries and lock waits until the connection is
 released. These times do not independently measure PostgreSQL CPU, I/O, lock
-waits, or executor scheduling. The admin statistic metrics cover only its
-headline aggregate, and the current set does not instrument every workload.
+waits, or executor scheduling. In the current development candidate, the admin
+statistic metrics cover its combined headline and format aggregation; the
+current set does not instrument every workload.
 
 ### Scrobble contention and large Release merge/split (in progress)
 

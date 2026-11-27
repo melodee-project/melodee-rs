@@ -499,7 +499,7 @@ impl CatalogStore {
         );
         let mut tx = (&mut *connection).begin().await?;
         let candidates =
-            crate::processing::claim_candidates(&mut tx, "catalog", config, now).await?;
+            crate::processing::claim_candidates(&mut tx, "catalog", config, now, false).await?;
         let mut claimed = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let (id, persisted_state) = (candidate.id, candidate.state);
@@ -514,7 +514,7 @@ impl CatalogStore {
             let row = sqlx::query_as::<_, WorkItemRow>(
                 "UPDATE release_work_items
                  SET state = 'cataloging', state_reason = $2,
-                     lease_owner = $3, lease_acquired_at = $4,
+                     lease_owner = $3, lease_acquired_at = $4, protected_attempt_lease_epoch = gen_random_uuid(),
                      lease_expires_at = $5, next_attempt_at = NULL, updated_at = $4
                  WHERE id = $1
                  RETURNING *",
@@ -628,7 +628,7 @@ impl CatalogStore {
         let lease_expiry = now + config.lease_duration;
         let mut tx = pool.begin().await?;
         let candidates =
-            crate::processing::claim_candidates(&mut tx, "policy", config, now).await?;
+            crate::processing::claim_candidates(&mut tx, "policy", config, now, false).await?;
         let mut claimed = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let work_item_id = candidate.id;
@@ -641,7 +641,7 @@ impl CatalogStore {
             };
             let row = sqlx::query_as::<_, WorkItemRow>(
                 "UPDATE release_work_items
-                 SET lease_owner = $1, lease_acquired_at = $2,
+                 SET lease_owner = $1, lease_acquired_at = $2, protected_attempt_lease_epoch = gen_random_uuid(),
                      lease_expires_at = $3, updated_at = $2
                  WHERE id = $4
                  RETURNING *",
@@ -789,6 +789,7 @@ impl CatalogStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, work_item_id).await?;
         ensure_active_lease(&item, worker, now)?;
+        crate::work_items::ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Cataloging {
             return Err(WorkStoreError::InvalidState(work_item_id, item.state).into());
         }
@@ -964,6 +965,7 @@ impl CatalogStore {
             .fetch_one(&mut *tx)
             .await?;
         ensure_active_lease(&item, worker, now.max(database_now))?;
+        crate::work_items::ensure_ordinary_custody(&mut tx, item.id).await?;
         if item.state != IngestionState::Cataloging {
             return Err(WorkStoreError::InvalidState(work_item_id, item.state).into());
         }
@@ -982,6 +984,11 @@ impl CatalogStore {
             }
             Err(error) => return Err(error),
         };
+        crate::admin_media_reservation::ensure_release_unreserved(
+            &mut tx,
+            binding.receipt_release_id,
+        )
+        .await?;
         if let Some(existing) = load_existing_release_result(
             &mut tx,
             binding.receipt_release_id,

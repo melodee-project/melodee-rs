@@ -394,6 +394,65 @@ async fn measure_interactive_routes() {
     .execute(&pool)
     .await
     .unwrap();
+    let allowed_artist_id: Uuid = sqlx::query_scalar(
+        "SELECT artist.public_api_id FROM release_artists billing
+         JOIN artists artist ON artist.id=billing.artist_id
+         WHERE billing.release_id=$1 AND billing.role='primary'
+         ORDER BY billing.presentation_order,billing.id LIMIT 1",
+    )
+    .bind(allowed.release_id().into_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let hidden_artist_id: Uuid = sqlx::query_scalar(
+        "SELECT artist.public_api_id FROM release_artists billing
+         JOIN artists artist ON artist.id=billing.artist_id
+         WHERE billing.release_id=$1 AND billing.role='primary'
+         ORDER BY billing.presentation_order,billing.id LIMIT 1",
+    )
+    .bind(hidden.release_id().into_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    // Exercise the actual paged Artist DTO path while library bindings are
+    // present. Most synthetic releases have no provenance and are therefore
+    // unrestricted; the two real imported releases exercise allow/deny.
+    for iteration in 0..4 {
+        let mut request = Request::builder()
+            .uri("/api/v1/artists?page=1&pageSize=25")
+            .body(Body::empty())
+            .unwrap();
+        request.extensions_mut().insert(principal);
+        request
+            .extensions_mut()
+            .insert(NativeClientBinding("203.0.113.7".into()));
+        let start = Instant::now();
+        let response = native.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 64 * 1024 * 1024)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let rows = value["data"].as_array().unwrap();
+        let allowed_artist = rows
+            .iter()
+            .find(|row| row["id"] == allowed_artist_id.to_string())
+            .expect("allowed artist is in the first page");
+        assert_eq!(allowed_artist["albumCount"], 1);
+        assert_eq!(allowed_artist["songCount"], 1);
+        if allowed_artist_id != hidden_artist_id {
+            assert!(
+                !rows
+                    .iter()
+                    .any(|row| row["id"] == hidden_artist_id.to_string())
+            );
+        }
+        println!(
+            "route=native_acl_artists iteration={iteration} elapsed_ms={:.3} bytes={}",
+            start.elapsed().as_secs_f64() * 1000.0,
+            body.len()
+        );
+    }
     for (label, id, expected) in [
         ("allowed", release_ids[0], StatusCode::OK),
         ("denied", release_ids[1], StatusCode::NOT_FOUND),

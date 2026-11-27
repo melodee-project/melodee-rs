@@ -1,0 +1,655 @@
+{
+  "binary_sha256": "9708c07a441fb2091f7f8ae6b6163a555ce568dbb1761281e2ef8f89047838e8",
+  "fixture_sha256": "33fd769ad39cd2478406aa0017e0d804953c2a4a8c4f9f7239144c259b63abb4",
+  "limitations": [
+    "single process and generation; prior rebuild included in RSS",
+    "uncontrolled cache and segment evolution; mixed upserts only",
+    "in-process searches, no concurrent clients, physical media or network latency",
+    "SQLx event counts are not network round trips"
+  ],
+  "migration_cli_sha256": "453d8b5a2c00d0d229a6e99f99f2f6b6d39cd322756b6dfaf776ad909fee8c51",
+  "status": "complete",
+  "trials": [
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000253276,
+          0.00018629,
+          0.001004828,
+          0.000253036,
+          0.000176111,
+          0.000241864,
+          0.00023985,
+          0.000174759,
+          0.000172103,
+          0.000164098,
+          0.000161033,
+          0.000178656,
+          0.000174718
+        ],
+        "commit": [
+          0.014330981,
+          0.014944012
+        ],
+        "commit_reader_reload": [
+          0.000440729,
+          0.000563669
+        ],
+        "index_open": [
+          0.000166593,
+          0.000262283,
+          0.000133772
+        ],
+        "reader_init": [
+          0.000459323,
+          0.000754278,
+          0.000667424
+        ],
+        "segments": [
+          6.0,
+          6.0
+        ],
+        "writer_init": [
+          0.002014796,
+          0.000606781
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          44.400247,
+          36.333358000000004
+        ],
+        "batch_size": 16,
+        "batches": 2,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 18828,
+        "current_process_rss_before_kib": 13760,
+        "elapsed_seconds": 0.080734447,
+        "events": 19,
+        "events_per_second": 235.33944562721783,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 82.098,
+        "peak_process_rss_after_kib": 48548,
+        "peak_process_rss_before_kib": 28912,
+        "query_elapsed_ms": [
+          1.93662,
+          0.695357,
+          1.5264689999999999,
+          0.688494,
+          0.590519,
+          0.7290610000000001,
+          0.685217,
+          0.572586,
+          0.575782,
+          0.514386,
+          0.488128
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 40,
+        "track_events": 12,
+        "trial": 1,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.00062801,
+          0.000153057,
+          0.000149551,
+          0.000136968,
+          0.000140124,
+          0.000128842,
+          0.000198503,
+          0.000134503,
+          0.000119444,
+          0.00013305,
+          0.000115928,
+          0.000111089,
+          0.000124374
+        ],
+        "commit": [
+          0.016457367
+        ],
+        "commit_reader_reload": [
+          0.000507093
+        ],
+        "index_open": [
+          0.000174467
+        ],
+        "reader_init": [
+          0.000674327
+        ],
+        "segments": [
+          3.0
+        ],
+        "writer_init": [
+          0.000631737
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          39.330681
+        ],
+        "batch_size": 64,
+        "batches": 1,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 21524,
+        "current_process_rss_before_kib": 18836,
+        "elapsed_seconds": 0.039331502,
+        "events": 19,
+        "events_per_second": 483.0733390247848,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 40.578,
+        "peak_process_rss_after_kib": 48548,
+        "peak_process_rss_before_kib": 48548,
+        "query_elapsed_ms": [
+          1.129283,
+          0.595519,
+          0.449074,
+          0.39907000000000004,
+          0.5152979999999999,
+          0.39002299999999995,
+          0.509998,
+          0.439476,
+          0.376227,
+          0.399171,
+          0.37184799999999996
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 21,
+        "track_events": 12,
+        "trial": 2,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000720493,
+          0.000162836,
+          0.000134382,
+          0.000133761,
+          0.000134943,
+          0.00013312,
+          0.00017052,
+          0.000128943,
+          0.000137398,
+          0.000136627,
+          0.000131548,
+          0.000142939,
+          0.000118412
+        ],
+        "commit": [
+          0.018378848
+        ],
+        "commit_reader_reload": [
+          0.000500951
+        ],
+        "index_open": [
+          0.000198102
+        ],
+        "reader_init": [
+          0.000586913
+        ],
+        "segments": [
+          3.0
+        ],
+        "writer_init": [
+          0.000687382
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          41.908083999999995
+        ],
+        "batch_size": 256,
+        "batches": 1,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 21692,
+        "current_process_rss_before_kib": 21524,
+        "elapsed_seconds": 0.041909076,
+        "events": 19,
+        "events_per_second": 453.36241724823515,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 40.302,
+        "peak_process_rss_after_kib": 60524,
+        "peak_process_rss_before_kib": 48548,
+        "query_elapsed_ms": [
+          2.398988,
+          1.3462,
+          0.438824,
+          0.531629,
+          0.520017,
+          0.442913,
+          0.49894700000000003,
+          0.5192950000000001,
+          0.46225900000000003,
+          0.418145,
+          0.407165
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 21,
+        "track_events": 12,
+        "trial": 3,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000550044,
+          0.000124554,
+          0.000116279,
+          0.000112852,
+          0.000124714,
+          0.00011175,
+          0.000115016,
+          0.000114426,
+          0.000125256,
+          0.000159519,
+          0.000123752,
+          0.000117331,
+          0.000120737
+        ],
+        "commit": [
+          0.017297666
+        ],
+        "commit_reader_reload": [
+          0.00040407
+        ],
+        "index_open": [
+          0.000144853
+        ],
+        "reader_init": [
+          0.000382779
+        ],
+        "segments": [
+          3.0
+        ],
+        "writer_init": [
+          0.000544143
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          39.218019
+        ],
+        "batch_size": 512,
+        "batches": 1,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 21784,
+        "current_process_rss_before_kib": 21692,
+        "elapsed_seconds": 0.039218911,
+        "events": 19,
+        "events_per_second": 484.4601625985994,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 42.821,
+        "peak_process_rss_after_kib": 60548,
+        "peak_process_rss_before_kib": 60524,
+        "query_elapsed_ms": [
+          0.938404,
+          0.40266599999999997,
+          0.379534,
+          0.34883499999999995,
+          0.374304,
+          0.33426799999999995,
+          0.358293,
+          0.380535,
+          0.46066500000000005,
+          0.5313180000000001,
+          0.49169399999999996
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 21,
+        "track_events": 12,
+        "trial": 4,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000636155,
+          0.000130525,
+          0.000123572,
+          0.000115948,
+          0.000114164,
+          0.000128982,
+          0.000128371,
+          0.000151004,
+          0.00014924,
+          0.000121218,
+          0.000122189,
+          0.000119534,
+          0.000157196
+        ],
+        "commit": [
+          0.018849172
+        ],
+        "commit_reader_reload": [
+          0.000446739
+        ],
+        "index_open": [
+          0.00017049
+        ],
+        "reader_init": [
+          0.000355639
+        ],
+        "segments": [
+          3.0
+        ],
+        "writer_init": [
+          0.000578998
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          41.705904000000004
+        ],
+        "batch_size": 512,
+        "batches": 1,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 21932,
+        "current_process_rss_before_kib": 21784,
+        "elapsed_seconds": 0.041706736,
+        "events": 19,
+        "events_per_second": 455.56190251857635,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 42.094,
+        "peak_process_rss_after_kib": 62060,
+        "peak_process_rss_before_kib": 60548,
+        "query_elapsed_ms": [
+          1.191649,
+          0.453072,
+          0.36689,
+          0.390493,
+          0.373051,
+          0.406073,
+          0.374905,
+          0.440929,
+          0.444475,
+          0.43555900000000003,
+          0.42370599999999997
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 21,
+        "track_events": 12,
+        "trial": 5,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000558429,
+          0.000128221,
+          0.000117541,
+          0.000127579,
+          0.000117722,
+          0.000116429,
+          0.000125455,
+          0.000126267,
+          0.000124934,
+          0.000127931,
+          0.000117861,
+          0.000203091,
+          0.000210416
+        ],
+        "commit": [
+          0.014445125
+        ],
+        "commit_reader_reload": [
+          0.000578377
+        ],
+        "index_open": [
+          0.0001866
+        ],
+        "reader_init": [
+          0.000376197
+        ],
+        "segments": [
+          3.0
+        ],
+        "writer_init": [
+          0.000612441
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          36.27557
+        ],
+        "batch_size": 256,
+        "batches": 1,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 22064,
+        "current_process_rss_before_kib": 21932,
+        "elapsed_seconds": 0.0362762,
+        "events": 19,
+        "events_per_second": 523.7593794278342,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 36.449000000000005,
+        "peak_process_rss_after_kib": 62060,
+        "peak_process_rss_before_kib": 62060,
+        "query_elapsed_ms": [
+          0.9641419999999999,
+          0.388139,
+          0.39289799999999997,
+          0.39045399999999997,
+          0.364986,
+          0.37458400000000003,
+          0.385174,
+          0.36682000000000003,
+          0.386867,
+          0.397217,
+          0.482346
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 21,
+        "track_events": 12,
+        "trial": 6,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000588856,
+          0.000126748,
+          0.000113894,
+          0.00012762,
+          0.000147928,
+          0.000142187,
+          0.000127659,
+          0.000128201,
+          0.000127108,
+          0.000129693,
+          0.000153308,
+          0.000129834,
+          0.000144592
+        ],
+        "commit": [
+          0.017524803
+        ],
+        "commit_reader_reload": [
+          0.000463842
+        ],
+        "index_open": [
+          0.000102763
+        ],
+        "reader_init": [
+          0.00040462
+        ],
+        "segments": [
+          3.0
+        ],
+        "writer_init": [
+          0.000836382
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          43.605725
+        ],
+        "batch_size": 64,
+        "batches": 1,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 22184,
+        "current_process_rss_before_kib": 22064,
+        "elapsed_seconds": 0.043606666,
+        "events": 19,
+        "events_per_second": 435.7132003625317,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 42.55,
+        "peak_process_rss_after_kib": 62060,
+        "peak_process_rss_before_kib": 62060,
+        "query_elapsed_ms": [
+          0.995491,
+          0.412736,
+          0.358714,
+          0.43841399999999997,
+          0.435238,
+          0.428976,
+          0.437052,
+          0.401785,
+          0.411373,
+          0.391115,
+          0.458271
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 21,
+        "track_events": 12,
+        "trial": 7,
+        "workload": "postgres-search-incremental"
+      }
+    },
+    {
+      "lifecycle": {
+        "cached_reader_reload": [
+          0.000706868,
+          0.000182833,
+          0.000165471,
+          0.000343976,
+          0.000275728,
+          0.000173406,
+          0.000164299,
+          0.000310374,
+          0.000207239,
+          0.000324419,
+          0.000172394,
+          0.000162125,
+          0.000206708
+        ],
+        "commit": [
+          0.013028874,
+          0.015427431
+        ],
+        "commit_reader_reload": [
+          0.000514978,
+          0.000561305
+        ],
+        "index_open": [
+          0.000167475,
+          0.000171833
+        ],
+        "reader_init": [
+          0.000433294,
+          0.000476967
+        ],
+        "segments": [
+          4.0,
+          6.0
+        ],
+        "writer_init": [
+          0.000613262,
+          0.000560292
+        ]
+      },
+      "result": {
+        "artist_events": 3,
+        "batch_elapsed_ms": [
+          34.55185,
+          32.862786
+        ],
+        "batch_size": 16,
+        "batches": 2,
+        "build_debug_assertions": false,
+        "current_process_rss_after_kib": 42872,
+        "current_process_rss_before_kib": 22184,
+        "elapsed_seconds": 0.067415618,
+        "events": 19,
+        "events_per_second": 281.8338029623937,
+        "fixture": {
+          "artists": 3,
+          "releases": 4,
+          "tracks": 12
+        },
+        "limitations": "eight mirrored trials on one process and generation; mixed upserts only; no concurrent activity or physical media; SQL setup excluded; query timings in-process; SQLx events count statements, not network round trips; RSS includes the full rebuild and earlier trials",
+        "max_end_to_end_outbox_lag_ms": 67.47200000000001,
+        "peak_process_rss_after_kib": 62588,
+        "peak_process_rss_before_kib": 62060,
+        "query_elapsed_ms": [
+          1.145162,
+          0.530146,
+          0.46881100000000003,
+          1.0103280000000001,
+          0.6234609999999999,
+          0.523734,
+          0.474301,
+          0.697171,
+          0.522593,
+          0.67055,
+          0.482967
+        ],
+        "release_events": 4,
+        "sqlx_statement_events": 40,
+        "track_events": 12,
+        "trial": 8,
+        "workload": "postgres-search-incremental"
+      }
+    }
+  ],
+  "wrapper_sha256": "8745aa6c28663dba423221f4c66d00a81bd1e97222c5635a0b21b073f78cbc83"
+}

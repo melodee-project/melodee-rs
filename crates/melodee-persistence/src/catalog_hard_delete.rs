@@ -769,6 +769,13 @@ impl CatalogStore {
         if locked != prepared {
             return Err(CatalogStoreError::MutationConflict);
         }
+        // Worker/retention and administrative reservations are not authorization
+        // to unlink media; this DB-only legacy path rejects those scopes.
+        let blocked:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM admin_media_reservation_releases WHERE release_id=ANY($1)) OR EXISTS(SELECT 1 FROM release_work_items w JOIN (SELECT work_item_id FROM catalog_imports WHERE release_id=ANY($1) UNION SELECT work_item_id FROM release_publication_plans WHERE release_id=ANY($1)) scoped ON scoped.work_item_id=w.id WHERE w.protected_custody_required OR EXISTS(SELECT 1 FROM admin_media_reservation_items g WHERE g.work_item_id=w.id) OR EXISTS(SELECT 1 FROM inbound_retained_sources r WHERE r.work_item_id=w.id AND r.status='active'))")
+            .bind(&release_ids).fetch_one(&mut *tx).await?;
+        if blocked {
+            return Err(CatalogStoreError::MutationConflict);
+        }
         lock_delete_recommendation_closure(&mut tx, &[], &[]).await?;
         let mut outcome = HardDeleteOutcome {
             deleted_tracks: locked.iter().map(|(_, public, _)| *public).collect(),
@@ -1355,6 +1362,14 @@ async fn delete_releases_tx(
     .bind(release_ids)
     .fetch_all(&mut **tx)
     .await?;
+    // DB-only legacy hard deletion must not bypass an active protected or
+    // administrative media operation. Filesystem callers also need an intent
+    // before they remove bytes; this check alone is not that intent.
+    let blocked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM release_work_items w WHERE w.id=ANY($1) AND (w.protected_custody_required OR EXISTS(SELECT 1 FROM admin_media_reservation_items g WHERE g.work_item_id=w.id) OR EXISTS(SELECT 1 FROM inbound_retained_sources r WHERE r.work_item_id=w.id AND r.status='active'))) OR EXISTS(SELECT 1 FROM admin_media_reservation_releases WHERE release_id=ANY($2))")
+        .bind(&work_items).bind(release_ids).fetch_one(&mut **tx).await?;
+    if blocked {
+        return Err(CatalogStoreError::MutationConflict);
+    }
     let media_ids = sqlx::query_scalar::<_, Uuid>(
         "SELECT DISTINCT media_asset_id FROM track_media_assets
           WHERE track_id = ANY($1)

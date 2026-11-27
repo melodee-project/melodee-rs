@@ -613,3 +613,217 @@ async fn purge_refuses_a_cataloged_release_even_when_marked_failed() {
     assert_eq!(1, release_survives);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn no_handoff_purge_refuses_before_removing_any_storage() {
+    let db = TestDb::create("admin_purge_source_custody_hold").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "purge-admin");
+    let root = tempfile::tempdir().expect("temp root");
+    let inbound = root.path().join("inbound");
+    let staging = root.path().join("staging");
+    let work = root.path().join("work");
+    std::fs::create_dir_all(inbound.join("Never Acquired")).expect("source");
+    std::fs::write(inbound.join("Never Acquired/track.flac"), b"producer bytes")
+        .expect("source bytes");
+    let (id, _) = insert_failed_item(&db, "Never Acquired").await;
+    std::fs::create_dir_all(work.join(id.simple().to_string())).expect("work area");
+    std::fs::write(
+        work.join(id.simple().to_string()).join("keep"),
+        b"work bytes",
+    )
+    .expect("work bytes");
+    let (status, body) = call(
+        app(db.pool.clone(), inbound.clone(), staging, work.clone()),
+        "POST",
+        "/api/admin/v1/ingest/work-items/purge",
+        Some(json!({"workItemIds":[id],"confirm":true})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["deleted"], json!([]));
+    assert_eq!(body["failed"][0]["code"], "source_custody_required");
+    assert_eq!(
+        std::fs::read(inbound.join("Never Acquired/track.flac")).expect("source retained"),
+        b"producer bytes"
+    );
+    assert_eq!(
+        std::fs::read(work.join(id.simple().to_string()).join("keep")).expect("work retained"),
+        b"work bytes"
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM release_work_items WHERE id=$1")
+        .bind(id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("item");
+    assert_eq!(count, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn abandoned_purge_guard_blocks_retry_before_any_filesystem_deletion() {
+    let db = TestDb::create("admin_purge_abandoned_guard").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "purge-admin");
+    let root = tempfile::tempdir().expect("temp root");
+    let inbound = root.path().join("inbound");
+    let staging = root.path().join("staging");
+    let work = root.path().join("work");
+    let (id, _) = insert_failed_item(&db, "Candidate").await;
+    let relative = format!("releases/{id}/source");
+    std::fs::create_dir_all(staging.join(&relative)).expect("staging");
+    std::fs::write(staging.join(&relative).join("track"), b"owned bytes").expect("staged bytes");
+    std::fs::create_dir_all(work.join(id.simple().to_string())).expect("work area");
+    sqlx::query("INSERT INTO release_work_item_staging_handoffs(work_item_id,staging_relative_path,source_generation,status,method,tree_hash,intended_at,staged_at) VALUES($1,$2,'gen','staged','rename',$3,clock_timestamp(),clock_timestamp())")
+        .bind(id).bind(&relative).bind("a".repeat(64)).execute(&db.pool).await.expect("handoff");
+    let guard = melodee_persistence::WorkItemStore
+        .begin_pre_catalog_purge(&db.pool, id, &fixture.admin_public.to_string())
+        .await
+        .expect("reserve");
+    drop(guard); // Simulate process loss before any filesystem operation.
+    let (status, body) = call(
+        app(db.pool.clone(), inbound, staging.clone(), work.clone()),
+        "POST",
+        "/api/admin/v1/ingest/work-items/purge",
+        Some(json!({"workItemIds":[id],"confirm":true})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["deleted"], json!([]));
+    assert_eq!(body["failed"][0]["code"], "purge_guard_failed");
+    assert_eq!(
+        std::fs::read(staging.join(relative).join("track")).expect("stage retained"),
+        b"owned bytes"
+    );
+    assert!(work.join(id.simple().to_string()).exists());
+    let guards: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM inbound_occurrence_purge_guards WHERE work_item_id=$1",
+    )
+    .bind(id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("guard");
+    assert_eq!(guards, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn unsafe_staging_path_is_rejected_before_guard_or_filesystem_changes() {
+    let db = TestDb::create("admin_purge_preflight_unsafe_stage").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "purge-admin");
+    let root = tempfile::tempdir().expect("temp root");
+    let inbound = root.path().join("inbound");
+    let staging = root.path().join("staging");
+    let work = root.path().join("work");
+    let (id, _) = insert_failed_item(&db, "Candidate").await;
+    std::fs::create_dir_all(work.join(id.simple().to_string())).expect("work area");
+    std::fs::write(
+        work.join(id.simple().to_string()).join("keep"),
+        b"work bytes",
+    )
+    .expect("work bytes");
+    sqlx::query("INSERT INTO release_work_item_staging_handoffs(work_item_id,staging_relative_path,source_generation,status,method,tree_hash,intended_at,staged_at) VALUES($1,'../outside','gen','staged','rename',$2,clock_timestamp(),clock_timestamp())")
+        .bind(id).bind("a".repeat(64)).execute(&db.pool).await.expect("handoff");
+    let (status, body) = call(
+        app(db.pool.clone(), inbound, staging, work.clone()),
+        "POST",
+        "/api/admin/v1/ingest/work-items/purge",
+        Some(json!({"workItemIds":[id],"confirm":true})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["deleted"], json!([]));
+    assert_eq!(body["failed"][0]["code"], "unsafe_path");
+    assert_eq!(
+        std::fs::read(work.join(id.simple().to_string()).join("keep")).expect("work retained"),
+        b"work bytes"
+    );
+    let guards: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM inbound_occurrence_purge_guards WHERE work_item_id=$1",
+    )
+    .bind(id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("guard count");
+    assert_eq!(
+        guards, 0,
+        "a deterministic preflight failure must not strand a guard"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn retained_occurrence_blocks_purge_after_original_item_is_deleted() {
+    let db = TestDb::create("admin_purge_retained_after_original_deletion").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "purge-admin");
+    let root = tempfile::tempdir().expect("temp root");
+    let inbound = root.path().join("inbound");
+    let staging = root.path().join("staging");
+    let work = root.path().join("work");
+    std::fs::create_dir_all(inbound.join("Candidate")).expect("source");
+    std::fs::write(inbound.join("Candidate/track"), b"producer bytes").expect("source bytes");
+    let (original, _) = insert_failed_item(&db, "Candidate").await;
+    sqlx::query("INSERT INTO inbound_retained_sources(work_item_id,source_path,source_generation,content_digest,next_reobserve_at,created_at,updated_at) VALUES($1,'Candidate','generation',$2,clock_timestamp(),clock_timestamp(),clock_timestamp())")
+        .bind(original).bind(format!("v3:{}", "a".repeat(64))).execute(&db.pool).await.expect("retained obligation");
+    sqlx::query("DELETE FROM release_work_items WHERE id=$1")
+        .bind(original)
+        .execute(&db.pool)
+        .await
+        .expect("remove original row");
+    // Model a preexisting row/handoff from before occurrence fencing. Normal
+    // discovery and handoff APIs now prevent creating this conflicting state.
+    let (fresh, _) = insert_failed_item(&db, "Candidate").await;
+    let relative = format!("releases/{fresh}/source");
+    std::fs::create_dir_all(staging.join(&relative)).expect("stage");
+    std::fs::write(staging.join(&relative).join("keep"), b"stage bytes").expect("stage bytes");
+    std::fs::create_dir_all(work.join(fresh.simple().to_string())).expect("work");
+    std::fs::write(
+        work.join(fresh.simple().to_string()).join("keep"),
+        b"work bytes",
+    )
+    .expect("work bytes");
+    sqlx::query("INSERT INTO release_work_item_staging_handoffs(work_item_id,staging_relative_path,source_generation,status,method,tree_hash,intended_at,staged_at) VALUES($1,$2,'gen','staged','rename',$3,clock_timestamp(),clock_timestamp())")
+        .bind(fresh).bind(&relative).bind("a".repeat(64)).execute(&db.pool).await.expect("old handoff");
+    let (status, body) = call(
+        app(
+            db.pool.clone(),
+            inbound.clone(),
+            staging.clone(),
+            work.clone(),
+        ),
+        "POST",
+        "/api/admin/v1/ingest/work-items/purge",
+        Some(json!({"workItemIds":[fresh],"confirm":true})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["deleted"], json!([]));
+    assert_eq!(body["failed"][0]["code"], "source_retained");
+    assert_eq!(
+        std::fs::read(inbound.join("Candidate/track")).expect("source retained"),
+        b"producer bytes"
+    );
+    assert_eq!(
+        std::fs::read(staging.join(relative).join("keep")).expect("stage retained"),
+        b"stage bytes"
+    );
+    assert_eq!(
+        std::fs::read(work.join(fresh.simple().to_string()).join("keep")).expect("work retained"),
+        b"work bytes"
+    );
+    let retained: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM inbound_retained_sources WHERE work_item_id=$1 AND status='active'",
+    )
+    .bind(original)
+    .fetch_one(&db.pool)
+    .await
+    .expect("obligation remains");
+    assert_eq!(retained, 1);
+    db.drop().await;
+}

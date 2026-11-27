@@ -120,13 +120,30 @@ or an equivalent supervisor to start MPV with the configured socket.
 | `MELODEE__INGEST__SOURCE_LIBRARY_ID` | — | Optional library id for the single-root mode. |
 | `MELODEE__INGEST__SOURCE_LIBRARY_NAME` | — | Optional source name for the single-root mode. |
 | `MELODEE__INGEST__RECONCILIATION_INTERVAL_SECONDS` | `30` | Period between periodic scans. |
+| `MELODEE__INGEST__RETAINED_RECHECK_INTERVAL_SECONDS` | `300` | Delay before rechecking an unchanged retained source; must be between 1 and 2,592,000 seconds. |
+| `MELODEE__INGEST__RETAINED_RECHECK_MIB_PER_SECOND` | `8` | Per-process maximum scheduled read rate for retained-source rechecks, in MiB/s. |
 | `MELODEE__INGEST__SETTLING_QUIET_SECONDS` | `10` | Minimum quiet period before `Settling`→`Ready`. |
 | `MELODEE__INGEST__READY_MARKER_NAME` | `.melodee-ready` | Marker filename that can short-circuit settling. |
 | `MELODEE__INGEST__READY_MARKER_SHORTCUT_SECONDS` | `0` | Quiet-period override when marker is present. |
 
+:::caution[Planned documentation]
+Protected intake is not active yet. The optional `MELODEE__INGEST__PROTECTED_CUSTODY_ROOT`
+and `MELODEE__INGEST__PROTECTED_PRODUCER_UID` settings are reserved for its future
+Linux implementation and do not enable it. If supplied, both are required: the
+root must be an absolute path, and the numeric producer UID must be non-root and
+different from the service UID. Leaving both unset preserves existing behavior.
+The future protocol will also validate filesystem isolation and ownership; setting
+these values alone does not establish them. Operators must enforce that all drop
+writers use the declared unprivileged identity and cannot run as the service user;
+the setting does not verify who actually writes inbound files.
+:::
+
 ### Throughput tuning
 
 The default worker concurrency is `2` per stage. Even one publisher can keep a shared disk busy.
+Retained-source rechecks share one read budget within a process. If multiple configurations set
+different rates, the strictest rate remains in effect until the process restarts. The setting
+limits application reads; operating-system caching and readahead affect actual storage traffic.
 For a 25-Release, 1.8 GB batch on a 24-core host, the median wait before a Release was claimed was ~200 s while the
 work itself took seconds to tens of seconds per stage.
 

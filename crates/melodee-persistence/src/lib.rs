@@ -7,7 +7,21 @@
 
 #![forbid(unsafe_code)]
 
+mod admin_media_completion;
+pub use admin_media_completion::{AdminArchiveIntent, AdminArchiveRoot};
+mod admin_media_page_intent;
 pub mod asset_files;
+pub use admin_media_page_intent::{
+    AdminDeletionIntentEntry, AdminDeletionPageIntent, AdminDeletionPageKind,
+    AdminMediaRootExpectation, AdminQuarantineBinding, AdminQuarantineIntent,
+    AdminQuarantineObservation, AdminQuarantineRecovery, AdminQuarantineRequest,
+};
+mod admin_media_reservation;
+mod admin_media_snapshot;
+pub use admin_media_reservation::{AdminMediaReservation, AdminReservedLifecycle};
+pub use admin_media_snapshot::{
+    AdminCatalogDeleteKind, AdminMediaObjectKey, AdminMediaSnapshotEntry, AdminMediaSnapshotObject,
+};
 mod auth;
 mod catalog;
 mod catalog_browse;
@@ -21,10 +35,16 @@ mod device_profiles;
 mod discovery;
 mod discovery_scan;
 pub use discovery_scan::DiscoveryScanFence;
+mod custody_hash_spool;
 mod error;
 mod group_admin;
 mod identity_review;
 mod inbound_custody;
+pub use custody_hash_spool::{
+    CUSTODY_HASH_PAGE_BYTES, CUSTODY_HASH_PAGE_SIZE, CustodyHashCursor, CustodyHashEntry,
+    CustodyHashObservation, CustodyHashPurpose, CustodyHashSpool, CustodyLegacyCursor,
+    CustodyLegacyEntry, SealedCustodyHash,
+};
 pub use inbound_custody::{InboundCustodyClaim, InboundCustodyIntent};
 mod installation;
 mod job_history;
@@ -33,12 +53,44 @@ pub mod metrics;
 mod migrate;
 mod native_user_state;
 mod notifications;
+mod protected_publication;
+pub use protected_publication::{ProtectedPublication, ProtectedRetentionSession};
+mod protected_stage_cleanup;
+pub use protected_stage_cleanup::{ProtectedCleanupLease, ProtectedCleanupRetryReason};
+mod protected_stage_attempt;
+pub use protected_stage_attempt::{
+    ClaimedStageReceipt, ProtectedBaselineDirectoryEntry, ProtectedBaselineVerityEntry,
+    ProtectedCleanedReceiptRecovery, ProtectedReceiptRecovery, ProtectedStageAttempt,
+    ProtectedStageIdentity,
+};
 mod policy;
 pub mod processing;
 mod provider_eligibility;
 mod provider_enrichment;
 mod providers;
 mod radio;
+mod retained_baseline;
+pub use retained_baseline::{
+    RetainedBaselineChunk, RetainedBaselineFile, RetainedBaselineFrozen, RetainedFileVerity,
+    RetainedProtectedBaselineFrozen,
+};
+mod retained_baseline_directory;
+pub use retained_baseline_directory::{
+    RetainedBaselineDirectory, RetainedDirectoryAdvance, RetainedDirectoryContinuation,
+    RetainedDirectoryMember,
+};
+mod retained_baseline_walk;
+pub use retained_baseline_walk::{
+    RetainedBaselinePage, RetainedBaselinePass, RetainedBaselineRead,
+    RetainedBaselineUnreadableReason,
+};
+mod retained_chunk_checkpoint;
+pub use retained_chunk_checkpoint::RetainedChunkCheckpoint;
+mod retained_sources;
+pub use retained_sources::{
+    MAX_RETAINED_OBLIGATION_LIST, MAX_RETAINED_SOURCE_CLAIM, RetainedObligationView,
+    RetainedRecheckOutcome, RetainedRecheckSession, RetainedRetryReason, RetainedSourceLease,
+};
 pub mod review_correction;
 mod review_delete;
 pub use review_delete::ReviewDeletionAuthorization;
@@ -54,6 +106,11 @@ pub use settling_capture::{
 mod settings;
 mod user_admin;
 mod user_profile;
+mod work_item_lifecycle;
+pub use work_item_lifecycle::{
+    LifecycleMaintenance, LifecycleProvisionLease, LifecycleQuarantineReason,
+    LifecycleQuiescenceAttestation, WorkItemLifecycleIdentity,
+};
 mod work_items;
 mod worker;
 mod worker_pool;
@@ -223,10 +280,11 @@ pub use user_profile::{
     RegistrationRequest, UserProfileError, UserProfileStore, valid_time_zone_id,
 };
 pub use work_items::{
-    ActiveLease, HourlyCompletionCount, LegacyInboundPath, LegacyPathResolution,
-    PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StagingHandoff,
-    StagingHandoffMethod, StagingHandoffStatus, StateCount, StoredManifest, StoredPublication,
-    WorkItemListRow, WorkItemSort, WorkItemStore, WorkItemWindowCounts,
+    ActiveLease, HourlyCompletionCount, InboundPurgeGuard, InboundPurgeGuardInfo,
+    LegacyInboundPath, LegacyPathResolution, ProtectedClaim, ProtectedClaimEpoch,
+    PublicationJournalEntry, PurgeGuardRecoveryAttestation, SettlingSnapshot, SettlingSnapshotFile,
+    StagingHandoff, StagingHandoffMethod, StagingHandoffStatus, StateCount, StoredManifest,
+    StoredPublication, WorkItemListRow, WorkItemSort, WorkItemStore, WorkItemWindowCounts,
     inbound_path_requires_review,
 };
 pub use worker::WorkerId;

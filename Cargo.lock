@@ -786,6 +786,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "composefs-ioctls"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d1e1dbf64a4a2dda8db3cbdb3109d29274b0cbeedc1ee68fdc8ccfdefc17cb9"
+dependencies = [
+ "rustix 1.1.6",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2469,6 +2479,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "melodee-custody"
+version = "0.3.0"
+dependencies = [
+ "blake3",
+ "rustix 1.1.6",
+ "sha2 0.11.0",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
 name = "melodee-domain"
 version = "0.3.0"
 dependencies = [
@@ -2487,7 +2510,9 @@ dependencies = [
  "blake3",
  "cap-fs-ext",
  "cap-std",
+ "composefs-ioctls",
  "futures-util",
+ "melodee-custody",
  "melodee-domain",
  "melodee-media",
  "melodee-persistence",
@@ -2542,6 +2567,7 @@ dependencies = [
  "blake3",
  "getrandom 0.4.3",
  "melodee-auth",
+ "melodee-custody",
  "melodee-domain",
  "rustix 1.1.6",
  "serde",

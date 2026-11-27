@@ -1,0 +1,44 @@
+{
+  "binary_sha256_observed_after": "55492821222007635162f8766d4f6108ea2ed20b88478291385212356a9517aa",
+  "build_evidence_sha256": "c7b07f58b83055205fc465d4a8184d4d5d318d63bb08ec8f91a41999383f944d",
+  "build_head": "37f29889fb05d1825faecb8b597387f0eb971b5e",
+  "changes_since_build_observed_after_run": [
+    {
+      "build_sha256": "ed1709f0a15173a91552f301ce16a60b6e62979e643cedd9acacc322f82ec673",
+      "path": "crates/melodee-ingestion/src/custody.rs",
+      "postrun_sha256": "28e1386c7a6d9b306169c46ebdcf377a7421c6a5cfbb5d5aa0479cdb5684abdf"
+    },
+    {
+      "build_sha256": "9f55da051071ffce1da0ddf469ada965cc1c8236401e00f38494ccbf6d1d6061",
+      "path": "crates/melodee-ingestion/src/scheduler.rs",
+      "postrun_sha256": "b213259af6b78364d9412c3bf4ab17c6daa6c397e71e17c9fe5094e58eef7db1"
+    },
+    {
+      "build_sha256": "5110bae9847671724a4342e00c806379afdf63791c39386f5ccc2fc9ef0085c9",
+      "path": "crates/melodee-ingestion/tests/acquisition.rs",
+      "postrun_sha256": "cb2aa2cd696a14185e1959e6ed5950659cd15e351086c94aa071f90f447b8f86"
+    },
+    {
+      "build_sha256": "bdd99343efa403f441efdd526e7c53faad09504f754697001053cc353af40382",
+      "path": "crates/melodee-persistence/migrations/0071_custody_hash_spool.sql",
+      "postrun_sha256": "d014cb37cc630b94acd34d94ca7aec9dd301686c08e8b98c68c68a0f24d11e8a"
+    },
+    {
+      "build_sha256": "3722217a642ac02b5e4b27337a4c48e6cc79fc38ba5ccf7d87dd0ddce5ee935b",
+      "path": "crates/melodee-persistence/src/retained_sources.rs",
+      "postrun_sha256": "e24cc92cd601514da6a140dd2fe9ccbb180f58a893e078bb158394ecd04ec5d3"
+    },
+    {
+      "build_sha256": "a054f34c792713ece446a553fe3bb40a83a901098a4f600cbf7bf5baf04fb3b5",
+      "path": "crates/melodee-persistence/tests/retained_sources.rs",
+      "postrun_sha256": "f34735df7821541a3ccb72cd8f7e76efc972b4bf86b9b346eac3f6149db72993"
+    }
+  ],
+  "limitations": [
+    "postrun source observation is not an atomic snapshot during the earlier run",
+    "matching hashes do not exclude transient changes"
+  ],
+  "observed_utc": "2026-11-27T05:31:03.487774+00:00",
+  "postrun_head": "37f29889fb05d1825faecb8b597387f0eb971b5e",
+  "test_evidence_sha256": "a5ded9891fe91c74581c9fb93590eb4b41b2372538e57c6185b4e6f14c46d906"
+}

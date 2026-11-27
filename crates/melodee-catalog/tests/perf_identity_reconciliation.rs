@@ -43,9 +43,7 @@ impl<S: Subscriber> Layer<S> for CaptureStatements {
             let mut visitor = StatementVisitor::default();
             event.record(&mut visitor);
             if let Some(statement) = visitor.0 {
-                if statement.starts_with("WITH ")
-                    && statement.contains("catalog_identity_reconciliation_seed")
-                {
+                if statement.starts_with("WITH ") {
                     let mut statements = self.0.lock().expect("statement capture lock");
                     if statements.len() == 8 {
                         statements.remove(0);
@@ -62,15 +60,14 @@ async fn explain_captured(
     captured: &Arc<Mutex<Vec<String>>>,
     name: &str,
     seeds: &[i64],
+    global: bool,
 ) {
     let statements = std::mem::take(&mut *captured.lock().expect("statement capture lock"));
     let statement = statements
         .into_iter()
         .rev()
-        .find(|sql| {
-            sql.starts_with("WITH ") && sql.contains("catalog_identity_reconciliation_seed")
-        })
-        .expect("production scoped SQL captured from SQLx tracing");
+        .find(|sql| sql.starts_with("WITH "))
+        .expect("production candidate SQL captured from SQLx tracing");
     assert!(
         !statement.contains(';'),
         "only one captured statement may be explained"
@@ -79,15 +76,23 @@ async fn explain_captured(
     // input. Bind the exact same seed IDs and candidate limit as that query.
     let explain = format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {statement}");
     let mut query = sqlx::query_scalar::<_, serde_json::Value>(sqlx::AssertSqlSafe(explain));
-    if name == "strong_release" {
+    if global {
+        query = query.bind(64_i64);
+    } else if name == "strong_release" {
         query = query.bind(seeds).bind(64_i64);
     } else {
         query = query.bind(64_i64).bind(seeds);
     }
     match query.fetch_one(pool).await {
-        Ok(plan) => println!("identity_plan={name} {plan}"),
+        Ok(plan) => println!(
+            "identity_plan={name} scope={} {plan}",
+            if global { "global" } else { "scoped" }
+        ),
         Err(error) if error.to_string().contains("statement timeout") => {
-            println!("identity_plan={name} status=censored_statement_timeout")
+            println!(
+                "identity_plan={name} scope={} status=censored_statement_timeout",
+                if global { "global" } else { "scoped" }
+            )
         }
         Err(error) => panic!("{name} plan: {error}"),
     }
@@ -238,6 +243,34 @@ async fn measure_scoped_identity_discovery_and_production_drain() {
             .bind(release_id).bind(artist_id).bind(observed_id).execute(&pool).await.expect("set contextual billing");
         affected_ids.push(artist_id);
     }
+    // Two historical Track-only identities on the same Release exercise the
+    // production same-Release predicate with a nonempty candidate, rather
+    // than interpreting an empty-query plan as representative evidence.
+    let track: Uuid =
+        sqlx::query_scalar("SELECT id FROM tracks WHERE release_id=$1 ORDER BY id LIMIT 1")
+            .bind(releases[0])
+            .fetch_one(&pool)
+            .await
+            .expect("select same-Release Track");
+    for ordinal in 0..2_i32 {
+        let artist_id = Uuid::now_v7();
+        let observed_id = Uuid::now_v7();
+        let decision_id = Uuid::now_v7();
+        sqlx::query("INSERT INTO artists (id,public_api_id,canonical_name,normalized_name,sort_name,artist_type,status,created_at,updated_at) VALUES ($1,$2,'Benchmark Track Guest','benchmark track guest','Benchmark Track Guest','unknown','active',now(),now())")
+            .bind(artist_id).bind(Uuid::now_v7()).execute(&pool).await.expect("insert Track-only Artist");
+        sqlx::query("INSERT INTO observed_artists (id,release_id,track_id,scope,source_ordinal,raw_value,normalized_value,display_value,source_pointer,source_payload,created_at) VALUES ($1,$2,$3,'track',$4,'Benchmark Track Guest','benchmark track guest','Benchmark Track Guest',$5,'{}'::jsonb,now())")
+            .bind(observed_id).bind(releases[0]).bind(track).bind(10_000 + ordinal)
+            .bind(format!("benchmark:identity-track:{ordinal}"))
+            .execute(&pool).await.expect("insert Track-only observation");
+        sqlx::query("INSERT INTO artist_match_decisions (id,observed_artist_id,artist_id,outcome,authority,confidence,reason,is_locked,payload,created_at) VALUES ($1,$2,$3,'confirmed','automated',9500,'benchmark',false,'{}'::jsonb,now())")
+            .bind(decision_id).bind(observed_id).bind(artist_id).execute(&pool).await.expect("insert Track-only decision");
+        sqlx::query("INSERT INTO artist_match_current (observed_artist_id,decision_id,updated_at) VALUES ($1,$2,now())")
+            .bind(observed_id).bind(decision_id).execute(&pool).await.expect("set Track-only decision");
+        sqlx::query("INSERT INTO track_artists (id,track_id,artist_id,observed_artist_id,role,presentation_order,display_value,join_phrase,created_at) VALUES ($1,$2,$3,$4,'primary',$5,'Benchmark Track Guest','',now())")
+            .bind(Uuid::now_v7()).bind(track).bind(artist_id).bind(observed_id).bind(10_000 + ordinal)
+            .execute(&pool).await.expect("insert Track-only credit");
+        affected_ids.push(artist_id);
+    }
     sqlx::query("INSERT INTO release_external_identities (id,release_id,provider,external_id,trusted,confidence,evidence_source,is_locked,observed_at) SELECT uuidv7(),id,'musicbrainz','20000000-0000-7000-8000-000000000001',true,9500,'benchmark-fixture',false,now() FROM unnest($1::uuid[]) id")
         .bind(&releases).execute(&pool).await.expect("create shared strong Release evidence");
     let mut seeds: Vec<i64> = sqlx::query_scalar("INSERT INTO catalog_identity_reconciliation_seed (artist_id,normalized_name,created_at) SELECT id,normalized_name,now() FROM artists WHERE id=ANY($1) RETURNING id")
@@ -245,6 +278,18 @@ async fn measure_scoped_identity_discovery_and_production_drain() {
     seeds.extend(sqlx::query_scalar::<_, i64>("INSERT INTO catalog_identity_reconciliation_seed (release_id,created_at) SELECT id,now() FROM unnest($1::uuid[]) id RETURNING id")
         .bind(&releases).fetch_all(&pool).await.expect("persist affected Release seeds"));
     let store = CatalogStore;
+    let relations: (i64, i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM observed_artists), (SELECT count(*) FROM artist_match_current),
+                (SELECT count(*) FROM track_artists), (SELECT count(*) FROM artist_external_identities),
+                (SELECT count(*) FROM release_external_identities)",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count identity relationship fixture");
+    println!(
+        "identity_fixture_relations observations={} current_decisions={} track_credits={} artist_external_ids={} release_external_ids={}",
+        relations.0, relations.1, relations.2, relations.3, relations.4
+    );
     macro_rules! compare {
         ($label:literal, $scoped:expr, $global:expr) => {{
             captured.lock().expect("statement capture lock").clear();
@@ -253,7 +298,11 @@ async fn measure_scoped_identity_discovery_and_production_drain() {
                 .expect("scoped query timed out");
             if matches!(
                 $label,
-                "strong_artist" | "strong_release" | "repeated_credit" | "name_proposal"
+                "strong_artist"
+                    | "same_release"
+                    | "strong_release"
+                    | "repeated_credit"
+                    | "name_proposal"
             ) {
                 assert!(
                     !scoped.is_empty(),
@@ -261,7 +310,8 @@ async fn measure_scoped_identity_discovery_and_production_drain() {
                     $label
                 );
             }
-            explain_captured(&pool, &captured, $label, &seeds).await;
+            explain_captured(&pool, &captured, $label, &seeds, false).await;
+            captured.lock().expect("statement capture lock").clear();
             if let Some(global) = timed(concat!($label, "_global"), $global).await {
                 assert!(global.len() < 64, "global oracle result is truncated");
                 assert_eq!(scoped, global, "fixture oracle differs for {}", $label);
@@ -270,6 +320,7 @@ async fn measure_scoped_identity_discovery_and_production_drain() {
                     $label,
                     global.len()
                 );
+                explain_captured(&pool, &captured, $label, &seeds, true).await;
             } else {
                 println!("identity_oracle={} outcome=censored", $label);
             }
@@ -333,6 +384,56 @@ async fn measure_scoped_identity_discovery_and_production_drain() {
         releases.len()
     );
     assert!(ran);
+
+    // A merge may enqueue new work, and a turn may retain its captured IDs
+    // when the fixed-point budget is exhausted. Record both independently;
+    // neither a nonzero queue nor a single successful turn proves convergence.
+    let mut queued = remaining;
+    let mut turns = 0_u32;
+    let closure_started = Instant::now();
+    let mut outcome = "quiescent";
+    loop {
+        let captured_remaining: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM catalog_identity_reconciliation_seed WHERE id=ANY($1)",
+        )
+        .bind(&seeds)
+        .fetch_one(&pool)
+        .await
+        .expect("count original captured seeds");
+        println!(
+            "identity_closure_turn={turns} seeds_remaining={queued} original_seeds_remaining={captured_remaining} elapsed_ms={:.3}",
+            closure_started.elapsed().as_secs_f64() * 1000.0
+        );
+        if queued == 0 {
+            break;
+        }
+        if turns >= 64 {
+            outcome = "turn_limit_censored";
+            break;
+        }
+        // This deadline is checked only between turns: cancelling the future
+        // mid-turn could return a session advisory lock to the pool.
+        if closure_started.elapsed() >= std::time::Duration::from_secs(120) {
+            outcome = "deadline_censored";
+            break;
+        }
+        if !reconcile_affected_identities_once(&store, &pool).await {
+            outcome = "drain_unavailable";
+            break;
+        }
+        turns += 1;
+        queued = sqlx::query_scalar("SELECT count(*) FROM catalog_identity_reconciliation_seed")
+            .fetch_one(&pool)
+            .await
+            .expect("count closure queue");
+    }
+    println!(
+        "identity_closure_outcome={outcome} turns={turns} seeds_remaining={queued} elapsed_ms={:.3}",
+        closure_started.elapsed().as_secs_f64() * 1000.0
+    );
+    if outcome != "quiescent" {
+        return;
+    }
 
     // Allocate the lower ID in an uncommitted transaction while a higher ID
     // is committed and drained. Only the explicitly captured IDs may be acked.

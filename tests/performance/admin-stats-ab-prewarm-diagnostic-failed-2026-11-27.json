@@ -1,0 +1,24 @@
+{
+  "changed_fields": [
+    "database.totalBytes"
+  ],
+  "error": "baseline/candidate normalized response results differ",
+  "fixture": {
+    "artists": 35,
+    "releases": 50,
+    "tracks": 150
+  },
+  "limitations": [
+    "small fixture smoke, not representative timing",
+    "only fixed changed-field label retained, no response values"
+  ],
+  "performance_samples_recorded": false,
+  "pool_connections": 8,
+  "quiescence": {
+    "duration_seconds": 2.711,
+    "mode": "vacuum_and_size_stability",
+    "observations": 3,
+    "stable_observations": 3
+  },
+  "status": "failed_before_result"
+}

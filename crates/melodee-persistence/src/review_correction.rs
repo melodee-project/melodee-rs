@@ -39,6 +39,7 @@ pub async fn save_review_correction(
 ) -> Result<(), WorkStoreError> {
     let mut tx = pool.begin().await?;
     let item = lock_for_update(&mut tx, id).await?;
+    crate::work_items::ensure_ordinary_custody(&mut tx, id).await?;
     if item.state != IngestionState::NeedsReview || item.has_active_lease(now) {
         return Err(WorkStoreError::InvalidState(id, item.state));
     }

@@ -13,6 +13,11 @@ from run_perf_mutation_benchmarks import validate_fixture
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def benchmark_command(binary: Path) -> list[str]:
+    return [str(binary), "measure_scoped_identity_discovery_and_production_drain", "--exact",
+            "--ignored", "--nocapture", "--test-threads=1"]
+
+
 def resolve_binary(requested: Path | None) -> Path:
     test_dir = (ROOT / "target/release/deps").resolve()
     if requested is None:
@@ -45,7 +50,7 @@ def main() -> int:
             if result.returncode:
                 return result.returncode
         return subprocess.run(
-            [str(binary), "--ignored", "--nocapture"],
+            benchmark_command(binary),
             cwd=ROOT, env=env, check=False,
         ).returncode
     except (OSError, ValueError) as error:

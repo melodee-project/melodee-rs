@@ -16,6 +16,7 @@ cap-std.workspace = true
 cap-fs-ext.workspace = true
 futures-util.workspace = true
 melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
+melodee-custody = { path = "../melodee-custody", version = "0.3.0" }
 melodee-persistence = { path = "../melodee-persistence", version = "0.3.0" }
 melodee-media = { path = "../melodee-media", version = "0.3.0" }
 thiserror.workspace = true
@@ -29,6 +30,9 @@ uuid.workspace = true
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
 rustix = { workspace = true, features = ["process", "std"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+composefs-ioctls.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,6 +1,6 @@
 # Performance Remediation — Upgrade, Repair, and Rollback Runbook
 
-Applies to the forward migrations `0060`–`0070` and the derived-state repair delivered with the
+Applies to the forward migrations `0060`–`0071` and the derived-state repair delivered with the
 PERF-001…PERF-015 / V001 / V002 remediation. This is an internal operator runbook; the public
 summary lives in `docs/src/content/docs/installation/upgrading.md`.
 
@@ -19,6 +19,7 @@ summary lives in `docs/src/content/docs/installation/upgrading.md`.
 | 0068 | Adds incomplete-capture markers and exact-nanosecond metadata to settling evidence, plus indexes for per-scope recovery and ordered file pages | additive transactional DDL; ordinary index builds require the maintenance fence |
 | 0069 | Adds a Jellyfin Track-number/public-ID ordering index | ordinary transactional index build under the maintenance fence |
 | 0070 | Adds durable inbound custody intent/evidence rows for the proposed quarantine protocol, including source-root generation and distinct native-path and legacy-receipt digests | additive transactional DDL; filesystem handoff and recovery remain in progress |
+| 0071 | Adds a quota-controlled provisional custody-hash metadata spool, retained-source obligations, and pre-catalog purge guards | additive transactional DDL; custody traversal, receipt binding and independently scheduled orphan cleanup remain in progress |
 
 Identity hints are resolved by indexed joins during reconciliation; deleted identities can leave
 stale hints, which are ignored and removed when their seed is acknowledged. Hard deletion records
@@ -144,6 +145,45 @@ melodee-cli work prune-lease-events --older-than-days 30 --apply    # bounded, r
   deletion. Until a dedicated audited path-purge protocol is implemented, the administrative
   pre-catalog purge refuses both lossy and encoded occurrence paths before removing any files;
   do not work around this by deleting storage or audit records manually.
+- **Retained-source reobservation:** work in progress under migration 0071. A retained obligation
+  is not permission to delete source media. The scheduler uses a separate leased, oldest-due
+  queue and leaves failed, missing, or ambiguous sources for retry. Its read budget is controlled
+  by `MELODEE__INGEST__RETAINED_RECHECK_MIB_PER_SECOND` (default 8 MiB/s per process), and
+  `MELODEE__INGEST__RETAINED_RECHECK_INTERVAL_SECONDS` controls the delay after a stable
+  observation (default 300 seconds, maximum 30 days). Multiple configurations in one process
+  use the strictest read rate until restart. This paces application reads, not filesystem readahead.
+  The defaults remain provisional until representative mixed-load measurement; receipt activation,
+  interrupted-copy recovery, and fixed-crash traversal fairness remain incomplete. Do not manually
+  remove source media or unfinished custody evidence to clear the queue.
+  For read-only review, `melodee-cli ingest retained-obligations --limit 100`
+  lists active rows ordered by work-item ID, with source-library identity,
+  exact stored source path and encoding version, baseline/change state,
+  retry/unreadable reasons and counts, unsupported-directory reason and retry
+  time, lease state, and due information. Use the returned
+  `nextAfter` as `--after` to continue; restart at the beginning to capture rows
+  inserted ahead of the cursor. JSON paths may be sensitive. Preserve encoded
+  `//melodee-unix-hex:` and `//melodee-windows-u16:` strings exactly; a
+  format-0 path containing U+FFFD is ambiguous and must never be decoded by
+  guessing. This listing does not verify or change the source, create a
+  successor, or implement safe copy-only retained intake. An active lease is
+  not proof of process liveness, and a missing source is not permission to
+  remove its obligation.
+- **Interrupted pre-catalog purge:** under the stop-all-writers maintenance fence, preserve and
+  independently back up affected source, staging, work, and canonical media plus PostgreSQL.
+  Inspect those locations and the work-item evidence before deciding whether to release a guard;
+  the guard records intent, not the outcome of filesystem operations. `melodee-cli ingest
+  purge-guards` lists at most 100 guards in work-item-ID order; use `--after <last-id>` for the
+  next page. After recording the exact ID, fence token, and owner, use `melodee-cli ingest
+  recover-purge-guard --work-item-id <id> --fence-token <token> --guard-owner <owner> --actor
+  <operator> --reason '<inspection and decision>' --stopped-all-writers --inspected-media --backup-verified
+  --confirm`. The command requires these operator assertions, transactionally checks the exact
+  guard and rejects live occurrence leases, audits the decision, and removes only that guard. It
+  does not delete media or work-item rows or retry the purge. The database cannot prove an old
+  external process stopped; if a writer, filesystem outcome, or identity is uncertain, keep the
+  guard and investigate. Fence tokens and actor names are operator evidence, not authentication.
+  A pre-catalog purge with an existing inbound source and no staging handoff currently fails
+  before filesystem mutation with `source_custody_required`; occurrence-bound source deletion
+  remains unfinished. This is a temporary compatibility restriction, not a completed remediation.
 
 ## Rollback
 
@@ -158,3 +198,28 @@ Do **not** run an old worker against a database migrated to 0065. The old binary
 snapshot-visible outbox rows and would activate a rebuilt generation under the old (unsafe)
 watermark check. Stop all writers, upgrade, verify, then resume. This is a stop-all-writers
 maintenance upgrade.
+
+### Planned lifecycle-lock upgrade
+
+The lifecycle-lock upgrade and its repair tooling are **not complete**. Do not enable protected
+intake or treat a reservation, a database lease expiry, or a lock-registry row as proof that an
+older writer has stopped. The intended upgrade requires the operator to stop every server, worker,
+script process and older binary that can access the affected media, verify that they have actually
+terminated, and preserve verified database and media backups before provisioning begins. The
+maintenance fence must remain in effect across interruption and until all upgraded writers are
+known to honor the same per-work-item lock; old binaries must not be restarted afterward.
+
+Provisioning is intended to reserve each identity before exclusively creating its lock in a
+validated private namespace, record the exact filesystem identities only after durable creation,
+and progress in bounded replayable pages. An existing unacknowledged lock name is ambiguous: keep
+it and the associated media intact for operator review instead of adopting, replacing, or deleting
+it. Missing roots, uncertain ownership, unsupported filesystem behavior, and unverified stage
+identity must likewise remain quarantined. A later completed runbook will provide the actual
+commands, explicit fence/recovery procedure and verification evidence; this text does not authorize
+or implement the upgrade.
+
+The lifecycle-lock prototype includes a candidate for distinct supported local filesystem devices
+with no relevant nested mounts. One owned different-device lock test has passed; full provisioning,
+recovery, worker and deletion integration across filesystems remain unverified. Same-device
+different-mount aliases and unsupported or ambiguous topologies fail closed. Cross-filesystem
+support is unfinished and remains part of the remediation.

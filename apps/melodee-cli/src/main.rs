@@ -220,6 +220,122 @@ mod tests {
     }
 
     #[test]
+    fn purge_guard_recovery_requires_exact_fence_and_all_attestations() {
+        let id = Uuid::now_v7().to_string();
+        let token = Uuid::now_v7().to_string();
+        assert!(Cli::try_parse_from(["melodee", "ingest", "purge-guards"]).is_ok());
+        let args = [
+            "melodee",
+            "ingest",
+            "recover-purge-guard",
+            "--work-item-id",
+            &id,
+            "--fence-token",
+            &token,
+            "--guard-owner",
+            "worker-1",
+            "--actor",
+            "ops",
+            "--reason",
+            "backup and media inspection complete",
+            "--stopped-all-writers",
+            "--inspected-media",
+            "--backup-verified",
+            "--confirm",
+        ];
+        assert!(matches!(
+            Cli::try_parse_from(args)
+                .expect("complete operator review")
+                .command,
+            Commands::Ingest {
+                command: IngestCommands::RecoverPurgeGuard { .. }
+            }
+        ));
+        for flag in [
+            "--stopped-all-writers",
+            "--inspected-media",
+            "--backup-verified",
+            "--confirm",
+        ] {
+            assert!(Cli::try_parse_from(args.into_iter().filter(|arg| *arg != flag)).is_err());
+        }
+        for flag in [
+            "--work-item-id",
+            "--fence-token",
+            "--guard-owner",
+            "--actor",
+            "--reason",
+        ] {
+            let position = args
+                .iter()
+                .position(|arg| *arg == flag)
+                .expect("flag present");
+            assert!(
+                Cli::try_parse_from(args.into_iter().enumerate().filter_map(|(index, arg)| {
+                    (index != position && index != position + 1).then_some(arg)
+                }))
+                .is_err()
+            );
+        }
+        let mut blank_reason = args;
+        blank_reason[12] = "   ";
+        assert!(Cli::try_parse_from(blank_reason).is_err());
+        let mut exact_owner = args;
+        exact_owner[8] = " worker-1 ";
+        assert!(matches!(
+            Cli::try_parse_from(exact_owner).expect("owner kept byte-for-byte").command,
+            Commands::Ingest {
+                command: IngestCommands::RecoverPurgeGuard { guard_owner, .. }
+            } if guard_owner == " worker-1 "
+        ));
+    }
+
+    #[test]
+    fn retained_obligation_listing_is_bounded_and_keyset_paginated() {
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "ingest", "retained-obligations"])
+                .expect("default retained listing")
+                .command,
+            Commands::Ingest {
+                command: IngestCommands::RetainedObligations {
+                    after: None,
+                    limit: 100
+                }
+            }
+        ));
+        let after = Uuid::now_v7();
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "ingest", "retained-obligations", "--after", &after.to_string(), "--limit", "128"])
+                .expect("bounded retained page").command,
+            Commands::Ingest {
+                command: IngestCommands::RetainedObligations { after: Some(parsed), limit: 128 }
+            } if parsed == after
+        ));
+        for limit in ["0", "129", "-1"] {
+            assert!(
+                Cli::try_parse_from([
+                    "melodee",
+                    "ingest",
+                    "retained-obligations",
+                    "--limit",
+                    limit
+                ])
+                .is_err()
+            );
+        }
+        assert!(
+            Cli::try_parse_from([
+                "melodee",
+                "ingest",
+                "retained-obligations",
+                "--after",
+                "not-a-uuid"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
     fn validation_and_publication_batch_commands_are_exposed() {
         for (name, expected_validation) in [("validate", true), ("publish", false)] {
             let cli = Cli::try_parse_from(["melodee", "ingest", name])

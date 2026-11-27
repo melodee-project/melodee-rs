@@ -1,0 +1,82 @@
+{
+  "algorithm": 2,
+  "baseline_options": [
+    "fpcalc",
+    "-json",
+    "-length",
+    "120",
+    "--",
+    "<source>"
+  ],
+  "candidate_options": [
+    "-nostdin",
+    "-v",
+    "error",
+    "-xerror",
+    "-n",
+    "-i",
+    "<source>",
+    "-filter_complex",
+    "[0:a:0]asplit=2[check][fp];[fp]atrim=duration=120[cut]",
+    "-map",
+    "[check]",
+    "-f",
+    "null",
+    "-",
+    "-map",
+    "[cut]",
+    "-c:a",
+    "pcm_s16le",
+    "-algorithm",
+    "2",
+    "-fp_format",
+    "base64",
+    "-f",
+    "chromaprint",
+    "<candidate>"
+  ],
+  "cases": [
+    {
+      "baseline_exit": 0,
+      "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+      "candidate_exit": 0,
+      "candidate_fingerprint": "AgAAFYmSTVokaUHy4_zhMdXhfMcfor4i5Bf0I9924vjB_OiDfgjDA8ee4zgALIwQAggmDEJEEuIsUc5a7B5SFg",
+      "candidate_seconds": 0.158421,
+      "candidate_stderr_sanitized": "",
+      "codec": "mp3",
+      "ffprobe_duration_seconds": "15.000000",
+      "fingerprints_equal": false,
+      "fpcalc_duration_seconds": 15.0,
+      "fpcalc_seconds": 0.083374,
+      "source_bytes": 60861
+    },
+    {
+      "baseline_exit": 0,
+      "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+      "candidate_exit": 0,
+      "candidate_fingerprint": "AgAAFYmSTVokaUHyw-SPM9XhfMcfor4i5Bf0I9924vjB_OiDfgjDA8ee4zgALIQgAggmDEJEEuIsUc5a7B5SFg",
+      "candidate_seconds": 0.154966,
+      "candidate_stderr_sanitized": "",
+      "codec": "flac",
+      "ffprobe_duration_seconds": "15.000000",
+      "fingerprints_equal": false,
+      "fpcalc_duration_seconds": 15.0,
+      "fpcalc_seconds": 0.085582,
+      "source_bytes": 762149
+    }
+  ],
+  "description": "test-only one-pass ffmpeg chromaprint feasibility, not production",
+  "ffmpeg_version": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "ffprobe_version": "ffprobe version 9.0.2 Copyright (c) 2007-2026 the FFmpeg developers",
+  "fingerprint_limit_seconds": 120,
+  "fpcalc_version": "fpcalc version 1.6.1 (FFmpeg Lavc63.1.101 Lavf63.1.101 SwR7.1.101)",
+  "generator": "deterministic aevalsrc frequency sweep, 44100 Hz mono",
+  "limitations": [
+    "one short generated source per codec",
+    "full-decode/fingerprint equivalence on long, corrupt, multistream and real music not tested",
+    "duration equality is checked separately; chromaprint muxer availability optional",
+    "cancellation, timeout and reaping not tested; no throughput conclusion"
+  ],
+  "sample_count_per_codec": 1,
+  "seconds": 15
+}

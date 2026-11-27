@@ -1,0 +1,22 @@
+[package]
+name = "melodee-custody"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Private filesystem custody capabilities"
+publish = false
+
+[target.'cfg(target_os = "linux")'.dependencies]
+blake3.workspace = true
+rustix = { workspace = true, features = ["process", "std"] }
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

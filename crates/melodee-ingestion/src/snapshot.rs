@@ -442,11 +442,11 @@ pub(crate) struct StreamSnapshotSummary {
 }
 
 /// Maximum number of retained directory cursors in one blocking traversal.
-const MAX_STREAM_DIRECTORY_DEPTH: usize = 16;
+pub(crate) const MAX_STREAM_DIRECTORY_DEPTH: usize = 16;
 /// A conservative bound compatible with extended-length Windows paths.
-const MAX_STREAM_PATH_BYTES: usize = 131_072;
+pub(crate) const MAX_STREAM_PATH_BYTES: usize = 131_072;
 
-struct StreamFrame {
+pub(crate) struct StreamFrame {
     cursor: StreamCursor,
 }
 
@@ -462,7 +462,7 @@ enum StreamCursor {
     },
 }
 
-fn open_cap_relative(
+pub(crate) fn open_cap_relative(
     root: &cap_std::fs::Dir,
     relative: &Path,
 ) -> Result<cap_std::fs::Dir, SnapshotCaptureError> {
@@ -486,7 +486,7 @@ fn open_cap_relative(
 }
 
 impl StreamFrame {
-    fn open(
+    pub(crate) fn open(
         root: &cap_std::fs::Dir,
         relative: &Path,
         live: bool,
@@ -503,7 +503,7 @@ impl StreamFrame {
         Ok(Self { cursor })
     }
 
-    fn next(
+    pub(crate) fn next(
         &mut self,
         root: &cap_std::fs::Dir,
         relative: &Path,

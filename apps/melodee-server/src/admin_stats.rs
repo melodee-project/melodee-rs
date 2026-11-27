@@ -218,6 +218,55 @@ async fn library_stats(pool: &sqlx::PgPool) -> Result<LibraryStatsDto, sqlx::Err
         melodee_persistence::metrics::Metric::AdminStatsHeadlineAcquire,
         acquire_duration,
     );
+    // The same grouped asset pass supplies both exact headline totals and the
+    // bounded format breakdown. A materialized grouping avoids rescanning the
+    // full asset table while retaining the existing SQL ordering and NULLs.
+    type AssetStatsRow = (
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+    );
+    let rows: Vec<AssetStatsRow> = sqlx::query_as(
+        "WITH asset_groups AS MATERIALIZED (
+           SELECT container,codec,count(*)::bigint AS assets,
+                  COALESCE(sum(byte_size),0)::bigint AS bytes
+             FROM media_assets GROUP BY container,codec
+         ), asset_totals AS (
+           SELECT COALESCE(sum(assets),0)::bigint AS assets,
+                  COALESCE(sum(bytes),0)::bigint AS bytes,
+                  COALESCE(sum(assets) FILTER (WHERE codec IS NOT NULL AND
+                    lower(codec) IN ('flac','alac','wav','pcm_s16le','pcm_s24le','ape','wv')),0)::bigint AS lossless
+             FROM asset_groups
+         ), top_formats AS (
+           SELECT container,codec,assets,bytes FROM asset_groups
+            ORDER BY assets DESC,container,codec LIMIT $1
+         )
+         SELECT (SELECT count(*) FROM artists WHERE status <> 'merged'),
+                (SELECT count(*) FROM releases), track_totals.tracks,
+                asset_totals.assets, asset_totals.bytes, track_totals.duration_ms,
+                asset_totals.lossless, top_formats.container, top_formats.codec,
+                top_formats.assets, top_formats.bytes
+           FROM (SELECT count(*) AS tracks,COALESCE(sum(duration_ms),0)::bigint AS duration_ms
+                   FROM tracks) AS track_totals
+          CROSS JOIN asset_totals
+           LEFT JOIN top_formats ON true
+          ORDER BY top_formats.assets DESC NULLS LAST,top_formats.container,top_formats.codec",
+    )
+    .bind(MAX_BREAKDOWN_ROWS)
+    .fetch_all(&mut *connection)
+    .await?;
+    drop(connection);
+    drop(hold);
+
+    let mut rows = rows.into_iter();
     let (
         artists,
         releases,
@@ -226,55 +275,31 @@ async fn library_stats(pool: &sqlx::PgPool) -> Result<LibraryStatsDto, sqlx::Err
         total_bytes,
         total_duration_ms,
         lossless_tracks,
-    ): (i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
-        "SELECT
-           (SELECT count(*) FROM artists WHERE status <> 'merged'),
-           (SELECT count(*) FROM releases),
-           track_totals.tracks,
-           asset_totals.assets,
-           asset_totals.bytes,
-           track_totals.duration_ms,
-           asset_totals.lossless
-         FROM (SELECT count(*) AS tracks,
-                      COALESCE(sum(duration_ms), 0)::bigint AS duration_ms
-                 FROM tracks) AS track_totals
-         CROSS JOIN (SELECT count(*) AS assets,
-                            COALESCE(sum(byte_size), 0)::bigint AS bytes,
-                            count(*) FILTER (WHERE codec IS NOT NULL AND
-                              lower(codec) IN ('flac','alac','wav','pcm_s16le','pcm_s24le','ape','wv')) AS lossless
-                       FROM media_assets) AS asset_totals",
-    )
-    .fetch_one(&mut *connection)
-    .await?;
-    drop(connection);
-    drop(hold);
-
-    let formats = sqlx::query_as::<_, (Option<String>, Option<String>, i64, i64)>(
-        "SELECT container, codec, count(*), COALESCE(sum(byte_size), 0)::bigint
-           FROM media_assets
-          GROUP BY container, codec
-          ORDER BY count(*) DESC, container, codec
-          LIMIT $1",
-    )
-    .bind(MAX_BREAKDOWN_ROWS)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|(container, codec, count, bytes)| {
-        let codec = codec.unwrap_or_else(|| "unknown".to_owned());
-        let lossless = matches!(
-            codec.to_ascii_lowercase().as_str(),
-            "flac" | "alac" | "wav" | "pcm_s16le" | "pcm_s24le" | "ape" | "wv"
-        );
-        FormatStatsDto {
-            container: container.unwrap_or_else(|| "unknown".to_owned()),
-            codec,
-            tracks: count,
-            bytes,
-            lossless,
-        }
-    })
-    .collect();
+        container,
+        codec,
+        count,
+        bytes,
+    ) = rows.next().ok_or(sqlx::Error::RowNotFound)?;
+    let format_rows = std::iter::once((container, codec, count, bytes)).chain(rows.map(
+        |(_, _, _, _, _, _, _, container, codec, count, bytes)| (container, codec, count, bytes),
+    ));
+    let formats = format_rows
+        .filter_map(|(container, codec, count, bytes)| Some((container, codec, count?, bytes?)))
+        .map(|(container, codec, count, bytes)| {
+            let codec = codec.unwrap_or_else(|| "unknown".to_owned());
+            let lossless = matches!(
+                codec.to_ascii_lowercase().as_str(),
+                "flac" | "alac" | "wav" | "pcm_s16le" | "pcm_s24le" | "ape" | "wv"
+            );
+            FormatStatsDto {
+                container: container.unwrap_or_else(|| "unknown".to_owned()),
+                codec,
+                tracks: count,
+                bytes,
+                lossless,
+            }
+        })
+        .collect();
 
     // Release years come from the typed date when present, else from the observed
     // date text (`2019`, `2019-04-12`), which is what most tagged releases carry.

@@ -1,0 +1,21 @@
+{
+  "build_provenance_sha256": "9cbb10de889d873ff2b12c85cc64182f9d910fb9d4701d7f25f45bea3e808830",
+  "exact_test_passed": false,
+  "exit_code": 1,
+  "fixture_basename": ".melodee-bind-alias-k6n9kuw4",
+  "fixture_cleanup": "retained_for_operator_inspection",
+  "fixture_entry_unchanged": true,
+  "last_setup_stage": "proc_mount",
+  "launcher_sha256": "b18d0c8516596f63874195479af7f6a9a550218f257e0ebb260307c284f65052",
+  "limitations": [
+    "test-only namespace topology check, not production custody",
+    "fixture is retained to avoid pathname replacement cleanup races"
+  ],
+  "mount_failure_detail": "wrong_fs_type",
+  "parent_mount_namespace_unchanged": true,
+  "parent_pid_namespace_unchanged": true,
+  "parent_user_namespace_unchanged": true,
+  "setup_failure_reason": "mount_command_failed",
+  "status": "failed",
+  "test_binary_sha256": "aa364e66780b013138353a1a3e2c333709704bcdae48fd65b6e6ab4b380899c2"
+}

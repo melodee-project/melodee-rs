@@ -1,0 +1,28 @@
+{
+  "build_provenance_sha256": "1b8d36a35bfd8b762eb6741ab3a5979786c2ffcdaf199dd5e86e7978bf095412",
+  "exit_code": 101,
+  "known_failure_reasons": [],
+  "limitations": [
+    "test-only adapter, not production custody",
+    "not a performance benchmark",
+    "namespace exit removes private mounts; SIGKILL may leave owned directories"
+  ],
+  "mount_failure": null,
+  "panic_locations": [
+    {
+      "column": 26,
+      "file": "custody.rs",
+      "line": 4467
+    }
+  ],
+  "parent_mount_namespace_unchanged": true,
+  "parent_pid_namespace_unchanged": true,
+  "parent_user_namespace_unchanged": true,
+  "sealed_tree_success_marker": false,
+  "sealed_tree_unsupported_marker": false,
+  "status": "failed",
+  "test_binary_sha256": "3e5e52788e30fee69b89620cd7dc1f197b34141016e36d2cd2413c9d3caddac6",
+  "test_filter": "sealed-tree",
+  "test_functions_passed": 0,
+  "unsupported_branch_messages": 0
+}

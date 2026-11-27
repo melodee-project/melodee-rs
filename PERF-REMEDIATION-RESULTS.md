@@ -385,7 +385,10 @@ Recording is instrumented on the search outbox pass, rebuild page, discovery pas
 import pass. Unit tests prove fixed buckets, a single overflow bucket, and a fixed label set.
 Per-class connection-checkout histograms and the representative 560K fixture remain outstanding.
 
-## 8.6 Safe media/identity throughput (PERF-007 / PERF-014)
+## 8.6 Safe media/identity throughput at the previous checkpoint (historical)
+
+The version-cache behavior below was later changed after an ABA review finding;
+unbound executable results are currently not reused. See the current ledger.
 
 - Tool version output is cached by canonical executable path plus file size/modification time, with
   a bounded 16-entry map. Normalization previously started ffmpeg/fpcalc/ffprobe `-version` three
@@ -836,3 +839,82 @@ complete RM-11. The current custody, ambiguous-path and subprocess
 work remains in progress. In particular, the occurrence-bound filesystem
 handoff and cleanup, final upgrades/recovery, required full suites and quality
 gates have not been verified against the integrated working tree.
+
+The representative fixture's former Release and Track rating expressions
+generated only rating 1 for selected rows because their selection predicates
+used the same remainder as the rating. The expressions now vary ratings across
+1–5. An invocation-owned 50-Artist/100-Release/1,000-Track database verified
+that Artist, Release and Track ratings each cover all five values. The Python
+harness tests passed (13 passed, one owned-database test skipped outside the
+fixture); the database-only test passed inside that fixture. Earlier benchmark
+captures retained the old, skewed rating distribution, so their rating-sensitive
+results must not be presented as representative; large-scale validation and
+comparable final measurements remain pending.
+
+The fixture subsequently gained alternate media-asset references for a subset
+of Tracks. A 50-Artist/100-Release/1,000-Track invocation-owned smoke verified
+that both playable and alternate associations were present and reran the
+rating-distribution check. These are database references, not additional
+physical media. Earlier captures did not include these alternates; the updated
+fixture still requires representative-scale validation and matched comparisons.
+
+The fixture also creates one generated PNG in its disposable asset root and
+content-addressed Artist and Release artwork references. A small owned-database
+smoke verified both reference kinds and the file's recorded SHA-256 and length.
+This shared image is bounded fixture content; it is not evidence of artwork
+route throughput, cache behavior, or a representative large artwork corpus.
+
+The fixture subsequently gained library-group ACLs and synthetic publication
+provenance for a subset of Releases. In a small owned database, two non-admin
+users each had both allowed and denied Releases according to the production
+authorization predicate. The receipt and manifest rows are placeholders, not
+evidence of real ingestion; this smoke does not establish representative ACL
+distribution, route latency, or end-to-end correctness at 600K Tracks.
+
+The updated fixture was then verified at 35,000 Artists, 50,000 Releases and
+600,000 Tracks, including 30,000 alternate links. Four data-shape checks passed;
+the 183.2-second seeding duration is fixture setup, not application throughput.
+The [sanitized run record](tests/performance/fixture-verification-2026-11-27.md)
+states its provenance and remaining limitations. This does not replace matched
+baseline and final production-path measurements.
+
+An [intermediate 600K identity closure run](tests/performance/identity-closure-600k-2026-11-27.md)
+compared all five scoped and global candidate vectors and found them nonempty
+and equal. The initial production drain acknowledged all eight captured seeds
+and generated 68 follow-up seeds; a further bounded turn consumed those in
+32.029 ms and reached an empty queue. This single synthetic graph and source
+snapshot do not replace final integrated, concurrent-import or end-to-end
+acceptance measurements.
+
+An intermediate 35K-Artist/50K-Release/600K-Track in-process admin statistics
+ABBA comparison recorded 16 warm samples per variant: baseline p50/p95 were
+615.140/640.197 ms and the candidate was 528.069/567.805 ms. Each process kept
+its ordered normalized responses identical; across processes only the validated
+volatile `database.totalBytes` value was masked. The [measurement record](tests/performance/admin-stats-ab-representative-2026-11-27.md)
+uses a dirty intermediate snapshot, a quiesced fixture and shared host; it is
+not a final-source, TCP or mixed-load measurement. Earlier failed attempts are
+retained rather than counted as samples.
+
+The first isolated supported-filesystem sealed-tree test emitted a positive
+copy marker but subsequently exited with status 101. It is a failed test, not
+evidence of a verified protected stage. The [sanitized failure](tests/performance/stage-verity-sealed-tree-2026-11-27.json)
+and [build proof](tests/performance/stage-verity-sealed-tree-build-2026-11-27.json)
+are retained. A [separate diagnostic rerun](tests/performance/stage-verity-sealed-tree-diagnostic-2026-11-27.json)
+also failed: its named-user ACL setup selected an unmapped UID and returned
+EINVAL inside the private user namespace. The sealed-copy and promotion
+assertions ran before that failure; the full test still did not pass. A valid
+mapped-UID ACL case was added, but a [subsequent rerun](tests/performance/stage-verity-sealed-tree-corrected-2026-11-27.json)
+failed earlier because its cross-process lock probe could not execute inside
+the private chroot. A [further re-exec run](tests/performance/stage-verity-sealed-tree-reexec-2026-11-27.json)
+also failed with ENOENT despite the fixed executable path; the lack of a
+`/dev/null` node was a hypothesis. A later [fingerprinted Btrfs run](tests/performance/stage-verity-sealed-tree-2026-11-27.md)
+inheriting stdin passed the complete test 1/1, including the real sealed-copy
+marker, with unchanged parent namespaces. This is a debug test of an
+intermediate snapshot in a one-UID namespace; it excludes newer changes and
+does not establish production publication, cleanup or final integrated safety.
+
+One release-build [10,000-Track offline closure capture](tests/performance/admin-offline-release-closure-10k-2026-11-27.md)
+completed in 22.999 seconds over 629 bounded turns against an owned database.
+It exercises provisional metadata APIs only; filesystem deletion, merge/split,
+statement and lock counts, concurrent activity and a 600K catalog were not
+measured.

@@ -45,6 +45,38 @@ pub struct OwnedSource {
     pub tree_hash: String,
 }
 
+/// Internal ownership travels with each actual stage worker, even if the
+/// async caller is cancelled while a blocking operation remains in flight.
+/// Existing receipts carry no lifecycle hold; protected receipts stay gated
+/// until acquisition can construct and validate one. Clones extend lifetime
+/// only; this wrapper exposes no operation or mutation authority on the hold.
+#[derive(Clone)]
+pub(crate) struct GuardedOwnedSource {
+    pub(crate) source: OwnedSource,
+    hold: Option<crate::gate::StageLifetimeHold>,
+}
+
+impl GuardedOwnedSource {
+    pub(crate) fn existing(source: OwnedSource) -> Self {
+        Self { source, hold: None }
+    }
+
+    pub(crate) fn lifecycle_hold(&self) -> Option<crate::gate::StageLifetimeHold> {
+        self.hold.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_hold(
+        source: OwnedSource,
+        hold: std::sync::Arc<dyn Send + Sync>,
+    ) -> Self {
+        Self {
+            source,
+            hold: Some(crate::gate::StageLifetimeHold::from_arc(hold)),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum AcquisitionError {
     #[error("work item source is no longer configured")]
@@ -778,6 +810,16 @@ async fn finish_inbound_cleanup(
     now: OffsetDateTime,
     #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
 ) -> Result<(), AcquisitionError> {
+    // The retained-copy receipt and this marker commit together. The binder
+    // only accepts an intent, so an already-started legacy cleanup cannot be
+    // converted into retained mode after this check.
+    if store
+        .staging_handoff(pool, item_id)
+        .await?
+        .is_some_and(|handoff| handoff.retained_source)
+    {
+        return Ok(());
+    }
     let inbound = inbound.to_path_buf();
     let inbound_root = inbound_root.to_path_buf();
     let expected_generation = expected_generation.to_owned();
@@ -1169,7 +1211,7 @@ fn tree_hashes_from_pinned_directory_with_hook(
     Ok(hashes)
 }
 
-fn hash_custody_path(
+pub(crate) fn hash_custody_path(
     hasher: &mut blake3::Hasher,
     path: &Path,
     is_dir: bool,
@@ -1270,6 +1312,165 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn guarded_source_outlives_cancelled_blocking_worker() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        struct DropProbe(Arc<AtomicBool>);
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let dropped = Arc::new(AtomicBool::new(false));
+        let hold: Arc<dyn Send + Sync> = Arc::new(DropProbe(dropped.clone()));
+        let owned = GuardedOwnedSource::with_test_hold(
+            OwnedSource {
+                root: PathBuf::from("stage"),
+                tree_hash: String::new(),
+            },
+            hold,
+        );
+        assert!(owned.lifecycle_hold().is_some());
+        let task_owned = owned.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let task = tokio::spawn(async move {
+            crate::admission::run(move || {
+                let _stage_ownership = task_owned;
+                started_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+            })
+            .await
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        task.abort();
+        drop(owned);
+        assert!(!dropped.load(Ordering::SeqCst));
+        release_tx.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !dropped.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[test]
+    fn guarded_source_child_probe() {
+        use std::io::{Read, Write};
+        if std::env::var_os("MELODEE_GUARDED_CHILD").as_deref() != Some(std::ffi::OsStr::new("1")) {
+            return;
+        }
+        std::io::stdout().write_all(&[0x1e]).unwrap();
+        std::io::stdout().flush().unwrap();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut release = [0_u8; 1];
+            let result = std::io::stdin().read_exact(&mut release).map(|_| release);
+            let _ = release_tx.send(result);
+        });
+        let release = release_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
+        assert_eq!(release, [1]);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn guarded_source_outlives_cancelled_subprocess_waiter() {
+        use std::io::{Read, Write};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        struct DropProbe(Arc<AtomicBool>);
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let dropped = Arc::new(AtomicBool::new(false));
+        let hold: Arc<dyn Send + Sync> = Arc::new(DropProbe(dropped.clone()));
+        let owned = GuardedOwnedSource::with_test_hold(
+            OwnedSource {
+                root: PathBuf::from("stage"),
+                tree_hash: String::new(),
+            },
+            hold,
+        );
+        let task_owned = owned.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let task = tokio::spawn(async move {
+            crate::admission::run(move || {
+                let _stage_ownership = task_owned;
+                let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "acquisition::tests::guarded_source_child_probe",
+                        "--nocapture",
+                    ])
+                    .env("MELODEE_GUARDED_CHILD", "1")
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .unwrap();
+                let mut output = child.stdout.take().unwrap();
+                let mut byte = [0_u8; 1];
+                let mut ready = false;
+                for _ in 0..4096 {
+                    if output.read_exact(&mut byte).is_err() {
+                        break;
+                    }
+                    if byte == [0x1e] {
+                        ready = true;
+                        break;
+                    }
+                }
+                if !ready {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return;
+                }
+                let _ = started_tx.send(());
+                if release_rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .is_ok()
+                {
+                    let _ = child.stdin.take().unwrap().write_all(&[1]);
+                } else {
+                    child.stdin.take();
+                }
+                let status = child.wait().unwrap();
+                assert!(status.success());
+            })
+            .await
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        task.abort();
+        drop(owned);
+        assert!(!dropped.load(Ordering::SeqCst));
+        release_tx.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !dropped.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
 
     fn temporary_root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(

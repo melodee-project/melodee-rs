@@ -1,0 +1,21 @@
+{
+  "changed_fields": "not recorded in this attempt",
+  "error": "baseline/candidate normalized response results differ",
+  "fixture": {
+    "artists": 35,
+    "releases": 50,
+    "tracks": 150
+  },
+  "limitations": [
+    "small fixture smoke, not representative timing",
+    "the fixed-label cross-process diagnostic was added after this attempt"
+  ],
+  "performance_samples_recorded": false,
+  "quiescence": {
+    "duration_seconds": 2.566,
+    "mode": "vacuum_and_size_stability",
+    "observations": 3,
+    "stable_observations": 3
+  },
+  "status": "failed_before_result"
+}

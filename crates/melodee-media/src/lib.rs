@@ -1712,12 +1712,9 @@ pub(crate) fn run_ffprobe_cancellable(
     })
 }
 
-/// PERF-007 / RM-11: a tool's `-version` output is a function of the resolved
-/// executable, not of the media being processed. Normalization previously
-/// started ffmpeg/fpcalc/ffprobe `-version` three times per album. Cache the
-/// result by resolved invocation path and executable identity, so PATH order
-/// and ordinary executable replacement invalidate the entry. The map is small
-/// and bounded; an unavailable or canceled probe is not cached.
+/// Version probes are serialized by bounded executable identity. Results are
+/// not cached: a path-based subprocess can observe an A→B→A replacement that
+/// before/after metadata checks cannot detect.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ToolVersionKey {
     path: std::path::PathBuf,
@@ -1731,9 +1728,39 @@ struct ToolVersionKey {
 
 const MAX_CACHED_TOOL_VERSIONS: usize = 16;
 
-type ToolVersionCache = std::sync::Mutex<Vec<(ToolVersionKey, Option<String>)>>;
+#[derive(Default)]
+struct ToolVersionState {
+    pending: Vec<ToolVersionKey>,
+}
+
+#[derive(Default)]
+struct ToolVersionCache {
+    state: std::sync::Mutex<ToolVersionState>,
+    ready: std::sync::Condvar,
+}
 
 static TOOL_VERSION_CACHE: std::sync::OnceLock<ToolVersionCache> = std::sync::OnceLock::new();
+
+/// Always release an identity's in-flight slot, including on unwind.
+struct ToolVersionFlight {
+    cache: &'static ToolVersionCache,
+    key: ToolVersionKey,
+}
+
+impl Drop for ToolVersionFlight {
+    fn drop(&mut self) {
+        let mut state = self
+            .cache
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(index) = state.pending.iter().position(|key| key == &self.key) {
+            state.pending.swap_remove(index);
+        }
+        drop(state);
+        self.cache.ready.notify_all();
+    }
+}
 
 pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
     tool_version_with_cancellation(path, max_output, None, None)
@@ -1762,6 +1789,17 @@ fn tool_version_with_search_path(
     shutdown: Option<&AtomicBool>,
     search_path: Option<&std::ffi::OsStr>,
 ) -> Option<String> {
+    tool_version_with_probe_hook(path, max_output, cancellation, shutdown, search_path, || {})
+}
+
+fn tool_version_with_probe_hook(
+    path: &Path,
+    max_output: usize,
+    cancellation: Option<&AtomicBool>,
+    shutdown: Option<&AtomicBool>,
+    search_path: Option<&std::ffi::OsStr>,
+    before_probe: impl FnOnce(),
+) -> Option<String> {
     if tool_canceled(cancellation, shutdown) {
         return None;
     }
@@ -1773,28 +1811,45 @@ fn tool_version_with_search_path(
     if is_bare_tool_name(path) {
         return probe_tool_version(path, max_output, cancellation, shutdown);
     }
-    let invocation = resolve_tool_path(path, search_path)?;
-    let key = tool_version_key(&invocation, max_output)?;
-    let cache = TOOL_VERSION_CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
-    if let Ok(cache) = cache.lock()
-        && let Some((_, cached)) = cache.iter().find(|(entry, _)| entry == &key)
-    {
-        return cached.clone();
-    }
+    let cache = TOOL_VERSION_CACHE.get_or_init(ToolVersionCache::default);
+    // Bound waiting as well as the child process runtime. Waiters poll the
+    // cancellation flags while another thread probes the same identity.
+    let deadline = Instant::now().checked_add(StdDuration::from_secs(2))?;
+    let (invocation, key) = loop {
+        if tool_canceled(cancellation, shutdown) {
+            return None;
+        }
+        let invocation = resolve_tool_path(path, search_path)?;
+        let key = tool_version_key(&invocation, max_output)?;
+        let mut state = cache
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        if !state.pending.contains(&key) && state.pending.len() < MAX_CACHED_TOOL_VERSIONS {
+            state.pending.push(key.clone());
+            break (invocation, key);
+        }
+        let (_state, _) = cache
+            .ready
+            .wait_timeout(state, remaining.min(StdDuration::from_millis(25)))
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    };
+    let flight = ToolVersionFlight {
+        cache,
+        key: key.clone(),
+    };
+    before_probe();
     let value = probe_tool_version(&invocation, max_output, cancellation, shutdown);
     let current = resolve_tool_path(path, search_path)
         .and_then(|resolved| tool_version_key(&resolved, max_output));
     if tool_canceled(cancellation, shutdown) || current.as_ref() != Some(&key) {
         return None;
     }
-    if value.is_some()
-        && let Ok(mut cache) = cache.lock()
-    {
-        if cache.len() >= MAX_CACHED_TOOL_VERSIONS {
-            cache.remove(0);
-        }
-        cache.push((key, value.clone()));
-    }
+    drop(flight);
     value
 }
 
@@ -2461,8 +2516,8 @@ mod tests {
         assert_eq!(lookup(&paths).as_deref(), Some("alpha"));
         assert_eq!(
             fs::read(&marker).unwrap(),
-            b"x",
-            "the second probe must use the cache"
+            b"xx",
+            "unbound executable results must not be reused"
         );
         let reordered = std::env::join_paths([&second, &first]).unwrap();
         assert_eq!(lookup(&reordered).as_deref(), Some("bravo"));
@@ -2484,7 +2539,7 @@ mod tests {
             original.modified().unwrap()
         );
         assert_eq!(lookup(&paths).as_deref(), Some("gamma"));
-        assert_eq!(fs::read(&marker).unwrap(), b"xxx");
+        assert_eq!(fs::read(&marker).unwrap(), b"xxxx");
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -2539,6 +2594,175 @@ mod tests {
         fs::write(&release, b"go").unwrap();
         assert!(task.join().unwrap().is_none());
         assert_eq!(tool_version(&tool, 1024).as_deref(), Some("new"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transient_aba_executable_swap_cannot_poison_later_version() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let root = temp_dir("tool-version-aba");
+        let tool = root.join("tool");
+        let a = root.join("a");
+        let b = root.join("b");
+        let ready = root.join("ready");
+        let release = root.join("release");
+        fs::write(&a, "#!/bin/sh\nprintf alpha\n").unwrap();
+        fs::write(&b, format!(
+            "#!/bin/sh\nprintf ready > '{}'\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nprintf bravo\n",
+            ready.display(), release.display()
+        )).unwrap();
+        for path in [&a, &b] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        symlink(&a, &tool).unwrap();
+        let probe_tool = tool.clone();
+        let switch_tool = tool.clone();
+        let b_for_hook = b.clone();
+        let probe = thread::spawn(move || {
+            tool_version_with_probe_hook(&probe_tool, 1024, None, None, None, || {
+                fs::remove_file(&switch_tool).unwrap();
+                symlink(&b_for_hook, &switch_tool).unwrap();
+            })
+        });
+        let deadline = Instant::now() + StdDuration::from_secs(1);
+        while !ready.exists() && Instant::now() < deadline {
+            thread::sleep(StdDuration::from_millis(5));
+        }
+        assert!(ready.exists(), "transient B executable did not start");
+        fs::remove_file(&tool).unwrap();
+        symlink(&a, &tool).unwrap();
+        fs::write(&release, b"go").unwrap();
+        assert_eq!(probe.join().unwrap().as_deref(), Some("bravo"));
+        // The unbound B observation is never retained as A's future result.
+        assert_eq!(tool_version(&tool, 1024).as_deref(), Some("alpha"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn concurrent_unbound_version_requests_are_serialized_but_not_reused() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::{Arc, Barrier};
+
+        let root = temp_dir("tool-version-singleflight");
+        let tool = root.join("tool");
+        let calls = root.join("calls");
+        let release = root.join("release");
+        fs::write(&tool, format!(
+            "#!/bin/sh\nprintf x >> '{}'\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nprintf version\n",
+            calls.display(), release.display()
+        )).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        let barrier = Arc::new(Barrier::new(9));
+        let tasks = (0..8)
+            .map(|_| {
+                let tool = tool.clone();
+                let barrier = barrier.clone();
+                thread::spawn(move || {
+                    barrier.wait();
+                    tool_version(&tool, 1024)
+                })
+            })
+            .collect::<Vec<_>>();
+        barrier.wait();
+        let deadline = Instant::now() + StdDuration::from_secs(1);
+        while !calls.exists() && Instant::now() < deadline {
+            thread::sleep(StdDuration::from_millis(5));
+        }
+        assert!(calls.exists(), "version probe did not start");
+        thread::sleep(StdDuration::from_millis(100));
+        assert_eq!(
+            fs::read(&calls).unwrap(),
+            b"x",
+            "only one probe may be in flight for an identity"
+        );
+        fs::write(&release, b"go").unwrap();
+        for task in tasks {
+            assert_eq!(task.join().unwrap().as_deref(), Some("version"));
+        }
+        assert_eq!(fs::read(&calls).unwrap(), b"xxxxxxxx");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canceled_version_waiter_does_not_cancel_or_duplicate_leader() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::Arc;
+
+        let root = temp_dir("tool-version-waiter-cancel");
+        let tool = root.join("tool");
+        let calls = root.join("calls");
+        let release = root.join("release");
+        fs::write(&tool, format!(
+            "#!/bin/sh\nprintf x >> '{}'\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nprintf version\n",
+            calls.display(), release.display()
+        )).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        let leader_tool = tool.clone();
+        let leader = thread::spawn(move || tool_version(&leader_tool, 1024));
+        let deadline = Instant::now() + StdDuration::from_secs(1);
+        while !calls.exists() && Instant::now() < deadline {
+            thread::sleep(StdDuration::from_millis(5));
+        }
+        assert!(calls.exists(), "version leader did not start");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let waiter_cancel = cancel.clone();
+        let waiter_tool = tool.clone();
+        let waiter = thread::spawn(move || {
+            tool_version_with_cancellation(&waiter_tool, 1024, Some(&waiter_cancel), None)
+        });
+        thread::sleep(StdDuration::from_millis(75));
+        let started = Instant::now();
+        cancel.store(true, Ordering::SeqCst);
+        assert!(waiter.join().unwrap().is_none());
+        assert!(started.elapsed() < StdDuration::from_millis(500));
+        fs::write(&release, b"go").unwrap();
+        assert_eq!(leader.join().unwrap().as_deref(), Some("version"));
+        assert_eq!(fs::read(&calls).unwrap(), b"x");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canceled_version_leader_releases_waiter_to_retry() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::Arc;
+
+        let root = temp_dir("tool-version-leader-cancel");
+        let tool = root.join("tool");
+        let calls = root.join("calls");
+        let release = root.join("release");
+        fs::write(&tool, format!(
+            "#!/bin/sh\nprintf x >> '{}'\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nprintf version\n",
+            calls.display(), release.display()
+        )).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let leader_cancel = cancel.clone();
+        let leader_tool = tool.clone();
+        let leader = thread::spawn(move || {
+            tool_version_with_cancellation(&leader_tool, 1024, Some(&leader_cancel), None)
+        });
+        let deadline = Instant::now() + StdDuration::from_secs(1);
+        while !calls.exists() && Instant::now() < deadline {
+            thread::sleep(StdDuration::from_millis(5));
+        }
+        assert!(calls.exists(), "version leader did not start");
+        let waiter_tool = tool.clone();
+        let waiter = thread::spawn(move || tool_version(&waiter_tool, 1024));
+        thread::sleep(StdDuration::from_millis(75));
+        cancel.store(true, Ordering::SeqCst);
+        assert!(leader.join().unwrap().is_none());
+        let deadline = Instant::now() + StdDuration::from_secs(1);
+        while fs::read(&calls).unwrap().len() < 2 && Instant::now() < deadline {
+            thread::sleep(StdDuration::from_millis(5));
+        }
+        assert_eq!(fs::read(&calls).unwrap(), b"xx");
+        fs::write(&release, b"go").unwrap();
+        assert_eq!(waiter.join().unwrap().as_deref(), Some("version"));
         fs::remove_dir_all(root).unwrap();
     }
 

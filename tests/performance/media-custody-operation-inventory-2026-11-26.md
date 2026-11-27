@@ -14,10 +14,17 @@ cold cache when configured with a resolvable executable path. At the time of
 the original trace, bare `ffprobe` defaults failed the version cache's metadata
 lookup before spawning, so there was no subprocess to save in that case and
 inspection's version provenance was absent. The later PATH-resolution fix
-restores that provenance; on Unix it caches using the resolved executable's
-identity. Bare names on Windows and Android use native search without caching
-because the exact executable selected cannot safely be inferred by a simple
-PATH search on those platforms.
+restores that provenance. A subsequent review found that a pathname can switch
+from executable A to B and back during a version probe, so before/after
+identity checks cannot safely bind the output to A. Persistent version-result
+reuse is now disabled for unbound path execution. The bounded per-identity
+in-flight gate remains, but waiting requests retry instead of sharing a result;
+this serializes rather than eliminates concurrent probes. A deterministic ABA
+regression and the related version tests passed. Bare names on Windows and Android
+use native search without persistent caching. An individual uncached probe can
+still observe whichever executable the operating system starts during an ABA
+race. Binding execution to a verified, immutable image and restoring safe
+caching remain open; independent source/output media probes are retained.
 This is a small cold-path reduction, not a measurement of file I/O or
 completion of RM-11. The 14 real-media normalization tests passed afterward.
 

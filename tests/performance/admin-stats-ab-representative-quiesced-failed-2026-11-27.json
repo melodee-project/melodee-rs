@@ -1,0 +1,27 @@
+{
+  "baseline_proof_sha256": "0b7bfe210f79e2852741875b7def2882c291c22fd2b00b05996c224f1a4c5dfd",
+  "candidate_proof_sha256": "5c4c3ea8857e718e1b45d31564d435925848b74fcec24af8f452a3cf1b795083",
+  "changed_fields": [
+    "database.poolInUse"
+  ],
+  "cli_proof_sha256": "f60b66bbf5696faa728f2e87d16bd66c50d77e547209ced2380ca151d2671d01",
+  "error": "normalized response changed within process",
+  "fixture": {
+    "artists": 35000,
+    "releases": 50000,
+    "tracks": 600000
+  },
+  "limitations": [
+    "only fixed changed-field labels retained, no response values",
+    "synthetic fixture; in-process route; uncontrolled warm cache and shared host"
+  ],
+  "performance_samples_recorded": false,
+  "quiescence": {
+    "duration_seconds": 15.568,
+    "mode": "vacuum_and_size_stability",
+    "observations": 3,
+    "stable_observations": 3
+  },
+  "seed_seconds": 184.3,
+  "status": "failed_before_result"
+}

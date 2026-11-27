@@ -1713,6 +1713,62 @@ async fn native_library_acl_prevents_cross_library_browse_search_mutation_and_sc
     assert_eq!(visible_artist["albumCount"], 1);
     assert_eq!(visible_artist["songCount"], 1);
 
+    // A guest credit makes this Artist visible but does not contribute to
+    // the legacy primary-release count or create a track association.
+    let guest_id = Uuid::now_v7();
+    let guest_public_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO artists (id, public_api_id, canonical_name, normalized_name, sort_name,
+                              artist_type, status, created_at, updated_at)
+         VALUES ($1,$2,'Visible Guest Artist','visible guest artist','Visible Guest Artist',
+                 'group','verified',$3,$3)",
+    )
+    .bind(guest_id)
+    .bind(guest_public_id)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("guest artist");
+    sqlx::query(
+        "INSERT INTO release_artists (id,release_id,artist_id,role,presentation_order,
+                                      display_value,join_phrase,created_at)
+         VALUES ($1,$2,$3,'guest',2,'Visible Guest Artist','',$4)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(allowed.release_id().into_uuid())
+    .bind(guest_id)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("guest release credit");
+
+    // The paged route computes counts for the returned Artist IDs in one
+    // batch. Its counts must exclude another library even when that Artist
+    // also has hidden release and track credits.
+    let (status, listed_artists) = response_json(
+        state.clone(),
+        principal,
+        "/api/v1/artists?page=1&pageSize=50",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let listed_artist = listed_artists["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|artist| artist["id"] == allowed_artist_public_id.to_string())
+        .expect("visible artist in list");
+    assert_eq!(listed_artist["albumCount"], 1);
+    assert_eq!(listed_artist["songCount"], 1);
+    let listed_guest = listed_artists["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|artist| artist["id"] == guest_public_id.to_string())
+        .expect("visible guest artist in list");
+    assert_eq!(listed_guest["albumCount"], 0);
+    assert_eq!(listed_guest["songCount"], 0);
+
     for path in [
         "/api/v1/artists?page=1&pageSize=50",
         "/api/v1/albums?page=1&pageSize=50",
@@ -1775,9 +1831,35 @@ async fn native_library_acl_prevents_cross_library_browse_search_mutation_and_sc
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    let (_, stats) = response_json(state, principal, "/api/v1/user/stats?days=30").await;
+    let (_, stats) = response_json(state.clone(), principal, "/api/v1/user/stats?days=30").await;
     assert_eq!(stats["totalPlays"], 0);
     assert_eq!(stats["favoriteAlbums"], 0);
+
+    sqlx::query("DELETE FROM native_user_library_groups WHERE user_id=$1 AND group_id=$2")
+        .bind(user.id)
+        .bind(allowed_group)
+        .execute(&db.pool)
+        .await
+        .expect("revoke library access");
+    let (status, revoked) = response_json(
+        state.clone(),
+        principal,
+        "/api/v1/artists?page=1&pageSize=50",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(revoked["meta"]["totalCount"], 0);
+    assert!(revoked["data"].as_array().is_some_and(Vec::is_empty));
+    assert_eq!(
+        response_json(
+            state,
+            principal,
+            &format!("/api/v1/artists/{allowed_artist_public_id}")
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     db.drop().await;
 }
 

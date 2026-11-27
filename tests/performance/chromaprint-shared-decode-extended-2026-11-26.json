@@ -1,0 +1,644 @@
+{
+  "all_durations_equal": false,
+  "all_fingerprints_equal": false,
+  "candidate_algorithm": 1,
+  "cases": [
+    {
+      "channels": 1,
+      "codec": "mp3",
+      "encoding_options": [
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "4"
+      ],
+      "fallback": false,
+      "generated_seconds": 15,
+      "sample_rate_hz": 44100,
+      "samples": [
+        {
+          "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+          "candidate_seconds": 0.157765,
+          "decode_exit": 0,
+          "decode_seconds": 0.208643,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "15.000000",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.107422
+        },
+        {
+          "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+          "candidate_seconds": 0.157742,
+          "decode_exit": 0,
+          "decode_seconds": 0.158986,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "15.000000",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.107494
+        }
+      ],
+      "source_bytes": 60861,
+      "trace": {
+        "decode": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 28093,
+              "calls": 3,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 32768,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 21,
+          "unparsed_file_calls": 0
+        },
+        "decode_exit": 0,
+        "fpcalc": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "fpcalc:other": 1
+          },
+          "file_calls": {
+            "fpcalc:source:read": {
+              "bytes": 60861,
+              "calls": 4,
+              "errors": 0
+            }
+          },
+          "trace_files": 1,
+          "unparsed_file_calls": 1
+        },
+        "fpcalc_exit": 0,
+        "shared": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 28093,
+              "calls": 3,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 32768,
+              "calls": 1,
+              "errors": 0
+            },
+            "ffmpeg:work:write": {
+              "bytes": 256,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 23,
+          "unparsed_file_calls": 0
+        },
+        "shared_exit": 0
+      }
+    },
+    {
+      "channels": 2,
+      "codec": "flac",
+      "encoding_options": [
+        "-c:a",
+        "flac"
+      ],
+      "fallback": false,
+      "generated_seconds": 15,
+      "sample_rate_hz": 48000,
+      "samples": [
+        {
+          "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_seconds": 0.208461,
+          "decode_exit": 0,
+          "decode_seconds": 0.209657,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "15.000000",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.10732
+        },
+        {
+          "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_seconds": 0.207875,
+          "decode_exit": 0,
+          "decode_seconds": 0.207896,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "15.000000",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.108001
+        }
+      ],
+      "source_bytes": 781243,
+      "trace": {
+        "decode": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 748475,
+              "calls": 26,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 32768,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 37,
+          "unparsed_file_calls": 0
+        },
+        "decode_exit": 0,
+        "fpcalc": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "fpcalc:other": 1
+          },
+          "file_calls": {
+            "fpcalc:source:read": {
+              "bytes": 781243,
+              "calls": 27,
+              "errors": 0
+            }
+          },
+          "trace_files": 1,
+          "unparsed_file_calls": 1
+        },
+        "fpcalc_exit": 0,
+        "shared": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 748475,
+              "calls": 26,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 32768,
+              "calls": 1,
+              "errors": 0
+            },
+            "ffmpeg:work:write": {
+              "bytes": 254,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 39,
+          "unparsed_file_calls": 0
+        },
+        "shared_exit": 0
+      }
+    },
+    {
+      "channels": 1,
+      "codec": "aac",
+      "encoding_options": [
+        "-c:a",
+        "aac"
+      ],
+      "fallback": false,
+      "generated_seconds": 15,
+      "sample_rate_hz": 48000,
+      "samples": [
+        {
+          "baseline_fingerprint": "AQAAZMkkLUmSJAr-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBwJRCAg3JAJDUCUQFARJgJ6wCkBFlHNEGASMSQKYozRCgwiARCFGKseoEOUQohBRZgiNi2LISEYQ4EgQ",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZMkkLUmSJAr-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBwJRCAg3JAJDUCUQFARJgJ6wCkBFlHNEGASMSQKYozRCgwiARCFGKseoEOUQohBRZgiNi2LISEYQ4EgQ",
+          "candidate_seconds": 0.156967,
+          "decode_exit": 0,
+          "decode_seconds": 0.157731,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "15.000000",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.107638
+        },
+        {
+          "baseline_fingerprint": "AQAAZMkkLUmSJAr-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBwJRCAg3JAJDUCUQFARJgJ6wCkBFlHNEGASMSQKYozRCgwiARCFGKseoEOUQohBRZgiNi2LISEYQ4EgQ",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZMkkLUmSJAr-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBwJRCAg3JAJDUCUQFARJgJ6wCkBFlHNEGASMSQKYozRCgwiARCFGKseoEOUQohBRZgiNi2LISEYQ4EgQ",
+          "candidate_seconds": 0.158928,
+          "decode_exit": 0,
+          "decode_seconds": 0.157238,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "15.000000",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.106436
+        }
+      ],
+      "source_bytes": 134725,
+      "trace": {
+        "decode": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 101913,
+              "calls": 4,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 69118,
+              "calls": 3,
+              "errors": 0
+            }
+          },
+          "trace_files": 21,
+          "unparsed_file_calls": 0
+        },
+        "decode_exit": 0,
+        "fpcalc": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "fpcalc:other": 1
+          },
+          "file_calls": {
+            "fpcalc:source:read": {
+              "bytes": 171031,
+              "calls": 7,
+              "errors": 0
+            }
+          },
+          "trace_files": 1,
+          "unparsed_file_calls": 1
+        },
+        "fpcalc_exit": 0,
+        "shared": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 101913,
+              "calls": 4,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 69118,
+              "calls": 3,
+              "errors": 0
+            },
+            "ffmpeg:work:write": {
+              "bytes": 255,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 23,
+          "unparsed_file_calls": 0
+        },
+        "shared_exit": 0
+      }
+    },
+    {
+      "channels": 2,
+      "codec": "opus",
+      "encoding_options": [
+        "-c:a",
+        "libopus"
+      ],
+      "fallback": false,
+      "generated_seconds": 15,
+      "sample_rate_hz": 48000,
+      "samples": [
+        {
+          "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33ww0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAwLYZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33ww0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAwLYZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_seconds": 0.208557,
+          "decode_exit": 0,
+          "decode_seconds": 0.209117,
+          "duration_ms_equal": false,
+          "ffprobe_duration": "15.006500",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.01,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.157494
+        },
+        {
+          "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33ww0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAwLYZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33ww0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAwLYZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+          "candidate_seconds": 0.207726,
+          "decode_exit": 0,
+          "decode_seconds": 0.208737,
+          "duration_ms_equal": false,
+          "ffprobe_duration": "15.006500",
+          "fingerprints_equal": true,
+          "fpcalc_duration": 15.01,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.156936
+        }
+      ],
+      "source_bytes": 221062,
+      "trace": {
+        "decode": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 188159,
+              "calls": 8,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 130843,
+              "calls": 6,
+              "errors": 0
+            }
+          },
+          "trace_files": 21,
+          "unparsed_file_calls": 0
+        },
+        "decode_exit": 0,
+        "fpcalc": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "fpcalc:other": 1
+          },
+          "file_calls": {
+            "fpcalc:source:read": {
+              "bytes": 319002,
+              "calls": 14,
+              "errors": 0
+            }
+          },
+          "trace_files": 1,
+          "unparsed_file_calls": 1
+        },
+        "fpcalc_exit": 0,
+        "shared": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 188159,
+              "calls": 8,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 130843,
+              "calls": 6,
+              "errors": 0
+            },
+            "ffmpeg:work:write": {
+              "bytes": 254,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 23,
+          "unparsed_file_calls": 0
+        },
+        "shared_exit": 0
+      }
+    },
+    {
+      "channels": 2,
+      "codec": "mp3_long",
+      "encoding_options": [
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "4"
+      ],
+      "fallback": false,
+      "generated_seconds": 125,
+      "sample_rate_hz": 44100,
+      "samples": [
+        {
+          "baseline_fingerprint": "AQADtEmlJUqSKKi-wI-F_uiJY7PB_OgxpWaQ7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowOB4wAAAMAB4Hjw4wBeHMDxAzhwHHiOP7jxAwCA47gB5D-O-ziA4wfwA3jx78jx4dCBAMABoMeBH88RQqdw4ziC_ziO4wAKHL7w4kcIH8AB_MDx4j6KHD2a40N53PBxHPjxA8eHI39wQvzRDweOQx9KC6YPAMAOAAfEA_2B5kGPQzsgIAAeHDhw4HiwI4OyHj0aoziKHwcAQDgOHPih40APANhREAeC4_iH4wAAHMDjBuGFHkbR4zAAAAAOHAAO4MDRH4_QBEV3_DBwAAdwADh-ANdx_MCPFj96-BmDk7gPxzgAAAAAAAAAHA-O9rguNEefoSczfPCPFzBuFAeO40eJ-zhSAAdw_MDhH_hwHs1T5OiP-zgAAAAAAACEANhxAOhxHDce5NCOAwAAAAAA4AAQHD9wHMeP4ujhD-XR3shhAAAA4DgO_DhwDAR2HDiOHz9-vD6Ko2hwlIdvAAAAAAAAAAAO_DiA48Nx2D76A8fx4ygtw0wPHDhwHDiGAwQAAAAAYDgAAD56AD5w9AAAAAAAAABwAACA4wGO4wNw7KCK6bjRo8GPP-iPAwAAAAAAAAAAAACAAwcOHA9woAA-7DkKDgAA4DiOAzgOAAAAAACAAwCAAwD-4MGBAwAAAAAAAAAA4ABwAAcAHAAAADge_MALAAAAAAAAAAAAAAAAAAAA4MCBAziA4w-eAzcOAAAAAAAAAAAAAAAAAAAAAAAAHDgOHA_-4DgOAKMUEmhIZgCQ1AlEBQESYCesApARZRzRBgEjEkCmIMIQoMIgEQhRirHqBDlEKIQUWYIjYixbViKCEEeCAM4YZwIIoLFQDTXABAAAa8aAcEE6EQZHjgFhOVNiimYYYQ57gwRxLTRADBOwgGmpAAM4YIWYEDmEDlEQK0XYJV14sRRAiiyETBlJMIWoMEkhxAzCBLJDLAuRSIzEAEYaIbhgiFgKiLAAS2UJQwwwI5y0mjCihOAAEfBaicIYcUYYZjnHHDILMOK8aKJS6hWJhmgX2hVUEQFIMgs5pBwssgoJrFBCVKAkROQQEZJi7CpmBlIIKUSWUmShhEz3iEgEkOVCCZMUQogLQTxngAkhmGDcAY0F48AJgFZqTDAAHNaYMSY4cwA",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQADtEmlJUqSKKi-wI-F_uiJY7PB_OgxpWaQ7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowOB4wAAAMAB4Hjw4wBeHMDxAzhwHHiOP7jxAwCA47gB5D-O-ziA4wfwA3jx78jx4dCBAMABoMeBH88RHjpx4ziC_ziO4wAKHL7w4kcIH8AB_MDx4j6KHD2a40N53PBxHPjxA8eHI39wQvzRDweOQx9KC6YPAMAOAAfEA_2B5kGPQzsgIAAeHDhw4HiwI4OyHj0aoziKHwcAQDgOHPih40APANhREAeC4_iH4wAAHMDjBuGFHkbR4zAAAAAOHAAO4MDRH4_QBEV3_DBwAAdwADh-ANdx_MCPFj96-BmDk7gPxzgAAAAAAAAAHA-O9rguNEefoSczfPCPFzBuFAeO40eJ-zhSAAdw_MDhH_hwHs1T5OiP-zgAAAAAAACEANhxAOhxHDce5NCOAwAAAAAA4AAQHD9wHMeP4ujhD-XR3shhAAAA4DgO_DhwDAR2HDiOHz9-vD6Ko2hwlIdvAAAAAAAAAAAO_DiA48Nx2D76A8fx4ygtw0wPHDhwHDiGAwQAAAAAYDgAAD56AD5w9AAAAAAAAABwAACA4wGO4wNw7KCK6bjRo8GPP-iPAwAAAAAAAAAAAACAAwcOHA9woAA-7DkKDgAA4DiOAzgOAAAAAACAAwCAAwD-4MGBAwAAAAAAAAAA4ABwAAcAHAAAADge_MALAAAAAAAAAAAAAAAAAAAA4MCBAziA4w-eAzcOAAAAAAAAAAAAAAAAAAAAAAAAHDgOHA_-4DgOAKMUEmhIZgCQ1AlEBQESYCesApARZRzRBgEjEkCmIMIQoMIgEQhRirHqBDlEKIQUWYIjYixbViKCEEeCAM4YZwIIoLFQDTXABAAAa8aAcEE6EQZHjgFhOVNiimYYkcxhb5AgroUGiGECFjAtFWAAB6wQEyKH0CEKYqUIu6QLL5YCSJGFkCkjCaYQFSYphJhBmEB2iGUhEomRGMBIIwQXDBFLAREWYKksYYgBZoSTVhNGlBAcIAJeK1EYI84IwyznmENmAUacF01USr0i0RDtQruCKiIASWYhh5SDRVYhgRVKiAqUhIgcIkJSjF3FzEAKIYXIUooslJDpHhGJALJcKGGSQghxIYjnDDAhBBOMO6CxYBw4AdBKjQkGgMMaM8YEZw4",
+          "candidate_seconds": 0.257151,
+          "decode_exit": 0,
+          "decode_seconds": 0.257404,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "125.000000",
+          "fingerprints_equal": false,
+          "fpcalc_duration": 125.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.156609
+        },
+        {
+          "baseline_fingerprint": "AQADtEmlJUqSKKi-wI-F_uiJY7PB_OgxpWaQ7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowOB4wAAAMAB4Hjw4wBeHMDxAzhwHHiOP7jxAwCA47gB5D-O-ziA4wfwA3jx78jx4dCBAMABoMeBH88RQqdw4ziC_ziO4wAKHL7w4kcIH8AB_MDx4j6KHD2a40N53PBxHPjxA8eHI39wQvzRDweOQx9KC6YPAMAOAAfEA_2B5kGPQzsgIAAeHDhw4HiwI4OyHj0aoziKHwcAQDgOHPih40APANhREAeC4_iH4wAAHMDjBuGFHkbR4zAAAAAOHAAO4MDRH4_QBEV3_DBwAAdwADh-ANdx_MCPFj96-BmDk7gPxzgAAAAAAAAAHA-O9rguNEefoSczfPCPFzBuFAeO40eJ-zhSAAdw_MDhH_hwHs1T5OiP-zgAAAAAAACEANhxAOhxHDce5NCOAwAAAAAA4AAQHD9wHMeP4ujhD-XR3shhAAAA4DgO_DhwDAR2HDiOHz9-vD6Ko2hwlIdvAAAAAAAAAAAO_DiA48Nx2D76A8fx4ygtw0wPHDhwHDiGAwQAAAAAYDgAAD56AD5w9AAAAAAAAABwAACA4wGO4wNw7KCK6bjRo8GPP-iPAwAAAAAAAAAAAACAAwcOHA9woAA-7DkKDgAA4DiOAzgOAAAAAACAAwCAAwD-4MGBAwAAAAAAAAAA4ABwAAcAHAAAADge_MALAAAAAAAAAAAAAAAAAAAA4MCBAziA4w-eAzcOAAAAAAAAAAAAAAAAAAAAAAAAHDgOHA_-4DgOAKMUEmhIZgCQ1AlEBQESYCesApARZRzRBgEjEkCmIMIQoMIgEQhRirHqBDlEKIQUWYIjYixbViKCEEeCAM4YZwIIoLFQDTXABAAAa8aAcEE6EQZHjgFhOVNiimYYYQ57gwRxLTRADBOwgGmpAAM4YIWYEDmEDlEQK0XYJV14sRRAiiyETBlJMIWoMEkhxAzCBLJDLAuRSIzEAEYaIbhgiFgKiLAAS2UJQwwwI5y0mjCihOAAEfBaicIYcUYYZjnHHDILMOK8aKJS6hWJhmgX2hVUEQFIMgs5pBwssgoJrFBCVKAkROQQEZJi7CpmBlIIKUSWUmShhEz3iEgEkOVCCZMUQogLQTxngAkhmGDcAY0F48AJgFZqTDAAHNaYMSY4cwA",
+          "candidate_exit": 0,
+          "candidate_fingerprint": "AQADtEmlJUqSKKi-wI-F_uiJY7PB_OgxpWaQ7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxAcWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowOB4wAAAMAB4Hjw4wBeHMDxAzhwHHiOP7jxAwCA47gB5D-O-ziA4wfwA3jx78jx4dCBAMABoMeBH88RHjpx4ziC_ziO4wAKHL7w4kcIH8AB_MDx4j6KHD2a40N53PBxHPjxA8eHI39wQvzRDweOQx9KC6YPAMAOAAfEA_2B5kGPQzsgIAAeHDhw4HiwI4OyHj0aoziKHwcAQDgOHPih40APANhREAeC4_iH4wAAHMDjBuGFHkbR4zAAAAAOHAAO4MDRH4_QBEV3_DBwAAdwADh-ANdx_MCPFj96-BmDk7gPxzgAAAAAAAAAHA-O9rguNEefoSczfPCPFzBuFAeO40eJ-zhSAAdw_MDhH_hwHs1T5OiP-zgAAAAAAACEANhxAOhxHDce5NCOAwAAAAAA4AAQHD9wHMeP4ujhD-XR3shhAAAA4DgO_DhwDAR2HDiOHz9-vD6Ko2hwlIdvAAAAAAAAAAAO_DiA48Nx2D76A8fx4ygtw0wPHDhwHDiGAwQAAAAAYDgAAD56AD5w9AAAAAAAAABwAACA4wGO4wNw7KCK6bjRo8GPP-iPAwAAAAAAAAAAAACAAwcOHA9woAA-7DkKDgAA4DiOAzgOAAAAAACAAwCAAwD-4MGBAwAAAAAAAAAA4ABwAAcAHAAAADge_MALAAAAAAAAAAAAAAAAAAAA4MCBAziA4w-eAzcOAAAAAAAAAAAAAAAAAAAAAAAAHDgOHA_-4DgOAKMUEmhIZgCQ1AlEBQESYCesApARZRzRBgEjEkCmIMIQoMIgEQhRirHqBDlEKIQUWYIjYixbViKCEEeCAM4YZwIIoLFQDTXABAAAa8aAcEE6EQZHjgFhOVNiimYYkcxhb5AgroUGiGECFjAtFWAAB6wQEyKH0CEKYqUIu6QLL5YCSJGFkCkjCaYQFSYphJhBmEB2iGUhEomRGMBIIwQXDBFLAREWYKksYYgBZoSTVhNGlBAcIAJeK1EYI84IwyznmENmAUacF01USr0i0RDtQruCKiIASWYhh5SDRVYhgRVKiAqUhIgcIkJSjF3FzEAKIYXIUooslJDpHhGJALJcKGGSQghxIYjnDDAhBBOMO6CxYBw4AdBKjQkGgMMaM8YEZw4",
+          "candidate_seconds": 0.257842,
+          "decode_exit": 0,
+          "decode_seconds": 0.25688,
+          "duration_ms_equal": true,
+          "ffprobe_duration": "125.000000",
+          "fingerprints_equal": false,
+          "fpcalc_duration": 125.0,
+          "fpcalc_exit": 0,
+          "fpcalc_seconds": 0.20831
+        }
+      ],
+      "source_bytes": 548959,
+      "trace": {
+        "decode": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 516191,
+              "calls": 18,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 32768,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 21,
+          "unparsed_file_calls": 0
+        },
+        "decode_exit": 0,
+        "fpcalc": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "fpcalc:other": 1
+          },
+          "file_calls": {
+            "fpcalc:source:read": {
+              "bytes": 548959,
+              "calls": 17,
+              "errors": 0
+            }
+          },
+          "trace_files": 1,
+          "unparsed_file_calls": 1
+        },
+        "fpcalc_exit": 0,
+        "shared": {
+          "attributed_mmaps": 0,
+          "executions": {
+            "ffmpeg:other": 1
+          },
+          "file_calls": {
+            "benchmark_or_other:source:read": {
+              "bytes": 516191,
+              "calls": 18,
+              "errors": 0
+            },
+            "ffmpeg:source:read": {
+              "bytes": 32768,
+              "calls": 1,
+              "errors": 0
+            },
+            "ffmpeg:work:write": {
+              "bytes": 1295,
+              "calls": 1,
+              "errors": 0
+            }
+          },
+          "trace_files": 23,
+          "unparsed_file_calls": 0
+        },
+        "shared_exit": 0
+      }
+    }
+  ],
+  "commands": {
+    "candidate": [
+      "ffmpeg",
+      "-nostdin",
+      "-v",
+      "error",
+      "-xerror",
+      "-n",
+      "-i",
+      "<source>",
+      "-filter_complex",
+      "[0:a:0]asplit=2[check][fp];[fp]atrim=duration=120[cut]",
+      "-map",
+      "[check]",
+      "-f",
+      "null",
+      "-",
+      "-map",
+      "[cut]",
+      "-c:a",
+      "pcm_s16le",
+      "-algorithm",
+      "1",
+      "-fp_format",
+      "base64",
+      "-f",
+      "chromaprint",
+      "<output>"
+    ],
+    "decode": [
+      "ffmpeg",
+      "-nostdin",
+      "-v",
+      "error",
+      "-xerror",
+      "-i",
+      "<source>",
+      "-map",
+      "0:a:0",
+      "-f",
+      "null",
+      "-"
+    ],
+    "fpcalc": [
+      "fpcalc",
+      "-json",
+      "-length",
+      "120",
+      "--",
+      "<source>"
+    ],
+    "probe": [
+      "ffprobe",
+      "-v",
+      "error",
+      "-print_format",
+      "json",
+      "-show_format",
+      "-show_streams",
+      "--",
+      "<source>"
+    ]
+  },
+  "description": "test-only generated media comparison, not production ingestion",
+  "filter": "[0:a:0]asplit=2[check][fp];[fp]atrim=duration=120[cut]",
+  "forced_fallback": false,
+  "fpcalc_algorithm": "default",
+  "limitations": [
+    "generated signals, not real music",
+    "untraced wall time includes process startup and filesystem cache is uncontrolled",
+    "trace bytes are logical returned syscall counts, not physical disk I/O",
+    "strace affects timing; incomplete calls, mmap faults and native library reads may be unattributed",
+    "candidate does not independently produce fpcalc's duration value",
+    "test supervisor is not the production subprocess supervisor"
+  ],
+  "logical_cpus": 24,
+  "muxer_available": true,
+  "platform": "Linux-7.3.4-300.fc45.x86_64-x86_64-with-glibc2.44",
+  "production_eligibility": "not established",
+  "repeats": 2,
+  "script_sha256": "a8df0d53846498f56ab4b217c23a512298f34102846a6a92b501fed429befe60",
+  "timeout_cleanup": {
+    "exit_code": 255,
+    "supervisor": "owned session and pidfd cleanup; child groups verified empty",
+    "timed_out": true
+  },
+  "timestamp_utc": "2026-11-27T03:56:05.106376+00:00",
+  "tool_versions": {
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobe": "ffprobe version 9.0.2 Copyright (c) 2007-2026 the FFmpeg developers",
+    "fpcalc": "fpcalc version 1.6.1 (FFmpeg Lavc63.1.101 Lavf63.1.101 SwR7.1.101)"
+  },
+  "trace_io": true,
+  "truncated_flac": {
+    "baseline_exit": 183,
+    "both_rejected": true,
+    "candidate_exit": 183
+  }
+}

@@ -746,6 +746,41 @@ async fn disabled_ingestion_still_cleans_expired_scan_spool() {
         .bind(item.id).bind(generation).fetch_one(&scenario.database.pool).await.expect("unfinished capture");
     sqlx::query("INSERT INTO release_work_item_settling_snapshot_files (snapshot_id,relative_path,file_type,file_size,modified_at,modified_at_nanos) SELECT $1, n::text,'file',0,clock_timestamp(),'0' FROM generate_series(1, 257) AS n")
         .bind(capture).execute(&scenario.database.pool).await.expect("unfinished files");
+    let hash_capture = Uuid::now_v7();
+    sqlx::query("INSERT INTO custody_hash_spool_captures(id,work_item_id,lease_owner,purpose,source_generation,target_binding,state,observation_epoch,created_at,updated_at) VALUES($1,$2,'expired-owner','source','unix:1:2','removed-release','capturing',$1,clock_timestamp(),clock_timestamp())")
+        .bind(hash_capture).bind(item.id).execute(&scenario.database.pool).await.expect("unfinished hash capture");
+    sqlx::query("INSERT INTO custody_hash_spool_entries(capture_id,path_key,parent_key,name_key,legacy_path_hex,is_directory,legacy_length,digest,observed_epoch) SELECT $1,n::text,'',lpad(to_hex(n),16,'0'),'6100',false,0,repeat('a',64),$1 FROM generate_series(1,257) n")
+        .bind(hash_capture).execute(&scenario.database.pool).await.expect("unfinished hash entries");
+    sqlx::query("INSERT INTO inbound_retained_sources(work_item_id,source_path,source_generation,content_digest,next_reobserve_at,created_at,updated_at) VALUES($1,'removed-release','old',$2,clock_timestamp(),clock_timestamp(),clock_timestamp())")
+        .bind(item.id).bind(format!("v3:{}", "a".repeat(64))).execute(&scenario.database.pool).await.expect("retained obligation");
+    let worker = melodee_persistence::WorkerId::new();
+    let lease = WorkItemStore
+        .claim_due_retained_sources(&scenario.database.pool, &worker, 1, Duration::minutes(1))
+        .await
+        .expect("claim retained")
+        .remove(0);
+    let checkpoint = WorkItemStore
+        .begin_or_adopt_retained_chunk_checkpoint(
+            &scenario.database.pool,
+            &lease,
+            "file",
+            "root",
+            "candidate",
+            1,
+        )
+        .await
+        .expect("checkpoint");
+    sqlx::query("UPDATE inbound_retained_sources SET lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL WHERE work_item_id=$1")
+        .bind(item.id).execute(&scenario.database.pool).await.expect("abandon retained lease");
+    sqlx::query("UPDATE inbound_retained_chunk_checkpoints SET updated_at=clock_timestamp()-interval '2 hours' WHERE work_item_id=$1")
+        .bind(item.id).execute(&scenario.database.pool).await.expect("age checkpoint");
+    let baseline = Uuid::now_v7();
+    sqlx::query("INSERT INTO inbound_retained_baselines(id,work_item_id,lease_owner,stage_capture_id,stage_epoch,stage_digest,stage_generation,stage_binding,state,logical_bytes,created_at,updated_at) VALUES($1,$2,'expired-owner',$3,$3,$4,'old','stage','capturing',512,clock_timestamp()-interval '2 hours',clock_timestamp()-interval '2 hours')")
+        .bind(baseline).bind(item.id).bind(generation).bind(format!("v3:{}", "a".repeat(64))).execute(&scenario.database.pool).await.expect("provisional baseline");
+    sqlx::query("UPDATE inbound_retained_baseline_budget SET captures=1,bytes=512 WHERE singleton")
+        .execute(&scenario.database.pool)
+        .await
+        .expect("baseline accounting");
     let mut config = IngestionConfig::with_sources(Vec::new());
     config.reconciliation_interval = Duration::seconds(1);
     let handle = start_reconciliation_loop(
@@ -762,7 +797,26 @@ async fn disabled_ingestion_still_cleans_expired_scan_spool() {
             .fetch_one(&scenario.database.pool)
             .await
             .expect("candidate count");
-            if count == 0 {
+            let hashes: i64 =
+                sqlx::query_scalar("SELECT count(*) FROM custody_hash_spool_captures WHERE id=$1")
+                    .bind(hash_capture)
+                    .fetch_one(&scenario.database.pool)
+                    .await
+                    .expect("hash captures");
+            let chunks: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM inbound_retained_chunk_checkpoints WHERE capture_id=$1",
+            )
+            .bind(checkpoint.capture_id())
+            .fetch_one(&scenario.database.pool)
+            .await
+            .expect("chunk checkpoints");
+            let baselines: i64 =
+                sqlx::query_scalar("SELECT count(*) FROM inbound_retained_baselines WHERE id=$1")
+                    .bind(baseline)
+                    .fetch_one(&scenario.database.pool)
+                    .await
+                    .expect("baselines");
+            if count == 0 && hashes == 0 && chunks == 0 && baselines == 0 {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;

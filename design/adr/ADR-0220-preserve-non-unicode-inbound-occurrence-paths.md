@@ -81,6 +81,14 @@ after traversal. The new custody protocol is not yet used for acquisition or
 purge: isolated custody, repeated verification, root fencing, and crash recovery
 must be implemented and validated before it is enabled. Existing legacy
 receipts remain unchanged and are not sufficient custody identity evidence.
+The experimental namespace check rejects unsupported filesystems and Linux
+directories with POSIX access or default ACLs, and fails closed on macOS until
+native ACL inspection exists. These checks do not yet establish safe mount
+topology: bind mounts can expose an apparently separate directory through an
+inbound tree. A future handoff must validate and recheck mount topology at the
+action boundary, and must treat the producer identity as trusted deployment
+configuration. Even a protected namespace cannot revoke writable file handles
+that a producer opened before a move.
 
 ## Validation
 

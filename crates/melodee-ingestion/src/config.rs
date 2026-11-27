@@ -29,6 +29,10 @@ pub const ENV_SOURCE_LIBRARY_NAME: &str = "MELODEE__INGEST__SOURCE_LIBRARY_NAME"
 /// Durable Melodee-owned source storage. This is not normalization scratch:
 /// it retains original source bytes for retry, review, and quarantine.
 pub const ENV_STAGING_ROOT: &str = "MELODEE__INGEST__STAGING_ROOT";
+/// Planned protected-stage custody requires an explicit private root and
+/// producer identity; neither is inferred from a filesystem path.
+pub const ENV_PROTECTED_CUSTODY_ROOT: &str = "MELODEE__INGEST__PROTECTED_CUSTODY_ROOT";
+pub const ENV_PROTECTED_PRODUCER_UID: &str = "MELODEE__INGEST__PROTECTED_PRODUCER_UID";
 pub const ENV_INSPECTION_CONCURRENCY: &str = "MELODEE__INSPECTION__CONCURRENCY";
 pub const ENV_FFPROBE_PATH: &str = "MELODEE__INSPECTION__FFPROBE_PATH";
 pub const ENV_FFPROBE_TIMEOUT_SECONDS: &str = "MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS";
@@ -42,8 +46,76 @@ pub const ENV_VALIDATION_CONCURRENCY: &str = "MELODEE__VALIDATION__CONCURRENCY";
 pub const ENV_PUBLICATION_CONCURRENCY: &str = "MELODEE__PUBLICATION__CONCURRENCY";
 pub const ENV_PUBLICATION_NFS_MIB_PER_SECOND: &str = "MELODEE__PUBLICATION__NFS_MIB_PER_SECOND";
 pub const ENV_STORAGE_ROOT: &str = "MELODEE__STORAGE__ROOT";
+pub const ENV_RETAINED_RECHECK_MIB_PER_SECOND: &str =
+    "MELODEE__INGEST__RETAINED_RECHECK_MIB_PER_SECOND";
+pub const ENV_RETAINED_RECHECK_INTERVAL_SECONDS: &str =
+    "MELODEE__INGEST__RETAINED_RECHECK_INTERVAL_SECONDS";
 
 pub const DEFAULT_READY_MARKER: &str = ".melodee-ready";
+
+/// Operator-supplied inputs for the planned protected-stage protocol.
+/// Possession of these values does not prove namespace isolation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtectedCustodyConfig {
+    pub private_root: PathBuf,
+    pub producer_uid: u32,
+}
+
+fn parse_protected_custody_config(
+    root: Option<std::ffi::OsString>,
+    producer: Option<std::ffi::OsString>,
+    service_uid: Option<u32>,
+) -> Result<Option<ProtectedCustodyConfig>, IngestionSourceParseError> {
+    let (root, producer) = match (root, producer) {
+        (None, None) => return Ok(None),
+        (Some(root), Some(producer)) => (PathBuf::from(root), producer),
+        _ => {
+            return Err(IngestionSourceParseError {
+                detail: format!(
+                    "{ENV_PROTECTED_CUSTODY_ROOT} and {ENV_PROTECTED_PRODUCER_UID} must be configured together"
+                ),
+            });
+        }
+    };
+    let service_uid = service_uid.ok_or_else(|| IngestionSourceParseError {
+        detail: "protected custody is unavailable on this platform".to_owned(),
+    })?;
+    let producer_uid = producer
+        .to_str()
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|uid| *uid != 0 && *uid != u32::MAX && *uid != service_uid)
+        .ok_or_else(|| IngestionSourceParseError {
+            detail: format!(
+                "{ENV_PROTECTED_PRODUCER_UID} must be a distinct, non-root numeric UID"
+            ),
+        })?;
+    if !root.is_absolute()
+        || root.parent().is_none()
+        || root
+            .components()
+            .any(|component| !matches!(component, Component::RootDir | Component::Normal(_)))
+    {
+        return Err(IngestionSourceParseError {
+            detail: format!(
+                "{ENV_PROTECTED_CUSTODY_ROOT} must be a normalized absolute directory path"
+            ),
+        });
+    }
+    Ok(Some(ProtectedCustodyConfig {
+        private_root: root,
+        producer_uid,
+    }))
+}
+
+#[cfg(target_os = "linux")]
+fn custody_service_uid() -> Option<u32> {
+    Some(rustix::process::geteuid().as_raw())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn custody_service_uid() -> Option<u32> {
+    None
+}
 
 const DEFAULT_RECONCILIATION_INTERVAL_SECONDS: i64 = 30;
 const DEFAULT_SETTLING_QUIET_SECONDS: i64 = 10;
@@ -56,6 +128,8 @@ const DEFAULT_FPCALC_TIMEOUT_SECONDS: i64 = 60;
 const DEFAULT_WORK_AREA_BASE: &str = "/tmp/melodee-work";
 const DEFAULT_VALIDATION_CONCURRENCY: u32 = 2;
 const DEFAULT_PUBLICATION_CONCURRENCY: u32 = 2;
+const DEFAULT_RETAINED_RECHECK_MIB_PER_SECOND: u32 = 8;
+const DEFAULT_RETAINED_RECHECK_INTERVAL_SECONDS: i64 = 300;
 
 #[derive(Debug, Clone)]
 pub struct IngestionConfig {
@@ -75,9 +149,15 @@ pub struct IngestionConfig {
     pub fpcalc_timeout: Duration,
     /// Required durable source storage whenever inbound ingestion is enabled.
     pub staging_root: Option<PathBuf>,
+    /// Absent by default; configured values do not activate protected intake.
+    pub protected_custody: Option<ProtectedCustodyConfig>,
     pub work_area_base: PathBuf,
     pub validation_concurrency: u32,
     pub publication_concurrency: u32,
+    /// Aggregate per-process read pacing for retained-source reobservations.
+    pub retained_recheck_mib_per_second: u32,
+    /// Delay after a complete unchanged retained-source observation.
+    pub retained_recheck_interval: Duration,
     pub(crate) nfs_io_budget: NfsIoBudget,
     /// Canonical publication is deliberately opt-in. An inbound source must
     /// never imply a destination with destructive operational consequences.
@@ -130,9 +210,12 @@ impl IngestionConfig {
             fpcalc_path: PathBuf::from("fpcalc"),
             fpcalc_timeout: Duration::seconds(DEFAULT_FPCALC_TIMEOUT_SECONDS),
             staging_root,
+            protected_custody: None,
             work_area_base: PathBuf::from(DEFAULT_WORK_AREA_BASE),
             validation_concurrency: DEFAULT_VALIDATION_CONCURRENCY,
             publication_concurrency: DEFAULT_PUBLICATION_CONCURRENCY,
+            retained_recheck_mib_per_second: DEFAULT_RETAINED_RECHECK_MIB_PER_SECOND,
+            retained_recheck_interval: Duration::seconds(DEFAULT_RETAINED_RECHECK_INTERVAL_SECONDS),
             nfs_io_budget: NfsIoBudget::default(),
             storage_root: None,
             #[cfg(feature = "test-support")]
@@ -156,6 +239,11 @@ impl IngestionConfig {
 
         let enabled = enabled.unwrap_or(true);
         let staging_root = env::var_os(ENV_STAGING_ROOT).map(PathBuf::from);
+        let protected_custody = parse_protected_custody_config(
+            env::var_os(ENV_PROTECTED_CUSTODY_ROOT),
+            env::var_os(ENV_PROTECTED_PRODUCER_UID),
+            custody_service_uid(),
+        )?;
         if enabled && !sources.is_empty() && staging_root.is_none() {
             return Err(IngestionSourceParseError {
                 detail: format!(
@@ -211,6 +299,7 @@ impl IngestionConfig {
                 DEFAULT_FPCALC_TIMEOUT_SECONDS,
             )?,
             staging_root,
+            protected_custody,
             work_area_base: config_var(ENV_WORK_AREA_BASE)
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from(DEFAULT_WORK_AREA_BASE)),
@@ -222,6 +311,11 @@ impl IngestionConfig {
                 ENV_PUBLICATION_CONCURRENCY,
                 DEFAULT_PUBLICATION_CONCURRENCY,
             )?,
+            retained_recheck_mib_per_second: parse_positive_u32(
+                ENV_RETAINED_RECHECK_MIB_PER_SECOND,
+                DEFAULT_RETAINED_RECHECK_MIB_PER_SECOND,
+            )?,
+            retained_recheck_interval: parse_retained_recheck_interval()?,
             nfs_io_budget: NfsIoBudget::new(parse_positive_u32(
                 ENV_PUBLICATION_NFS_MIB_PER_SECOND,
                 DEFAULT_NFS_MIB_PER_SECOND,
@@ -435,6 +529,19 @@ fn parse_positive_duration_seconds(
     Ok(Duration::seconds(value))
 }
 
+fn parse_retained_recheck_interval() -> Result<Duration, IngestionSourceParseError> {
+    let interval = parse_positive_duration_seconds(
+        ENV_RETAINED_RECHECK_INTERVAL_SECONDS,
+        DEFAULT_RETAINED_RECHECK_INTERVAL_SECONDS,
+    )?;
+    if interval > Duration::days(30) {
+        return Err(IngestionSourceParseError {
+            detail: format!("{ENV_RETAINED_RECHECK_INTERVAL_SECONDS} must not exceed 30 days"),
+        });
+    }
+    Ok(interval)
+}
+
 fn parse_non_negative_duration_seconds(
     key: &str,
     default: i64,
@@ -573,6 +680,56 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn protected_custody_settings_are_explicit_and_fail_closed() {
+        assert!(
+            parse_protected_custody_config(None, None, None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(parse_protected_custody_config(Some("/private".into()), None, Some(1000)).is_err());
+        assert!(parse_protected_custody_config(None, Some("1001".into()), Some(1000)).is_err());
+        for uid in ["0", "1000", "4294967295", "-1", "not-a-uid"] {
+            assert!(
+                parse_protected_custody_config(
+                    Some("/private".into()),
+                    Some(uid.into()),
+                    Some(1000)
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            parse_protected_custody_config(
+                Some("relative".into()),
+                Some("1001".into()),
+                Some(1000)
+            )
+            .is_err()
+        );
+        assert!(
+            parse_protected_custody_config(
+                Some("/private/../source".into()),
+                Some("1001".into()),
+                Some(1000)
+            )
+            .is_err()
+        );
+        assert!(
+            parse_protected_custody_config(Some("/private".into()), Some("1001".into()), None)
+                .is_err()
+        );
+        let config = parse_protected_custody_config(
+            Some("/private".into()),
+            Some("1001".into()),
+            Some(1000),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(config.private_root, Path::new("/private"));
+        assert_eq!(config.producer_uid, 1001);
+    }
 
     fn temporary_root(label: &str) -> PathBuf {
         env::temp_dir().join(format!(

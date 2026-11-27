@@ -1,0 +1,29 @@
+{
+  "changed_scripts": {
+    "scripts/run_perf_identity_case.py": {
+      "after": "ca9bd6bb58f8819bf6886a05037b331cb74d5d9ca5bff9560300bd27ee98692c",
+      "before": "76da32aa21d106c2270c379177a66fdde845507a12069364dd001049beed4b4a"
+    }
+  },
+  "cli_sha256": "29825cb1c31ea19325ff34dfe1fd1c495f68ab864fe6df76b899fa1770405093",
+  "limitations": [
+    "collector script updated after builds and separately attested",
+    "hashes do not exclude transient edits"
+  ],
+  "previous_record_sha256": "e0d48fcf281884e5fd8df60ceaacac8855e138de3094f4553ad5449885fe0756",
+  "script_sha256": {
+    "scripts/build_perf_cli.py": "2f1d014dee3e7082138a53cdfb626258c01673488818a94452193ca61734c203",
+    "scripts/build_perf_server.py": "908eacf53ba9c15fb490d7aa29b6e3e42ef9b6c821fa8c810929ac14f583c813",
+    "scripts/build_perf_test.py": "6ea3a0a3c9f33b48a75f5954a05c0a862b64c2879e87ce1c0c152e1ef0450cef",
+    "scripts/perf_identity_fixture.py": "1222d007e3f82ba0d06b8e6a55a7a022876c45ff63639d07ca760cace74628bb",
+    "scripts/perf_jellyfin_audio_plan.py": "1b6b8f9e87816c1e69d9a877cc29a6aeb10e0a8934bd484a97c4c55aa768c17a",
+    "scripts/perf_media_io_trace.py": "17bd758972c6951a0cf7e2b4c4f09b385f5e15a211b2bcfb74e3e1ccf9187bcb",
+    "scripts/perf_representative.py": "4c2040cd92e335f6694fa9c3871255ade3d4ec84f70abdbc194f97ccc2107a4f",
+    "scripts/run_perf_identity_benchmark.py": "12b36ae57291a6fac8d82fc56c993576857b714efba8baab6e8eed4fa0577a74",
+    "scripts/run_perf_identity_case.py": "ca9bd6bb58f8819bf6886a05037b331cb74d5d9ca5bff9560300bd27ee98692c",
+    "scripts/run_perf_mutation_benchmarks.py": "81789b1d2f6df3fba3cde14cd94c95d508e5e6c468cfd3035463dc428f09bb8c",
+    "scripts/test_database.py": "4a4c43f6cb4552954eca6f5c84b35a0ba026242da14b56d10b1b8d5eb462e518"
+  },
+  "source_file_count": 573,
+  "test_sha256": "58c308d9899b19c71e067ce1388b4a1409872b02103644e8aa75e8f5b04df0b8"
+}

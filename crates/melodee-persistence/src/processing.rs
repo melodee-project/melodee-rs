@@ -74,6 +74,8 @@ pub(crate) struct ClaimCandidate {
     pub(crate) id: Uuid,
     pub(crate) state: String,
     pub(crate) release_id: Option<Uuid>,
+    source_library_id: Option<Uuid>,
+    source_path: String,
 }
 
 /// A persistent four-slot cycle preserves the bulk share even for one-slot
@@ -83,7 +85,9 @@ pub(crate) async fn claim_candidates(
     stage: &str,
     config: &WorkEngineConfig,
     now: OffsetDateTime,
+    protected_allowed: bool,
 ) -> Result<Vec<ClaimCandidate>, sqlx::Error> {
+    crate::work_item_lifecycle::admit_runtime(tx).await?;
     let mut slot: i32 =
         sqlx::query_scalar("SELECT slot FROM ingest_claim_cursors WHERE stage=$1 FOR UPDATE")
             .bind(stage)
@@ -91,7 +95,7 @@ pub(crate) async fn claim_candidates(
             .await?;
     let limit = i64::from(config.claim_batch_size);
     let max_attempts = i32::try_from(config.retry_policy.max_attempts).unwrap_or(i32::MAX);
-    let mut lanes = [Vec::new(), Vec::new()];
+    let mut lanes: [Vec<ClaimCandidate>; 2] = [Vec::new(), Vec::new()];
     for (index, lane) in lanes.iter_mut().enumerate() {
         *lane = sqlx::query_as(include_str!("processing/claim_lane.sql"))
             .bind(stage)
@@ -99,6 +103,7 @@ pub(crate) async fn claim_candidates(
             .bind(now)
             .bind(max_attempts)
             .bind(limit)
+            .bind(protected_allowed)
             .fetch_all(&mut **tx)
             .await?;
         lane.reverse();
@@ -112,6 +117,22 @@ pub(crate) async fn claim_candidates(
         else {
             break;
         };
+        // Candidate rows are already locked. Never wait on the occurrence
+        // lock in the inverse order: a purge may hold it while waiting for
+        // this item. A failed try-lock skips the candidate until a later turn.
+        let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(1869834357,hashtext(COALESCE($1::uuid::text,'__default__') || '|' || $2::text))")
+            .bind(row.source_library_id).bind(&row.source_path).fetch_one(&mut **tx).await?;
+        if !locked {
+            continue;
+        }
+        // This is a separate statement under READ COMMITTED, after acquiring
+        // the occurrence lock, so a newly committed guard cannot be missed by
+        // the earlier candidate-selection snapshot.
+        let guarded: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inbound_occurrence_purge_guards WHERE source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\") OR EXISTS(SELECT 1 FROM admin_media_reservation_items WHERE source_library_id IS NOT DISTINCT FROM $1 AND ingest_occurrence_hash(source_path)=ingest_occurrence_hash($2) AND source_path COLLATE \"C\"=$2 COLLATE \"C\")")
+            .bind(row.source_library_id).bind(&row.source_path).fetch_one(&mut **tx).await?;
+        if guarded {
+            continue;
+        }
         chosen.push(row);
         slot = (slot + 1) % 4;
     }

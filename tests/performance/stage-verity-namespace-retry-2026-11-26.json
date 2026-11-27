@@ -1,0 +1,21 @@
+{
+  "exit_code": 1,
+  "known_failure_reasons": [],
+  "limitations": [
+    "test-only adapter, not production custody",
+    "not a performance benchmark",
+    "namespace exit removes private mounts; SIGKILL may leave owned directories"
+  ],
+  "mount_failure": {
+    "exit_code": 32,
+    "reason": "wrong fs type",
+    "status": "mount_failed",
+    "step": "proc_bind"
+  },
+  "parent_mount_namespace_unchanged": true,
+  "parent_user_namespace_unchanged": true,
+  "status": "failed",
+  "test_binary_sha256": "55492821222007635162f8766d4f6108ea2ed20b88478291385212356a9517aa",
+  "test_functions_passed": 0,
+  "unsupported_branch_messages": 0
+}

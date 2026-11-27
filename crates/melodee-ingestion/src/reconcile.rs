@@ -592,11 +592,12 @@ fn decide_settling_transition(
 // Process-owned threads supervise cancelled producers independently of Tokio
 // runtime shutdown. Capacity is reserved before any producer is started.
 struct SnapshotReaperJob {
-    thread: std::thread::JoinHandle<Result<crate::snapshot::StreamSnapshotSummary>>,
+    join: Box<dyn FnOnce() + Send>,
     _permit: tokio::sync::OwnedSemaphorePermit,
 }
 struct SnapshotSupervisor {
-    capacity: std::sync::Arc<tokio::sync::Semaphore>,
+    snapshot_capacity: std::sync::Arc<tokio::sync::Semaphore>,
+    custody_capacity: std::sync::Arc<tokio::sync::Semaphore>,
     sender: std::sync::mpsc::SyncSender<SnapshotReaperJob>,
     pending: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     _threads: Vec<std::thread::JoinHandle<()>>,
@@ -627,8 +628,8 @@ fn snapshot_supervisor() -> Result<&'static SnapshotSupervisor> {
                                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                                 .recv();
                             if let Ok(job) = job {
-                                let SnapshotReaperJob { thread, _permit } = job;
-                                let _ = thread.join();
+                                let SnapshotReaperJob { join, _permit } = job;
+                                join();
                                 drop(_permit);
                                 thread_pending.fetch_sub(1, std::sync::atomic::Ordering::Release);
                             } else {
@@ -648,7 +649,8 @@ fn snapshot_supervisor() -> Result<&'static SnapshotSupervisor> {
                 }
             }
             Ok(SnapshotSupervisor {
-                capacity: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+                snapshot_capacity: std::sync::Arc::new(tokio::sync::Semaphore::new(2)),
+                custody_capacity: std::sync::Arc::new(tokio::sync::Semaphore::new(2)),
                 sender,
                 pending,
                 _threads: threads,
@@ -679,39 +681,74 @@ impl Drop for SnapshotProducer {
     fn drop(&mut self) {
         self.receiver.take();
         if let (Some(thread), Some(permit)) = (self.thread.take(), self.reaper_permit.take()) {
-            let job = SnapshotReaperJob {
-                thread,
-                _permit: permit,
-            };
-            if let Ok(supervisor) = snapshot_supervisor() {
-                supervisor
-                    .pending
-                    .fetch_add(1, std::sync::atomic::Ordering::Release);
-                if let Err(error) = supervisor.sender.try_send(job) {
-                    supervisor
-                        .pending
-                        .fetch_sub(1, std::sync::atomic::Ordering::Release);
-                    tracing::error!("snapshot reaper unavailable; retaining producer ownership");
-                    let job = match error {
-                        std::sync::mpsc::TrySendError::Full(job)
-                        | std::sync::mpsc::TrySendError::Disconnected(job) => job,
-                    };
-                    FAILED_REAPER_JOBS
-                        .get_or_init(|| std::sync::Mutex::new(Vec::new()))
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .push(job);
-                }
-            } else {
-                tracing::error!("snapshot reaper unavailable; retaining producer ownership");
-                FAILED_REAPER_JOBS
-                    .get_or_init(|| std::sync::Mutex::new(Vec::new()))
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .push(job);
-            }
+            submit_reaper(
+                Box::new(move || {
+                    let _ = thread.join();
+                }),
+                permit,
+            );
         }
     }
+}
+
+pub(crate) fn submit_reaper(
+    join: Box<dyn FnOnce() + Send>,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) {
+    let job = SnapshotReaperJob {
+        join,
+        _permit: permit,
+    };
+    if let Ok(supervisor) = snapshot_supervisor() {
+        supervisor
+            .pending
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+        if let Err(error) = supervisor.sender.try_send(job) {
+            supervisor
+                .pending
+                .fetch_sub(1, std::sync::atomic::Ordering::Release);
+            tracing::error!("snapshot reaper unavailable; retaining producer ownership");
+            let job = match error {
+                std::sync::mpsc::TrySendError::Full(job)
+                | std::sync::mpsc::TrySendError::Disconnected(job) => job,
+            };
+            FAILED_REAPER_JOBS
+                .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(job);
+        }
+    } else {
+        tracing::error!("snapshot reaper unavailable; retaining producer ownership");
+        FAILED_REAPER_JOBS
+            .get_or_init(|| std::sync::Mutex::new(Vec::new()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(job);
+    }
+}
+
+pub(crate) async fn acquire_custody_reaper_permit()
+-> std::result::Result<tokio::sync::OwnedSemaphorePermit, String> {
+    snapshot_supervisor()
+        .map_err(|error| error.to_string())?
+        .custody_capacity
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn reap_custody_producer(
+    thread: std::thread::JoinHandle<std::result::Result<u64, crate::acquisition::AcquisitionError>>,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) {
+    submit_reaper(
+        Box::new(move || {
+            let _ = thread.join();
+        }),
+        permit,
+    );
 }
 
 #[cfg(test)]
@@ -724,12 +761,103 @@ mod producer_tests {
     };
 
     #[tokio::test]
+    async fn snapshot_and_custody_reapers_reserve_independent_capacity() {
+        let supervisor = snapshot_supervisor().expect("supervisor");
+        let mut snapshot_releases = Vec::new();
+        let mut custody_releases = Vec::new();
+        for _ in 0..2 {
+            let permit = supervisor
+                .snapshot_capacity
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("snapshot capacity");
+            let (sender, receiver) = tokio::sync::mpsc::channel(1);
+            let (release, wait) = std::sync::mpsc::channel();
+            let thread = std::thread::spawn(move || {
+                wait.recv().expect("release");
+                assert!(sender.is_closed());
+                Ok(crate::snapshot::StreamSnapshotSummary {
+                    file_count: 0,
+                    total_bytes: 0,
+                    ready_marker_seen: false,
+                })
+            });
+            drop(SnapshotProducer {
+                receiver: Some(receiver),
+                thread: Some(thread),
+                reaper_permit: Some(permit),
+            });
+            snapshot_releases.push(release);
+        }
+        assert!(
+            supervisor
+                .snapshot_capacity
+                .clone()
+                .try_acquire_owned()
+                .is_err()
+        );
+        for _ in 0..2 {
+            let permit = acquire_custody_reaper_permit()
+                .await
+                .expect("custody capacity");
+            let (sender, receiver) = tokio::sync::mpsc::channel::<()>(1);
+            let (release, wait) = std::sync::mpsc::channel();
+            let thread = std::thread::spawn(move || {
+                wait.recv().expect("release");
+                assert!(sender.is_closed());
+                Ok(0_u64)
+            });
+            drop(receiver);
+            reap_custody_producer(thread, permit);
+            custody_releases.push(release);
+        }
+        assert!(
+            supervisor
+                .custody_capacity
+                .clone()
+                .try_acquire_owned()
+                .is_err()
+        );
+        for release in custody_releases {
+            release.send(()).expect("release custody");
+        }
+        let permit = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            acquire_custody_reaper_permit(),
+        )
+        .await
+        .expect("custody was not starved")
+        .expect("custody permit");
+        drop(permit);
+        assert!(
+            supervisor
+                .snapshot_capacity
+                .clone()
+                .try_acquire_owned()
+                .is_err(),
+            "stalled snapshot permits remain held"
+        );
+        for release in snapshot_releases {
+            release.send(()).expect("release snapshot");
+        }
+        let permit = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            supervisor.snapshot_capacity.clone().acquire_owned(),
+        )
+        .await
+        .expect("snapshot reaped")
+        .expect("snapshot permit");
+        drop(permit);
+    }
+
+    #[tokio::test]
     async fn cancellation_reaps_stalled_producer_without_blocking_executor() {
         let semaphore = Arc::new(tokio::sync::Semaphore::new(1));
         let permit = semaphore.clone().acquire_owned().await.expect("permit");
         let reaper_permit = snapshot_supervisor()
             .expect("supervisor")
-            .capacity
+            .snapshot_capacity
             .clone()
             .acquire_owned()
             .await
@@ -777,7 +905,7 @@ mod producer_tests {
             .expect("other permit");
         let other_reaper = snapshot_supervisor()
             .expect("supervisor")
-            .capacity
+            .snapshot_capacity
             .clone()
             .acquire_owned()
             .await
@@ -825,7 +953,7 @@ mod producer_tests {
             .block_on(
                 snapshot_supervisor()
                     .expect("supervisor")
-                    .capacity
+                    .snapshot_capacity
                     .clone()
                     .acquire_owned(),
             )
@@ -897,7 +1025,7 @@ async fn capture_staged_snapshot(
             .await?;
     };
     let reaper_permit = snapshot_supervisor()?
-        .capacity
+        .snapshot_capacity
         .clone()
         .acquire_owned()
         .await

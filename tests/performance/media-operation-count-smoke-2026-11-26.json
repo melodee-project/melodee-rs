@@ -1,0 +1,161 @@
+{
+  "albums": 2,
+  "binary_sha256": "cdd948d0793aa705015474db5970b5e3ad89ad357f818d1d32673eeb6800a82b",
+  "concurrency_per_stage": 2,
+  "corpus_bytes": 125329,
+  "expected_success_count": 2,
+  "fixture": {
+    "artists": 3,
+    "releases": 4,
+    "seed_seconds": 0.4,
+    "tracks": 12
+  },
+  "limitations": [
+    "one synthetic five-second track per release; no artwork or CUE",
+    "same-filesystem acquisition only; no retry or fault injection",
+    "search, policy, discovery, enrichment and podcast workers disabled",
+    "no interactive load, streaming or complete syscall/physical I/O counts collected",
+    "cache condition uncontrolled",
+    "worker polling included in elapsed time",
+    "redrop creates new work items; ADR-0116 reserves distinct Release IDs and this is not a same-item retry",
+    "identifier comparison covers only release and track identifiers, not every catalog relationship",
+    "tiny smoke only; unintegrated custody source and warnings in server build",
+    "other application source changed after server build",
+    "trace-enabled overhead not compared",
+    "workload source was not fingerprinted before the run",
+    "cold tool version probes may duplicate concurrently"
+  ],
+  "media_operation_metrics": {
+    "byte_counts_complete": true,
+    "complete": true,
+    "events": 49,
+    "input_limited_or_truncated": false,
+    "limitations": [
+      "counts instrumented operations only; not physical I/O",
+      "media_buffer_hash read_bytes are memory bytes hashed, not additional file reads",
+      "external subprocess file I/O is not counted",
+      "failed operations may report lower-bound bytes",
+      "events span the whole captured server process, not an isolated stage",
+      "TRACE logging changes runtime overhead"
+    ],
+    "malformed_lines": 0,
+    "operations": {
+      "acquisition_copy": {
+        "incomplete_byte_counts": 0,
+        "operations": 0,
+        "read_bytes": 0,
+        "succeeded": 0,
+        "written_bytes": 0
+      },
+      "acquisition_tree_hash": {
+        "incomplete_byte_counts": 0,
+        "operations": 12,
+        "read_bytes": 751974,
+        "succeeded": 12,
+        "written_bytes": 0
+      },
+      "ffmpeg": {
+        "incomplete_byte_counts": 0,
+        "operations": 2,
+        "read_bytes": 0,
+        "succeeded": 2,
+        "written_bytes": 0
+      },
+      "ffprobe": {
+        "incomplete_byte_counts": 0,
+        "operations": 6,
+        "read_bytes": 0,
+        "succeeded": 6,
+        "written_bytes": 0
+      },
+      "fpcalc": {
+        "incomplete_byte_counts": 0,
+        "operations": 2,
+        "read_bytes": 0,
+        "succeeded": 2,
+        "written_bytes": 0
+      },
+      "media_bounded_read": {
+        "incomplete_byte_counts": 0,
+        "operations": 0,
+        "read_bytes": 0,
+        "succeeded": 0,
+        "written_bytes": 0
+      },
+      "media_buffer_hash": {
+        "incomplete_byte_counts": 0,
+        "operations": 0,
+        "read_bytes": 0,
+        "succeeded": 0,
+        "written_bytes": 0
+      },
+      "media_copy": {
+        "incomplete_byte_counts": 0,
+        "operations": 1,
+        "read_bytes": 40682,
+        "succeeded": 1,
+        "written_bytes": 40682
+      },
+      "media_file_hash": {
+        "incomplete_byte_counts": 0,
+        "operations": 8,
+        "read_bytes": 438532,
+        "succeeded": 8,
+        "written_bytes": 0
+      },
+      "other_tool": {
+        "incomplete_byte_counts": 0,
+        "operations": 0,
+        "read_bytes": 0,
+        "succeeded": 0,
+        "written_bytes": 0
+      },
+      "publication_copy": {
+        "incomplete_byte_counts": 0,
+        "operations": 2,
+        "read_bytes": 62545,
+        "succeeded": 2,
+        "written_bytes": 62545
+      },
+      "publication_hash": {
+        "incomplete_byte_counts": 0,
+        "operations": 8,
+        "read_bytes": 250180,
+        "succeeded": 8,
+        "written_bytes": 0
+      },
+      "tool_version": {
+        "incomplete_byte_counts": 0,
+        "operations": 6,
+        "read_bytes": 0,
+        "succeeded": 6,
+        "written_bytes": 0
+      },
+      "validation_hash": {
+        "incomplete_byte_counts": 0,
+        "operations": 2,
+        "read_bytes": 62545,
+        "succeeded": 2,
+        "written_bytes": 0
+      }
+    },
+    "processes": 1,
+    "required_labels_missing": [],
+    "server_shutdown_exit_code": 0
+  },
+  "migration_cli_sha256": "453d8b5a2c00d0d229a6e99f99f2f6b6d39cd322756b6dfaf776ad909fee8c51",
+  "migration_hash_match": "70 migration source hashes matched the server build record before and after CLI build; CLI source identity otherwise not independently established",
+  "mix": "alternating generated retained MP3 and FLAC, one five-second tone per release",
+  "platform": "Linux-7.3.4-300.fc45.x86_64-x86_64-with-glibc2.44",
+  "profile": "release binary supplied by operator; not independently verified",
+  "repository_head": "37f29889fb05d1825faecb8b597387f0eb971b5e",
+  "seconds": 6.158,
+  "states": {
+    "cataloged": 2
+  },
+  "success_count": 2,
+  "timed_out": false,
+  "tracked_worktree_dirty": true,
+  "tracks": 2,
+  "workload_script_sha256_observed_after_run": "e3539d2caa4628d010aa76eaaf378e664d04182bf0023a35732f87e69b451dce"
+}

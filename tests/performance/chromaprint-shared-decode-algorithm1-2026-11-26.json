@@ -1,0 +1,66 @@
+{
+  "baseline_algorithm": "fpcalc default 2",
+  "candidate_algorithm": 1,
+  "cases": [
+    {
+      "baseline_exit": 0,
+      "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+      "candidate_exit": 0,
+      "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgf64-JxHMWPH8l_5OgBHD2OHl6KC_aP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqthRG7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YRWAjDhlHNEGASMSQKYgwhCgwiARCFGKseoEOUQohBRZgiNiLFtWIoIQR4IA",
+      "candidate_seconds": 0.154633,
+      "codec": "mp3",
+      "error": "",
+      "fingerprints_equal": true,
+      "fpcalc_duration": 15.0,
+      "fpcalc_seconds": 0.083214,
+      "input_bytes": 60861
+    },
+    {
+      "baseline_exit": 0,
+      "baseline_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+      "candidate_exit": 0,
+      "candidate_fingerprint": "AQAAZEmlJUqSKKi-wI-F_uiJY7PB_Oix1QxC7yjuw1bxFT36C_7RH33gH0foIdmPpgd6POJxAcWPH8l_5OgBHD2OHl6K67CP6PiL-2B-PICBMscPw6-B_jge7A-OXiYeHwZ8HHUKNA96POiP49gPqhhqE7Bx_OhJ3AeOBzgKAMeeowMBoxQSaEgGgKROICoIkAA7YZVXRBlHtEHAiASQKUozBKgwSARClGKsOkEOEQohRZbgiBi2rEQEIY4EAQ",
+      "candidate_seconds": 0.162588,
+      "codec": "flac",
+      "error": "",
+      "fingerprints_equal": true,
+      "fpcalc_duration": 15.0,
+      "fpcalc_seconds": 0.084836,
+      "input_bytes": 762149
+    }
+  ],
+  "description": "test-only alternate FFmpeg chromaprint algorithm numbering; not production",
+  "limitations": [
+    "one generated frequency-sweep sample per codec",
+    "shorter than fpcalc 120s limit",
+    "no corruption, cancellation, reaping or duration-equivalence proof"
+  ],
+  "options": [
+    "-nostdin",
+    "-v",
+    "error",
+    "-xerror",
+    "-n",
+    "-i",
+    "<source>",
+    "-filter_complex",
+    "[0:a:0]asplit=2[check][fp];[fp]atrim=duration=120[cut]",
+    "-map",
+    "[check]",
+    "-f",
+    "null",
+    "-",
+    "-map",
+    "[cut]",
+    "-c:a",
+    "pcm_s16le",
+    "-algorithm",
+    "1",
+    "-fp_format",
+    "base64",
+    "-f",
+    "chromaprint",
+    "<output>"
+  ],
+  "seconds": 15
+}

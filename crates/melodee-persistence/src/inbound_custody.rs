@@ -1,6 +1,6 @@
 //! Fenced durable intent and evidence for inbound custody handoffs.
 
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -32,6 +32,17 @@ pub struct InboundCustodyIntent<'a> {
     pub preclaim_tree_hash: &'a str,
     pub preclaim_legacy_tree_hash: &'a str,
     pub now: OffsetDateTime,
+}
+
+async fn ensure_db_lease_live(
+    tx: &mut Transaction<'_, Postgres>,
+    item: &melodee_domain::ReleaseWorkItem,
+    worker: &WorkerId,
+) -> Result<(), WorkStoreError> {
+    let now: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&mut **tx)
+        .await?;
+    work_items::ensure_active_lease(item, worker, now)
 }
 
 impl WorkItemStore {
@@ -77,6 +88,8 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = work_items::lock_for_update(&mut tx, intent.work_item_id).await?;
         work_items::ensure_active_lease(&item, worker, intent.now)?;
+        work_items::ensure_ordinary_custody(&mut tx, intent.work_item_id).await?;
+        ensure_db_lease_live(&mut tx, &item, worker).await?;
         let inbound_active: bool =
             sqlx::query_scalar("SELECT inbound_active FROM release_work_items WHERE id=$1")
                 .bind(item.id)
@@ -126,6 +139,7 @@ impl WorkItemStore {
                 "inbound custody intent conflicts with existing evidence",
             ));
         }
+        ensure_db_lease_live(&mut tx, &item, worker).await?;
         tx.commit().await?;
         Ok(claim)
     }
@@ -145,6 +159,8 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = work_items::lock_for_update(&mut tx, work_item_id).await?;
         work_items::ensure_active_lease(&item, worker, now)?;
+        work_items::ensure_ordinary_custody(&mut tx, work_item_id).await?;
+        ensure_db_lease_live(&mut tx, &item, worker).await?;
         let mut claim = sqlx::query_as::<_, InboundCustodyClaim>(
             "SELECT * FROM inbound_custody_claims WHERE work_item_id=$1 FOR UPDATE",
         )
@@ -186,6 +202,7 @@ impl WorkItemStore {
             }
         }
         if claim.status == next {
+            ensure_db_lease_live(&mut tx, &item, worker).await?;
             tx.commit().await?;
             return Ok(claim);
         }
@@ -212,6 +229,7 @@ impl WorkItemStore {
         .await?;
         claim.status = next.to_owned();
         claim.updated_at = now;
+        ensure_db_lease_live(&mut tx, &item, worker).await?;
         tx.commit().await?;
         Ok(claim)
     }
