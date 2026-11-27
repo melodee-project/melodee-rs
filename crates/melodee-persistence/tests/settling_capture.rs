@@ -395,7 +395,9 @@ async fn populated_upgrade_preserves_existing_snapshot_evidence() {
     .await
     .unwrap();
     let item = ReleaseWorkItem::discovered("historical".into(), None, Uuid::now_v7(), T0);
-    WorkItemStore.create(&db.pool, &item).await.unwrap();
+    // Old-engine-faithful raw insert: the current guarded create requires the
+    // 0071 guard schema the subject upgrade creates.
+    common::seed_raw_work_item(&db.pool, &item).await;
     let id: i64 = sqlx::query_scalar("INSERT INTO release_work_item_settling_snapshots(work_item_id,observed_at,signature,file_count,total_bytes,ready_marker_seen,bypassed_settling) VALUES($1,$2,'legacy',1,7,false,false) RETURNING id")
         .bind(item.id).bind(T0).fetch_one(&db.pool).await.unwrap();
     sqlx::query("INSERT INTO release_work_item_settling_snapshot_files(snapshot_id,relative_path,file_type,file_size,modified_at) VALUES($1,'legacy.flac','file',7,$2)")

@@ -55,6 +55,7 @@ async fn claim_benchmark_10k_queue_32_workers() {
         .bind(T0)
         .bind(5_i32)
         .bind(4_i64)
+        .bind(false)
         .fetch_all(&db.pool)
         .await
         .expect("explain");
