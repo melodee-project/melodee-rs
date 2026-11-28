@@ -2388,7 +2388,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-application"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "boa_engine",
  "futures-util",
@@ -2418,7 +2418,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-auth"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.23.1",
  "bcrypt",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-catalog"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "melodee-domain",
  "melodee-persistence",
@@ -2451,7 +2451,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -2480,7 +2480,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-custody"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "rustix 1.1.6",
@@ -2493,7 +2493,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-domain"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "serde",
@@ -2505,7 +2505,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-ingestion"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "cap-fs-ext",
@@ -2530,7 +2530,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-media"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "lofty",
@@ -2550,7 +2550,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-mql"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "proptest",
  "serde",
@@ -2561,7 +2561,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-persistence"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bcrypt",
  "blake3",
@@ -2585,7 +2585,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-policy"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "melodee-domain",
  "melodee-persistence",
@@ -2602,7 +2602,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-search"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "blake3",
  "melodee-domain",
@@ -2624,7 +2624,7 @@ dependencies = [
 
 [[package]]
 name = "melodee-server"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "axum",
  "base64 0.23.1",

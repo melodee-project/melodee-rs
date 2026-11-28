@@ -5,6 +5,13 @@ All notable changes to the Rust rewrite repository will be documented here.
 The project is pre-release. Compatibility and migration guarantees apply only when explicitly stated
 by an accepted ADR and release gate.
 
+## 0.4.1 — 2026-11-28
+
+The missing-recovery workload safety checks now run under the repository's `unittest` runner instead
+of requiring `pytest`, which the release quality gate does not install. This unblocks the
+`Publish release container` workflow's repository gate. There is no runtime, schema, configuration
+or operator-visible change; upgrading from `0.4.0` needs no migration window.
+
 ## 0.4.0 — 2026-11-28
 
 Import no longer pays for external providers that cannot answer, and the manifest and search-outbox
