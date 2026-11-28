@@ -1012,7 +1012,7 @@ measurements; the full table, commands, provenance and limitations are in
 | Concurrent genre imports | measured | 200 Releases, 111.5 s, 107.58 Rel/min, genre counts exact on both surfaces |
 | Worker scheduling | sampled | Ready→claim p50 28.2 s/p95 51.0 s; 413 polls; per-stage idle-pass counts |
 | Identity reconciliation | final-only | 5 scoped vs global query pairs (6.5 vs 59.7 ms … 15.8 vs 2,963.8 ms); drain 3,188 ms; closure 32.1 ms |
-| Incremental indexing | final-only | 8 trials, 137-6,008 events/s, lag 0.54-15.2 s, 82-2,624 statements |
+| Incremental indexing | matched baseline/final | 8 mirrored trials: baseline 79-2,848 events/s, 2,120-4,352 statements, lag 3.9-29.3 s; final 137-6,008 events/s, 82-2,624 statements, lag 0.54-15.2 s |
 | Streaming during ingestion | final-only | TTFB p50 3.06 ms/p99 6.75 ms; 0 failures; slow stream 8.1 MB OK |
 | Merge/split | matched pair at 1K (cost/statements) + final-only correctness | baseline 1K: 633.7 ms / 3,025 statements merge, 618.1 ms / 3,017 split, leaving 2,000 stale genre-term rows; final 1K: 3.56 s / 6.86 s and 36/24 statements with zero stale rows; final 10K: 12.22 s / 9.57 s |
 

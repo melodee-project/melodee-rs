@@ -34,7 +34,7 @@ sub-item or acceptance evidence is missing.
 | Date | Item | Evidence | Status change |
 | --- | --- | --- | --- |
 | 2026-11-28 | RM-00 regression budget | `PERFORMANCE.md` §8.1 (declared before final testing) | Budget sub-item DONE; RM-00 still open |
-| 2026-11-28 | RM-00 final-only dispositions (identity, streaming) | `tests/performance/final-matrix-2026-11-27.md` §4.1 | Partial: two of four rows dispositioned; merge/split and outbox ports in progress |
+| 2026-11-28 | RM-00 (all sub-items) | matrix §2.8, §2.13, §4.1; `PERFORMANCE.md` §8.1 | **RM-00 DONE** |
 
 ---
 
@@ -42,7 +42,7 @@ sub-item or acceptance evidence is missing.
 
 | Package | State | Remaining work in one line |
 |---|---|---|
-| RM-00 | MEASURED (not accepted) | Disposition four final-only rows; declare the noise-aware regression budget. |
+| RM-00 | DONE | All 13 rows measured with declared evidence classes, four final-only rows dispositioned, regression budget declared. |
 | RM-01 | DONE | None (reconfirmed in final verification). |
 | RM-02 | DONE | None; matched 600K baseline/final evidence recorded. |
 | RM-03 | DONE | None. |
@@ -80,15 +80,13 @@ acceptance evidence the package cannot close without. Spec sections are in
 - **Exists:** thirteen workload rows measured on the final source (four matched
   baseline/final pairs, five measured single/repeat runs, four final-only rows);
   disposable 35K/50K/600K fixture; provenance records; bounded metrics.
-- **Pending:**
-  - [~] Record an explicit, evidence-backed disposition for the four final-only
-    rows — identity and streaming are dispositioned as accepted limitations in
-    the matrix §4.1; merge/split and incremental indexing are being ported to
-    the baseline worktree.
-  - [x] Declare the noise-aware regression budget **before** final testing
-    (`PERFORMANCE.md` §8.1) and keep it unchanged afterwards.
-  - [ ] Re-run the matrix rows whose committed evidence is single-sample at the
-    final commit if any further code changes touch them.
+- **Completed:** regression budget declared (`PERFORMANCE.md` §8.1); identity
+  and streaming dispositioned as accepted final-only limitations; merge/split
+  benchmark ported to the baseline (1K cost/statement pair + pre-fix genre-term
+  defect reproduced); incremental indexing ported to the baseline (matched pair
+  across all eight trials). See matrix §4.1 and §2.8/§2.13.
+- **Remaining:** none for RM-00 at this commit; re-run a row only if later code
+  changes touch it.
 - **Acceptance:** every row carries a stated evidence class and limitations; the
   regression budget is written down; no number is presented as a target or an
   estimate.

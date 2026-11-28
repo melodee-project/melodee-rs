@@ -170,7 +170,14 @@ Artist/Release/Track revisions through the production outbox worker.
 | 8 | 3, 6 | 3,381.8 / 3,962.7 | 0.80 s / 0.73 s | 164 |
 | 128 | 4, 5 | 5,960.5 / 6,008.3 | 0.54 s / 0.55 s | 82 |
 
-SQLx events are statements, not network round trips; mixed upserts only, no
+**Baseline port (same 600K fixture, benchmark copied into the verified baseline
+worktree):** for the same eight mirrored trials the pre-remediation revision ran
+at 79.1–82.1 events/s (batch 4), 380.4–420.4 (batch 32), 2,154.2–2,802.2
+(batch 8) and 2,802.2–2,847.7 (batch 128), with 4,352 / 2,624 / 2,192 / 2,120
+SQLx statements and maximum end-to-end lag of 8.1–29.3 s (batch 32/128) versus
+the final source's 82–164 statements and 0.54–2.20 s. At batch 128 the final
+path is ~2.1× the event throughput with ~26× fewer statements and ~7× lower
+lag. SQLx events are statements, not network round trips; mixed upserts only, no
 concurrent activity or physical media.
 
 ### 2.9 Full rebuild (matched baseline/final)
