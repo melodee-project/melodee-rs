@@ -471,3 +471,124 @@ current evidence:
 The working tree is clean and the final gates remain green for the changes made
 in this session; the next session should start by re-running `make check-fast`,
 then `make check`, before touching the remaining items.
+
+---
+
+## 10. Frozen remaining-work ledger (2026-11-28, authoritative)
+
+This section supersedes §9 for execution order and scope. One branch, one
+ledger. A work order closes only when its implementation, focused tests and
+acceptance evidence are complete; partial implementation of a package does not
+close it.
+
+### 10.1 Scope provenance and post-spec additions
+
+- **Original specification scope:** RM-00–RM-20 in `PERF-REMEDIATION-SPEC.md`,
+  findings PERF-001–015 and PERF-V001/V002.
+- **Preserved, already verified:** RM-01–05, RM-08, RM-16 (implementation +
+  regressions), and RM-00, RM-13, RM-14, RM-15, RM-17, RM-18, RM-19 as closed
+  in this operation (evidence in the package entries, `final-*` files and the
+  ledger tail).
+- **Introduced after the specification:** (a) the source-custody P0 protocol
+  (guarded owner, protected stage publication, retained-source obligations,
+  per-entry intent/quarantine, deletion/repair reservations, shared capability)
+  required by the security/durability invariants and ADR-0221/ADR-0222 reviews;
+  (b) benchmark/fixture corrections and the regression budget (evidence
+  infrastructure, not new optimization scope); (c) the fixed podcast
+  publication race (critical correctness defect found during nightly); (d) the
+  merge/split 1K regression investigation required by the current work order.
+  No other optimization was added to the mandatory scope.
+- **Newly discovered critical defects:** none open. The podcast orphan-reconcile
+  race is fixed and verified (18/18 stress runs, suite regressions green). The
+  merge/split 1K cost regression is tracked as WO-M, not as a correctness
+  defect.
+
+### 10.2 Why RM-06 and RM-07 are incomplete
+
+- **RM-07** was recorded as having "bounded 64-entry result retention" and its
+  remaining action was written as "reverify". Code inspection in this operation
+  showed the *other* half of the package was never implemented: inspection,
+  normalization, validation and publication workers claim a bounded batch,
+  spawn all of it, and then join; there is no rolling refill when a slot frees
+  before the slowest item finishes. Bounded retention alone does not satisfy
+  RM-07, so it is incomplete.
+- **RM-06** was recorded with "durable per-class cursors and a 100K fairness
+  regression", and earlier results text described parts as implemented. The
+  integrated bounded traversal and durable staging path (native/non-Unicode
+  names, directory add/remove, large directories, independent file/directory
+  due scheduling, crash/restart fairness, ownership/lease fencing, quotas)
+  was never implemented or tested across platforms, so the package is
+  incomplete despite its cursor foundation.
+
+### 10.3 Mandatory implementation vs outstanding measurement
+
+**Implementation work orders (code):**
+
+| ID | Work order | Files/ownership | Acceptance |
+| --- | --- | --- | --- |
+| WO-C1 | Custody: claim-bound guarded owner used by production stage readers/writers; generic acquisition/lease APIs reject protected work; stale same-owner reacquisition produces no receipt/cleanup | `crates/melodee-ingestion/{custody,publication,acquisition,stage_verity}.rs`, persistence claim paths, server stage wiring | integration tests with production readers/writers, stale-epoch and cross-API rejection |
+| WO-C2 | Custody: protected stage protocol publication (ADR-0221) end-to-end | same + `design/adr/ADR-0221-…` | receipt/marker/promotion tests on a supported filesystem; ADR accepted only when criteria are met |
+| WO-C3 | Custody: production-reachable retained-source obligations (NULL baseline IDs, immutable-trigger interplay, atomic changed-source reason, fenced discard) | `crates/melodee-ingestion/retained_*`, persistence retained tables | obligation lifecycle + fault tests |
+| WO-C4 | Custody: per-entry intent/private quarantine + two-name recovery | `crates/melodee-custody`, ingestion deletion | DB-bound interruption/replacement/unlink/ack/recovery tests |
+| WO-C5 | Custody: deletion/repair orchestration with durable pre-filesystem reservations for operator deletion/correction and catalog hard delete | persistence delete/review paths, server admin routes | reservation-before-FS, protected-claim exclusion, cancellation tests |
+| WO-C6 | Custody: shared non-fabricable capability/private executor (ADR-0222) | `crates/melodee-custody` | constructors acquire/validate locks and perform verified work; forged-proof rejection |
+| WO-C7 | RM-07 rolling refill for inspection/normalization/validation/publication with bounded per-turn items | `crates/melodee-ingestion/{inspect,normalize,publication_worker}.rs` | freed-slot refill regression, admission/heartbeat/cancellation preserved |
+| WO-C8 | RM-06 integrated bounded traversal + durable staging | `crates/melodee-ingestion/{source,source_windows,discovery_scan,snapshot}.rs`, persistence cursors | cross-platform/large-dir/add-remove/crash-fairness tests |
+| WO-C9 | RM-09 mutation audit and identity closure/plans | `crates/melodee-catalog`, persistence identity | every identity-affecting writer seeds closure; oracle/interruption/plans |
+| WO-C10 | RM-10 instrumentation for remaining workload classes + recorded admission decision | metrics, server/persistence | acquire/hold coverage per class + decision |
+| WO-C11 | RM-11 media operation inventory and elimination of remaining amplification | `crates/melodee-media`, ingestion | measured reads/hashes/probes + integrity/fault tests |
+| WO-C12 | RM-12 process-wide admission + cancellation/fairness + defaults | ingestion admission/workers | saturation/cancellation tests + measured defaults |
+
+**Measurement/decision-only remaining:** RM-09's production-shaped plan and
+oracle comparisons (evidence, after WO-C9); RM-10's mixed-load decision (after
+WO-C10); RM-11's measured delta (after WO-C11); RM-12's default selection
+(after WO-C12). RM-20 is closeout, not measurement: reconciliation, upgrade/
+repair rehearsal, final gates, final report.
+
+### 10.4 Work order for this session: WO-M (merge/split 1K regression)
+
+**Question:** why did 1,000-Track merge go from 633.7 ms (baseline `a0979cd`)
+to 3,556 ms (final), and is any of it avoidable overhead?
+
+**Evidence so far (measured, not inferred):** final merge 1K = 3,556.4 ms / 36
+statements; final 10K = 12,215.4 ms / 36 statements; baseline 1K = 633.7 ms /
+3,025 statements and leaves 2,000 stale genre terms. Final per-Track slope
+between 1K and 10K is ~0.96 ms, implying a large fixed component at 1K, but the
+two points are separate fresh fixtures with uncontrolled cache, so the intercept
+is indicative, not proven.
+
+**What the final path adds that the baseline lacks (code evidence):** immutable
+moved-Track/observation evidence (`release_merge_events` JSON), Track-move genre
+term maintenance (the correctness fix that baseline fails), identity
+reconciliation seeds, search-outbox revision fan-out for every moved Track, and
+release/Track aggregate refreshes. Those are required correctness effects, not
+optional work; the statement-count reduction must not be presented as a
+performance improvement.
+
+**Why a finer attribution is not yet available:** the dev PostgreSQL has no
+`pg_stat_statements`/`auto_explain`, the merge is one transaction call with no
+phase spans, and the two data points are single-sample separate fixtures.
+
+**Exact next action:** add bounded `tracing` phase spans (lock/eligibility,
+move, observations, evidence, assets, aggregates, outbox/seeds) inside
+`merge_releases`/`merge_release_in_transaction`, print them from the benchmark
+(env-gated), run 1K and 10K on fresh owned fixtures, and attribute the fixed
+component. Fix only avoidable duplication; record necessary correctness cost
+separately. Acceptance: a measured phase breakdown and either a fix with
+before/after or a justified "necessary cost" decision.
+
+**Status:** OPEN (investigation started; no code change yet).
+
+### 10.5 Execution order
+
+1. WO-M (bounded, explicitly requested) — close with phase attribution.
+2. WO-C1 → WO-C6 custody in order, each with independent review; then
+   WO-C7 (RM-07), WO-C8 (RM-06), WO-C9–WO-C12.
+3. RM-20 closeout: upgrade/repair rehearsal through the final migration,
+   documentation/traceability reconciliation, `do-prechecks.py`, final gates
+   on the integrated candidate, final report.
+
+Focused verification per work order; reserve the full three-gate run for the
+integrated candidate. Current HEAD `b4ad82d` has **not** passed the nightly gate
+(the last green nightly predates the RM-18 production change); record that
+fact and rerun it only at the next integrated checkpoint.
