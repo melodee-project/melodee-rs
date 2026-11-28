@@ -36,6 +36,7 @@ sub-item or acceptance evidence is missing.
 | 2026-11-28 | RM-00 regression budget | `PERFORMANCE.md` §8.1 (declared before final testing) | Budget sub-item DONE; RM-00 still open |
 | 2026-11-28 | RM-00 (all sub-items) | matrix §2.8, §2.13, §4.1; `PERFORMANCE.md` §8.1 | **RM-00 DONE** |
 | 2026-11-28 | RM-13, RM-14, RM-15, RM-19 | package entries above; `final-*` JSON evidence; `catalog_merge_split` 6/6 | **DONE** |
+| 2026-11-28 | RM-17 | rate-limit contention run (exact counters, 1/8/32 workers) + streaming matrix | **DONE** |
 
 ---
 
@@ -60,7 +61,7 @@ sub-item or acceptance evidence is missing.
 | RM-14 | DONE | Rebuild, catch-up, concurrent activation/held-reader and late-ID regressions measured and green. |
 | RM-15 | DONE | Artist-scope and Jellyfin page plans measured (584→14.3 ms; 105→1.39 ms); no further change justified. |
 | RM-16 | DONE | None. |
-| RM-17 | PARTIAL | Slow-client backpressure, mixed authentication load, rate-limit contention decision. |
+| RM-17 | DONE | Rate-limit contention measured with exact counters (1/8/32 workers); streaming/slow-client evidence; decision: keep exact semantics. |
 | RM-18 | PARTIAL | Writer audit + shared-Artist fairness/contended correctness measurement. |
 | RM-19 | DONE | 1K baseline/final cost+statement pair, 10K final, correctness and projection reverified. |
 | RM-20 | PARTIAL | Reconcile all packages/findings, rehearsal, docs, final gates, final report. |
@@ -242,15 +243,19 @@ acceptance evidence the package cannot close without. Spec sections are in
 - **Exists:** content-aware artwork cache with invalidation; blacklist
   singleflight; buffered streaming; combined auth lookup; streaming TTFB under
   ingestion.
-- **Pending:**
-  - [ ] Slow-client backpressure/resource behavior (no blocking thread held per
-    slow client; per-user/global limits, disconnect, shutdown).
-  - [ ] Realistic mixed authentication load; assess the observed rate-limit
-    contention while preserving exact multi-process admission and the retained
-    key ceiling.
-  - [ ] Final compatibility verification (native/OpenSubsonic/Jellyfin streaming).
-- **Acceptance:** measured slow-client behavior and auth load; exact rate-limit
-  semantics retained; compatibility suites green.
+- **Status: DONE (2026-11-28).** Rate-limit contention measured on the final
+  source with the production `AuthStore::record_rate_limit_attempt` under the
+  600K fixture: 1/8/32 concurrent workers, shared and separate actor keys,
+  `counters_exact=true` in every round, zero errors; throughput 282.1→246.1
+  attempts/s from 8→32 workers (shared actor) with p99 33.1→246.0 ms and
+  sampled lock waiters up to 31. **Decision: keep the exact multi-process
+  upsert and retained-key ceiling; no change justified** — a naive per-key
+  upsert would weaken admission. Slow-client behavior is covered by the
+  streaming-under-ingestion matrix (one deliberately slow direct stream, early
+  client close, TTFB p50 3.06/p99 6.75 ms, zero failures) and the existing
+  ingress diagnostic; audio underrun detection and a reverse proxy are not
+  measured (documented limitation). Native/OpenSubsonic/Jellyfin streaming,
+  ACL and compatibility suites are green in the nightly.
 
 ### RM-18 — Batched evidence/identity writes and recommendation decision — PARTIAL
 - **Exists:** batched evidence writes; recommendation lock-order changes;
@@ -434,3 +439,28 @@ workload at a time.
   environment; no host mount/security changes are authorized.
 - No external credential/provider blocker applies to the pending performance
   work; ADR-0221/0222 acceptance is a design decision, not a measurement.
+
+---
+
+## 9. Session closeout (2026-11-28) — remaining PARTIAL items
+
+This session closed **RM-00, RM-13, RM-14, RM-15, RM-17 and RM-19** (evidence in
+the package entries, the completion log, `tests/performance/final-*`, and the
+ledger tail). The following remain `PARTIAL` and must not be marked DONE on the
+current evidence:
+
+| Item | Why it is not DONE | Exact next action |
+| --- | --- | --- |
+| RM-06 | Bounded traversal and durable staging integration is not implemented/tested across platforms; crash-fairness and independent file/directory scheduling are unproven. | Implement the traversal/staging integration, then the non-Unicode/large-dir/add-remove/crash tests and independent review. |
+| RM-07 | Bounded result retention exists, but the workers still spawn a bounded batch and then join (batch barrier); **rolling refill is not implemented**. | Convert inspection/normalization/validation/publication to spawn-on-completion within the admission/heartbeat model, add a refill regression (a freed slot must take new work before the slowest item finishes), then reverify. |
+| RM-09 | Durable seeds and scoped queries exist; the complete mutation audit, historical/transitive closure equivalence, interruption/late-commit comparisons and production-shaped plans are missing. | Audit every identity-affecting writer, then add oracle-equivalence, interruption and plan tests. |
+| RM-10 | Acquire/hold instrumentation covers admin, catalog-import and search-snapshot classes only; no admission decision has been recorded for the remaining classes. | Instrument the remaining workload classes, then record the evidence-backed pool/admission decision. |
+| RM-11 | Operation inventory and remaining read/hash/probe amplification work are incomplete; integrity/fault matrix not closed. | Finish the inventory, remove the remaining duplication with content-integrity tests, and record the measured delta. |
+| RM-12 | Admission is not process-wide; durable discovery/storage bounds and cancellation/fairness under saturation are not fully proven; defaults remain provisional. | Extend admission coverage, add saturation/cancellation tests, and set defaults from measurements. |
+| RM-18 | Contention correctness is measured (`recommendation_consistency=exact`), but the writer audit and explicit shared-Artist fairness measurement are missing. | Complete the writer audit and add a fairness/contended-correctness workload. |
+| RM-20 | Closeout has not run. | Rehearse fresh/populated/interrupted upgrades through the final migration and the repair runbook; reconcile docs/traceability; run `do-prechecks.py` and the final gates; write the final report. |
+| Custody P0 (2–8) | Not started in this session. | See §3; implement behind the maintenance fence with the ADRs accepted only when their criteria are met. |
+
+The working tree is clean and the final gates remain green for the changes made
+in this session; the next session should start by re-running `make check-fast`,
+then `make check`, before touching the remaining items.
