@@ -421,6 +421,10 @@ rather than inventing a comparison.
 
 ## Recovery checkpoint 3 (final for this session)
 
+**Pending-work list:** `PERFORMANCE-REFACTOR-TASKS.md` is the task-oriented
+inventory of everything still open (14 partial packages, custody P0 items 2–8,
+RM-00 disposition, RM-20 closeout); this checkpoint is its provenance record.
+
 **Git state:** `main` at the commit containing this checkpoint; clean tree. The
 thirteen RM-00 workloads are measured (see
 `tests/performance/final-matrix-2026-11-27.md`), and the final integrated tree
