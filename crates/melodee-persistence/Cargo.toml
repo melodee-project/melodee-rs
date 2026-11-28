@@ -16,8 +16,8 @@ blake3.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 getrandom.workspace = true
-melodee-auth = { path = "../melodee-auth", version = "0.3.0" }
-melodee-domain = { path = "../melodee-domain", version = "0.3.0" }
+melodee-auth = { path = "../melodee-auth", version = "0.4.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.4.0" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
@@ -28,7 +28,7 @@ rustix.workspace = true
 uuid.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-melodee-custody = { path = "../melodee-custody", version = "0.3.0" }
+melodee-custody = { path = "../melodee-custody", version = "0.4.0" }
 
 [dev-dependencies]
 bcrypt.workspace = true

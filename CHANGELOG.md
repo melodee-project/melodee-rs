@@ -5,7 +5,7 @@ All notable changes to the Rust rewrite repository will be documented here.
 The project is pre-release. Compatibility and migration guarantees apply only when explicitly stated
 by an accepted ADR and release gate.
 
-## Unreleased
+## 0.4.0 — 2026-11-28
 
 Import no longer pays for external providers that cannot answer, and the manifest and search-outbox
 history no longer grow without bound. An external provider is now eligible only when it is enabled
@@ -46,6 +46,24 @@ Configure `MELODEE__STORAGE__ASSET_ROOT` for every service and importing CLI. Up
 verify and migrate all existing payloads. Back up the asset directory alongside PostgreSQL.
 System Stats shows file usage and the largest physical database tables.
 [Upgrade and restore instructions](docs/src/content/docs/installation/upgrading.md)
+
+Processing and search work is now bounded and durably resumable across a catalog-scale library.
+Discovery maintenance stores its per-class cursor, identity reconciliation runs as coalesced closure
+passes with a periodic backstop, and a rebuild activation cut cannot lose a late-committing catalog
+change. Play-driven recommendation popularity and genre serving aggregates now coordinate through one
+lock order, with idempotent repair. Predicate-aligned indexes replace catalog-wide rescans in the
+maintenance and merge paths. Inbound reconciliation gives each source root a single owner, and
+staged settling snapshots are capped at
+4,096 captures, 1,000,000 entries and 1 GiB of logical metadata. The Jellyfin album track order and
+custody claim spool are corrected.
+
+**Upgrade from 0.3.0.** Back up PostgreSQL, verify the backup, and back up the whole asset directory
+with the database. Apply migrations `0054`–`0071` through the usual updater, then run
+`melodee-cli migrate --preflight` and `melodee-cli migrate --verify`. Rebuild the search projection
+once (`melodee-cli search rebuild --actor upgrade`) and run
+`melodee-cli catalog repair-genres --apply`. Do not run a 0.3.0 binary against a database migrated to
+`0071`; rollback requires restoring the pre-upgrade database and the matching asset directory. See
+[Upgrading](docs/src/content/docs/installation/upgrading.md).
 
 ## 0.3.0 — 2026-11-25
 
