@@ -122,6 +122,34 @@ and the separation is stated.
 Every result is labelled: MEASURED IN THIS RUN, REPRODUCED CORRECTNESS, REPORTED BY VALIDATOR,
 ANALYTICALLY DERIVED, PROPOSED TARGET, or NOT EXECUTED.
 
+### 8.1 Declared regression budget (declared 2026-11-28, before final testing)
+
+This budget is fixed before final acceptance testing and must not be relaxed
+after observing results. It applies to comparisons between the pre-remediation
+baseline (`a0979cde…`) and the final integrated revision measured with the same
+fixture cardinality, release profile, worker/pool settings, cache declaration
+and bypassed-subsystem list.
+
+- **Throughput and latency.** A regression is a decrease of **≥10 %** in the
+  reported central statistic (median, or p95 where p95 is the reported
+  statistic) using **≥5 samples per side**. A 5–10 % difference needs one repeat
+  before it is classified; <5 % is noise. Percentile claims require ≥100 samples
+  for p95 and ≥1,000 for p99; rows with fewer samples are descriptive only.
+- **Memory.** A regression is **≥25 % or ≥64 MiB** increase in peak RSS (the
+  larger threshold applies), measured on the same workload and duration.
+- **Single-sample rows.** Results with one sample per side may not be used to
+  claim either an improvement or a regression; they are reported as descriptive
+  observations with their raw values.
+- **Timeouts.** A timeout is censored evidence, never a duration, and excludes
+  that row from a regression/improvement claim.
+- **Corrections.** A change that violates the budget is a regression even if it
+  improves another metric; trade-offs (for example throughput versus peak
+  memory) are reported explicitly and require their own justification.
+
+A result that does not meet the sample requirement above is labelled
+`NOT EXECUTED (insufficient samples)` for acceptance purposes even if a raw
+number exists.
+
 ## 9. Migrations and repair
 
 - Forward-only migrations under the ADR-0166 maintenance fence. Never edit a released migration.

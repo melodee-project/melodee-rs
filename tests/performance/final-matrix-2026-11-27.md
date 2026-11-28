@@ -290,6 +290,27 @@ declared per row. No result is a release-quality regression budget or a
 production default recommendation; the media and mixed-load rows in particular
 need the documented repeats before any worker or pool default changes.
 
+## 4.1 Declared regression budget and evidence-class disposition
+
+The regression budget was declared before final acceptance testing on
+2026-11-28 and is recorded in `PERFORMANCE.md` §8.1: a regression is ≥10 %
+degradation of the reported central statistic over ≥5 samples per side (5–10 %
+needs a repeat, <5 % is noise), ≥25 %/≥64 MiB peak-RSS increase, single-sample
+rows are descriptive only, and timeouts are censored. It is not relaxed after
+results.
+
+Evidence-class disposition for the four final-only rows:
+
+| Row | Disposition | Reason |
+| --- | --- | --- |
+| Identity reconciliation | final-only, accepted limitation | The baseline revision has no scoped candidate methods, so neither the comparison nor a port can exist. Scoped-vs-global measurements on the final source are the strongest available evidence. |
+| Streaming during ingestion | final-only, accepted limitation | The runner verifies the current server's bound-address startup log; the pre-remediation binary does not emit it. |
+| Incremental indexing | final-only unless the baseline benchmark compiles | The benchmark target is not part of the baseline revision; a port is attempted and recorded below. |
+| Merge/split | final-only unless the baseline benchmark compiles | The benchmark target is not part of the baseline revision; a baseline port is being measured and recorded below. |
+
+The final report must repeat these limitations; none of these rows may be
+described as before/after evidence.
+
 ## 5. Reproduction
 
 Build the CLI proof, the server proof, and the ignored benchmarks as documented

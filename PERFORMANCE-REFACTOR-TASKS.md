@@ -25,6 +25,19 @@ prototype is production behavior.
 
 ---
 
+## 0. Completion log (updated as items complete)
+
+A checked item requires committed evidence and this document's status row to be
+updated in the same commit. Never mark an item DONE while any mandatory
+sub-item or acceptance evidence is missing.
+
+| Date | Item | Evidence | Status change |
+| --- | --- | --- | --- |
+| 2026-11-28 | RM-00 regression budget | `PERFORMANCE.md` §8.1 (declared before final testing) | Budget sub-item DONE; RM-00 still open |
+| 2026-11-28 | RM-00 final-only dispositions (identity, streaming) | `tests/performance/final-matrix-2026-11-27.md` §4.1 | Partial: two of four rows dispositioned; merge/split and outbox ports in progress |
+
+---
+
 ## 1. Status at a glance
 
 | Package | State | Remaining work in one line |
@@ -68,13 +81,12 @@ acceptance evidence the package cannot close without. Spec sections are in
   baseline/final pairs, five measured single/repeat runs, four final-only rows);
   disposable 35K/50K/600K fixture; provenance records; bounded metrics.
 - **Pending:**
-  - [ ] Record an explicit, evidence-backed disposition for the four final-only
-    rows (identity reconciliation, incremental indexing, streaming during
-    ingestion, merge/split) — either a documented limitation/waiver with the
-    reason no baseline harness exists, or build the baseline harness. They must
-    not be labelled before/after.
-  - [ ] Declare the noise-aware regression budget **before** final testing
-    (`PERFORMANCE.md` §8.10) and keep it unchanged afterwards.
+  - [~] Record an explicit, evidence-backed disposition for the four final-only
+    rows — identity and streaming are dispositioned as accepted limitations in
+    the matrix §4.1; merge/split and incremental indexing are being ported to
+    the baseline worktree.
+  - [x] Declare the noise-aware regression budget **before** final testing
+    (`PERFORMANCE.md` §8.1) and keep it unchanged afterwards.
   - [ ] Re-run the matrix rows whose committed evidence is single-sample at the
     final commit if any further code changes touch them.
 - **Acceptance:** every row carries a stated evidence class and limitations; the
