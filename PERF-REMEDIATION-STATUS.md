@@ -31,7 +31,7 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 | RM-15 | IMPLEMENTED AND VERIFIED | Native Artist scope 584.0→14.3 ms; Jellyfin audio page 105.1→1.39 ms; admin/browse mixed-load percentiles; NO-CHANGE decision recorded | None. |
 | RM-16 | IMPLEMENTED AND VERIFIED | ADR-0215 opt-in lease-event retention; duplicate indexes dropped | Reconfirm in final integrated verification. |
 | RM-17 | IMPLEMENTED AND VERIFIED | rate-limit contention exact counters at 1/8/32 workers; streaming TTFB and slow-client evidence; exact semantics retained by decision | None. |
-| RM-18 | PARTIAL | batched evidence and recommendation lock-order changes; contention measurements | Complete writer audit and shared-Artist fairness/contended correctness measurement. |
+| RM-18 | IMPLEMENTED AND VERIFIED | set-based provider-image and detached-observation merge/split writes; recommendation contention exact per-artist popularity (`recommendation_consistency=exact`) | None. |
 | RM-19 | IMPLEMENTED AND VERIFIED | 1K baseline/final cost+statement pair; 10K final; catalog_merge_split 6/6; exact evidence/state round-trip | None. |
 | RM-20 | PARTIAL | intermediate upgrade/runbook and historical gate results | Reconcile all requirements, rehearse through final migrations, run final correctness and quality gates, and consolidate evidence. |
 
@@ -2121,3 +2121,15 @@ Additional current execution state:
   `PERFORMANCE-REFACTOR-TASKS.md` §9; notably RM-07's rolling refill is **not**
   implemented (workers still spawn a bounded batch and join), so RM-07 remains
   PARTIAL despite bounded result retention.
+- Handoff restart (cont.): closed **RM-18**. The writer audit of
+  `catalog_identity.rs`, `catalog_mutations.rs` and the catalog manifest/merge
+  paths found the manifest assembly loops already set-based; two per-item writes
+  remained in merge/split and are now set-based: provider-image collision
+  resolution/move (one `SELECT ... ANY` + one `UPDATE ... ANY ... RETURNING`)
+  and detached release-artist observation restore (one `UPDATE ... FROM unnest`).
+  Evidence on fresh owned databases: `catalog_merge_split` 6/6,
+  `catalog_correction_regressions` 5/5, strict workspace clippy clean; the
+  existing `perf_recommendation_contention` exact per-Artist popularity check is
+  the shared-Artist fairness/contended-correctness measurement (shared Track,
+  separate Tracks shared Artist, concurrent Artist changes; zero inconsistent
+  candidates). RM-18 is now IMPLEMENTED AND VERIFIED.

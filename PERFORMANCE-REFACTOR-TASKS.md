@@ -37,6 +37,7 @@ sub-item or acceptance evidence is missing.
 | 2026-11-28 | RM-00 (all sub-items) | matrix §2.8, §2.13, §4.1; `PERFORMANCE.md` §8.1 | **RM-00 DONE** |
 | 2026-11-28 | RM-13, RM-14, RM-15, RM-19 | package entries above; `final-*` JSON evidence; `catalog_merge_split` 6/6 | **DONE** |
 | 2026-11-28 | RM-17 | rate-limit contention run (exact counters, 1/8/32 workers) + streaming matrix | **DONE** |
+| 2026-11-28 | RM-18 | set-based provider/observation writes; merge/correction suites 6/6+5/5; exact per-artist contention | **DONE** |
 
 ---
 
@@ -62,7 +63,7 @@ sub-item or acceptance evidence is missing.
 | RM-15 | DONE | Artist-scope and Jellyfin page plans measured (584→14.3 ms; 105→1.39 ms); no further change justified. |
 | RM-16 | DONE | None. |
 | RM-17 | DONE | Rate-limit contention measured with exact counters (1/8/32 workers); streaming/slow-client evidence; decision: keep exact semantics. |
-| RM-18 | PARTIAL | Writer audit + shared-Artist fairness/contended correctness measurement. |
+| RM-18 | DONE | Writer audit batched the remaining per-item merge/split writes; shared-Artist contention exact per-artist popularity verified. |
 | RM-19 | DONE | 1K baseline/final cost+statement pair, 10K final, correctness and projection reverified. |
 | RM-20 | PARTIAL | Reconcile all packages/findings, rehearsal, docs, final gates, final report. |
 | Custody P0 | PARTIAL | Items 2–8 of the ledger P0 list (section 3) — the largest remaining workstream. |
@@ -261,12 +262,19 @@ acceptance evidence the package cannot close without. Spec sections are in
 - **Exists:** batched evidence writes; recommendation lock-order changes;
   `perf_recommendation_contention` passes (`recommendation_consistency=exact`,
   3 scenarios, 8 workers).
-- **Pending:**
-  - [ ] Complete the writer audit (all evidence/identity writers batched and
-    lock-ordered; no per-item loops).
-  - [ ] Shared-Artist fairness and contended correctness measurement (multiple
-    artists/releases contending on the same artist rows).
-- **Acceptance:** audit closure + measured fairness with exact counters.
+- **Status: DONE (2026-11-28).** Writer audit: `catalog_identity.rs` and the
+  manifest assembly loops were already set-based (result loops only populate
+  memory); the only remaining per-item writes in the merge/split path were the
+  provider-image collision check/move and the detached release-artist
+  observation restore. Both are now one set-based read + one `unnest` write
+  (commit `perf(rm18)`), with `catalog_merge_split` 6/6 and
+  `catalog_correction_regressions` 5/5 green and strict clippy clean. Fairness /
+  contended correctness is measured by `perf_recommendation_contention` on the
+  final source: `recommendation_consistency=exact` across shared-Track,
+  separate-Tracks-shared-Artist and concurrent-Artist-change scenarios, where
+  every affected Artist's recommendation popularity must equal its authoritative
+  primary-credit play count (a lost or starved update fails the test). Lock
+  sampling is approximate; network and PostgreSQL CPU are excluded.
 
 ### RM-19 — Set-based release merge/split — PARTIAL
 - **Exists:** set-based merge/split; `perf_large_release_merge` green at 1K
@@ -457,7 +465,6 @@ current evidence:
 | RM-10 | Acquire/hold instrumentation covers admin, catalog-import and search-snapshot classes only; no admission decision has been recorded for the remaining classes. | Instrument the remaining workload classes, then record the evidence-backed pool/admission decision. |
 | RM-11 | Operation inventory and remaining read/hash/probe amplification work are incomplete; integrity/fault matrix not closed. | Finish the inventory, remove the remaining duplication with content-integrity tests, and record the measured delta. |
 | RM-12 | Admission is not process-wide; durable discovery/storage bounds and cancellation/fairness under saturation are not fully proven; defaults remain provisional. | Extend admission coverage, add saturation/cancellation tests, and set defaults from measurements. |
-| RM-18 | Contention correctness is measured (`recommendation_consistency=exact`), but the writer audit and explicit shared-Artist fairness measurement are missing. | Complete the writer audit and add a fairness/contended-correctness workload. |
 | RM-20 | Closeout has not run. | Rehearse fresh/populated/interrupted upgrades through the final migration and the repair runbook; reconcile docs/traceability; run `do-prechecks.py` and the final gates; write the final report. |
 | Custody P0 (2–8) | Not started in this session. | See §3; implement behind the maintenance fence with the ADRs accepted only when their criteria are met. |
 

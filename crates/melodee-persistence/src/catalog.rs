@@ -3067,30 +3067,34 @@ async fn merge_release_in_transaction(
     .bind(source_release_id)
     .fetch_all(&mut **tx)
     .await?;
-    for provider in source_providers {
-        let target_has_provider = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM catalog_provider_images
-                                 WHERE entity_type='release' AND entity_id=$1 AND provider=$2)",
+    if !source_providers.is_empty() {
+        // Set-based: resolve collisions for the whole provider set in one read
+        // and move every non-colliding row in one write, instead of two
+        // statements per provider inside the merge transaction.
+        let target_providers = sqlx::query_scalar::<_, String>(
+            "SELECT provider FROM catalog_provider_images
+              WHERE entity_type='release' AND entity_id=$1 AND provider=ANY($2)",
         )
         .bind(target_release_id)
-        .bind(&provider)
-        .fetch_one(&mut **tx)
+        .bind(&source_providers)
+        .fetch_all(&mut **tx)
         .await?;
-        if target_has_provider {
-            continue;
-        }
-        if let Some(image_id) = sqlx::query_scalar::<_, Uuid>(
-            "UPDATE catalog_provider_images SET entity_id=$2
-                  WHERE entity_type='release' AND entity_id=$1 AND provider=$3
+        let to_move: Vec<String> = source_providers
+            .into_iter()
+            .filter(|provider| !target_providers.contains(provider))
+            .collect();
+        if !to_move.is_empty() {
+            let moved = sqlx::query_scalar::<_, Uuid>(
+                "UPDATE catalog_provider_images SET entity_id=$2
+                  WHERE entity_type='release' AND entity_id=$1 AND provider=ANY($3)
                  RETURNING id",
-        )
-        .bind(source_release_id)
-        .bind(target_release_id)
-        .bind(&provider)
-        .fetch_optional(&mut **tx)
-        .await?
-        {
-            assets.adopted_provider_images.push(image_id);
+            )
+            .bind(source_release_id)
+            .bind(target_release_id)
+            .bind(&to_move)
+            .fetch_all(&mut **tx)
+            .await?;
+            assets.adopted_provider_images.extend(moved);
         }
     }
     sqlx::query(
@@ -3163,13 +3167,27 @@ async fn restore_release_merge_assets(
     assets: &ReleaseMovedAssets,
     now: OffsetDateTime,
 ) -> Result<(), CatalogStoreError> {
-    for link in &assets.detached_release_artist_observations {
+    if !assets.detached_release_artist_observations.is_empty() {
+        // One statement for every restored link rather than one per link.
+        let ids: Vec<Uuid> = assets
+            .detached_release_artist_observations
+            .iter()
+            .map(|link| link.release_artist_id)
+            .collect();
+        let observed: Vec<Uuid> = assets
+            .detached_release_artist_observations
+            .iter()
+            .map(|link| link.observed_artist_id)
+            .collect();
         sqlx::query(
-            "UPDATE release_artists SET observed_artist_id=$2
-              WHERE id=$1 AND release_id=$3",
+            "UPDATE release_artists artist
+                SET observed_artist_id = restore.observed_artist_id
+               FROM (SELECT unnest($1::uuid[]) AS id,
+                            unnest($2::uuid[]) AS observed_artist_id) restore
+              WHERE artist.id = restore.id AND artist.release_id = $3",
         )
-        .bind(link.release_artist_id)
-        .bind(link.observed_artist_id)
+        .bind(&ids)
+        .bind(&observed)
         .bind(source_release_id)
         .execute(&mut **tx)
         .await?;
