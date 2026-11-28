@@ -7,11 +7,13 @@ complete under the hard definition of done in `OUTSTANDING-GPT.md`. It is a
 authoritative chronological ledger, `PERF-REMEDIATION-RESULTS.md` the results
 record, and `tests/performance/final-matrix-2026-11-27.md` the workload matrix.
 
-**Baseline for this document:** `main` at `1228d09` (code state `5e4fae1`),
-clean worktree. `make check-fast`, `make check` and `make check-nightly` pass on
-this line of work; the last nightly log is
-`.local-dev/check-nightly-green-20261127-174450.log` (2,475 tests, 0 failures,
-`cargo deny` all-ok).
+**Baseline for this document:** `main` at `080a619`; the 2026-11-28 scope and
+evidence changes are committed on top of it (`207bbea`) and the worktree is
+clean. `make check-fast` passes (exit 0); the last full nightly that completed
+green was at `5e4fae1`
+(`.local-dev/check-nightly-green-20261127-174450.log`, 2,475 tests, 0 failures,
+`cargo deny` all-ok) and **has not been rerun** on the current line, so do not
+claim a green nightly for it.
 
 **Status legend:** `DONE` = implemented and verified with committed evidence;
 `MEASURED` = all required measurements exist but acceptance/closeout is open;
