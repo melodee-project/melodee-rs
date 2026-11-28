@@ -13,7 +13,7 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 
 | Package | State | What exists | Exact remaining action |
 |---|---|---|---|
-| RM-00 | PARTIAL | All thirteen RM-00 workload rows measured on the final source: four matched baseline/final pairs (full rebuild, policy evaluate/dry-run, media normalization, bounded mixed load), five measured single/repeat runs (single/200-album import, unchanged reimport, concurrent genre imports, worker scheduling samples), four final-only (identity, incremental indexing, streaming, merge/split 1K/10K); full provenance and limitations in `tests/performance/final-matrix-2026-11-27.md` | Comparable-pair acceptance is impossible for the four final-only rows with current harnesses (baseline lacks scoped methods, targets, or bound-address log); keep those final-only, then close RM-20. |
+| RM-00 | IMPLEMENTED AND VERIFIED | All 13 workload rows measured with evidence classes; baseline ports for merge/split and incremental indexing; identity/streaming dispositioned final-only; regression budget declared (`PERFORMANCE.md` §8.1) | None; re-run a row only if later code changes touch it. |
 | RM-01 | IMPLEMENTED AND VERIFIED | narrow index 0060; historical 50K plan and regression evidence | Reconfirm in final integrated verification. |
 | RM-02 | IMPLEMENTED AND VERIFIED | scoped normal and dry-run acoustic queries; focused tests; matched baseline/final 600K production policy measurements (600,008 → 1 retained digest per evaluation; 16.4 s → 0.39 s bounded dry-run) in `tests/performance/final-matrix-2026-11-27.md` | Reconciled in the final integrated verification. |
 | RM-03 | IMPLEMENTED AND VERIFIED | genre indexes, status guard, Track-move term maintenance | Reconfirm in final integrated verification. |
@@ -26,13 +26,13 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 | RM-10 | PARTIAL | filesystem evidence prepared before transaction; fenced revalidation and checkout/hold instrumentation | Complete workload-class instrumentation and representative mixed-load comparison; decide admission based on evidence. |
 | RM-11 | PARTIAL | bounded tool admission and some duplicate media processing eliminated; unbound version-result caching disabled after ABA finding | Complete operation inventory, integrity/fault verification and representative actual read/hash/probe measurements. |
 | RM-12 | PARTIAL | shared ingestion admission and codec concurrency samples; optional connection cap | Complete coverage, durable discovery/storage bounds, cancellation/fairness tests and evidence-backed defaults. |
-| RM-13 | PARTIAL | bounded reader registry, batched hydration, outbox writer and lifecycle measurements | Finish reader/writer, memory and concurrency evaluation and substantiate final lifecycle decision. |
-| RM-14 | PARTIAL | admitted rebuild pages, commit bounds and single-sample 600K baseline/current rebuild | Finish snapshot, cancellation, catch-up and concurrent activation measurements and final regressions. |
-| RM-15 | PARTIAL | admin aggregate and OpenSubsonic rating/allocation improvements; route samples | Finish representative route, ACL and rating plans/measurements and justified optimizations. |
+| RM-13 | IMPLEMENTED AND VERIFIED | ordered batched hydration; bounded reader registry; lifecycle decision from measured commit/reload, concurrent held-reader and memory evidence | None. |
+| RM-14 | IMPLEMENTED AND VERIFIED | 35.21 s/69-commit rebuild, activation 6.60 ms, catch-up 17.1 ms; concurrent rebuild + outbox + 4 clients with held reader (activation 32.88 s, 0 errors); late-ID regressions green | None. |
+| RM-15 | IMPLEMENTED AND VERIFIED | Native Artist scope 584.0→14.3 ms; Jellyfin audio page 105.1→1.39 ms; admin/browse mixed-load percentiles; NO-CHANGE decision recorded | None. |
 | RM-16 | IMPLEMENTED AND VERIFIED | ADR-0215 opt-in lease-event retention; duplicate indexes dropped | Reconfirm in final integrated verification. |
-| RM-17 | PARTIAL | content-aware artwork cache, blacklist singleflight, buffered streaming and combined auth lookup | Measure slow-client streaming and realistic mixed authentication load; assess observed rate-limit contention while preserving exact semantics and verify final compatibility. |
+| RM-17 | IMPLEMENTED AND VERIFIED | rate-limit contention exact counters at 1/8/32 workers; streaming TTFB and slow-client evidence; exact semantics retained by decision | None. |
 | RM-18 | PARTIAL | batched evidence and recommendation lock-order changes; contention measurements | Complete writer audit and shared-Artist fairness/contended correctness measurement. |
-| RM-19 | PARTIAL | set-based merge/split and representative 1K/10K measurements | Reverify final implementation, state/projection correctness and transaction/lock costs. |
+| RM-19 | IMPLEMENTED AND VERIFIED | 1K baseline/final cost+statement pair; 10K final; catalog_merge_split 6/6; exact evidence/state round-trip | None. |
 | RM-20 | PARTIAL | intermediate upgrade/runbook and historical gate results | Reconcile all requirements, rehearse through final migrations, run final correctness and quality gates, and consolidate evidence. |
 
 ## Migrations
@@ -2096,3 +2096,28 @@ Additional current execution state:
   23.2 s), and `cargo deny check` (`advisories ok, bans ok, licenses ok,
   sources ok`). No suite was skipped, weakened or filtered to obtain this
   result.
+- Handoff restart (cont.): closed RM-00, RM-13, RM-14, RM-15, RM-17 and RM-19
+  with committed evidence. RM-00: regression budget declared in
+  `PERFORMANCE.md` §8.1; merge/split benchmark ported to the baseline (1K:
+  633.7 ms/3,025 statements merge, 618.1 ms/3,017 split, leaving 2,000 stale
+  genre-term rows — the pre-fix defect) versus final 3.56 s/6.86 s at 36/24
+  statements with zero stale rows; incremental indexing ported to the baseline
+  (8 mirrored trials: baseline 79–2,848 events/s, 2,120–4,352 statements, lag
+  3.9–29.3 s versus final 137–6,008 events/s, 82–2,624 statements, lag
+  0.54–15.2 s); identity and streaming dispositioned as accepted final-only
+  limitations. RM-13: keep short-lived writers; 69 commits median 64.68 ms and
+  reader reloads median 0.77 ms over a 35.21 s rebuild, plus a held-reader
+  successful during concurrent activation, make a long-lived writer unjustified
+  and riskier across processes. RM-14: concurrent rebuild/outbox/four-client
+  evidence (`perf_outbox_concurrent`: activation 32.88 s, snapshot pause
+  13.74 ms, held reader 2.65 ms, 2,048 events in ~575 ms at batch 256, zero
+  query errors). RM-15: native ACL-scoped Artist count 584.0→14.3 ms and
+  Jellyfin audio page 105.1→1.39 ms (24.4 MB index, 0.26 s build), count query
+  within noise; NO further change justified. RM-17: exact counters under
+  1/8/32-worker rate-limit contention, zero errors, 282.1→246.1 attempts/s and
+  p99 33.1→246.0 ms; exact multi-process semantics retained by decision.
+  RM-19: `catalog_merge_split` 6/6 and exact merge/split evidence. Remaining
+  PARTIAL items and their exact next actions are recorded in
+  `PERFORMANCE-REFACTOR-TASKS.md` §9; notably RM-07's rolling refill is **not**
+  implemented (workers still spawn a bounded batch and join), so RM-07 remains
+  PARTIAL despite bounded result retention.
