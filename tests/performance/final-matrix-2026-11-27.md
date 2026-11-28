@@ -252,6 +252,21 @@ Tracks controlled credits and clears fixture ratings/plays for them (the fixture
 now seeds credits for essentially every Track); those are benchmark-only edits.
 An earlier run of the same binary before `cargo fmt --all` is not used.
 
+**Baseline port (1K only).** The benchmark target was copied into the verified
+baseline worktree and compiled there (benchmark-only dev-dependency
+`tracing-subscriber` and test file; production sources unchanged). At 1,000
+Tracks the pre-remediation revision performed merge in **633.7 ms with 3,025
+SQLx statement events** and split in **618.1 ms with 3,017 events**, versus 36
+and 24 statements on the final source. The baseline run then failed the
+post-split assertion by design: it left **2,000 stale `catalog_genre_terms`
+rows** whose `release_id` no longer matched the moved Track's Release, which is
+the Track-move term-maintenance defect this program fixes; the final source
+restores zero stale rows and the full immutable evidence round-trip. The pair is
+therefore matched evidence for statement count and operation cost, while the
+correctness assertions are final-only. Baseline 10K was not run (each case needs
+a fresh owned database and a ~12-minute baseline seed); the final 10K result is
+recorded above.
+
 ## 3. Benchmark defects fixed in this round (no production code changed)
 
 1. `perf_catalog_policy.rs`: no longer assumes its own Releases are the earliest
