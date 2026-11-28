@@ -1,7 +1,7 @@
 # Performance Remediation — Status Ledger
 
 **Operation:** integrated remediation resumed from `8a4cf6f`
-**Current intermediate HEAD:** `37f2988`; further implementation remains in progress
+**Verified repository state (2026-11-28):** `main` at `080a619` plus the session changes recorded in `PERFORMANCE-REFACTOR-TASKS.md` §10.7 (scope resolution, WO-M evidence, RM-09/RM-10 progress). Earlier `37f2988`/`8a4cf6f` checkpoints below are historical.
 **Toolchain:** Rust 1.99.0 (pinned); PostgreSQL 18.3 (dev compose, port 5433)
 **Host budget:** 24 vCPU, 62 GiB RAM. `CARGO_BUILD_JOBS=2`, `RUST_TEST_THREADS=1`.
 **Authority:** `PERF-REMEDIATION-SPEC.md`. **Evidence:** `PERF-REMEDIATION-RESULTS.md`.
@@ -22,8 +22,8 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 | RM-06 | PARTIAL | durable per-class discovery cursors; 100K fairness regression; bounded traversal and durable staging in progress | Finish bounded traversal and staging, crash fairness, independent review and integrated tests. |
 | RM-07 | PARTIAL | bounded 64-entry worker and periodic-source result retention; regression tests | Reverify alongside current discovery and scheduler changes. |
 | RM-08 | IMPLEMENTED AND VERIFIED | full-batch drain; monotonic maintenance gate; durable last_prune_at | Reconfirm in final integrated verification. |
-| RM-09 | PARTIAL | durable captured seeds and affected-closure candidate discovery for all five algorithms; representative scoped cases | Complete mutation/concurrency audit, closure and interruption equivalence, production-shaped plans and final integrated tests. |
-| RM-10 | PARTIAL | filesystem evidence prepared before transaction; fenced revalidation and checkout/hold instrumentation | Complete workload-class instrumentation and representative mixed-load comparison; decide admission based on evidence. |
+| RM-09 | PARTIAL | durable seeds; all five scoped algorithms; scoped-vs-global oracle, transitive, interruption and late-commit regressions; mutation audit complete with no missing writer; concurrent-import seed regression added | Capture absent/rare/common plan-selectivity values and rerun the integrated regressions on the final tree. |
+| RM-10 | PARTIAL | filesystem evidence prepared before transaction; fenced revalidation; acquire+hold metrics for every claim class (catalog, inspection, normalization, validation, publication, policy, rebuild, enrichment, podcast, retained, heartbeat, outbox, snapshot, admin, scrobble, rate limit); single-pool/no-split decision recorded | Run the new classes under representative mixed load and finish the blocking-work audit. |
 | RM-11 | PARTIAL | bounded tool admission and some duplicate media processing eliminated; unbound version-result caching disabled after ABA finding | Complete operation inventory, integrity/fault verification and representative actual read/hash/probe measurements. |
 | RM-12 | PARTIAL | shared ingestion admission and codec concurrency samples; optional connection cap | Complete coverage, durable discovery/storage bounds, cancellation/fairness tests and evidence-backed defaults. |
 | RM-13 | IMPLEMENTED AND VERIFIED | ordered batched hydration; bounded reader registry; lifecycle decision from measured commit/reload, concurrent held-reader and memory evidence | None. |
@@ -40,9 +40,12 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 `0060` indexes/duplicate drops · `0061` genre correctness/repair · `0062` discovery progress ·
 `0063` search activation replay · `0064` identity seeds + sorted lock helper ·
 `0065` recommendation projection locks · `0066` non-owning identity seeds ·
-`0067` bounded discovery (in progress) · `0068` staged settling snapshots (in progress) ·
-`0069` Jellyfin track ordering index · `0070` durable custody intent (in progress) ·
-`0071` retained-source hash and directory spool (uncommitted, in progress).
+`0067` bounded discovery scan · `0068` staged settling snapshots ·
+`0069` Jellyfin track ordering index · `0070` durable custody intent ·
+`0071` retained-source hash and directory spool. All seven are committed and
+applied by the migration runner. `0070`/`0071` create the dormant custody
+schema described in `PERFORMANCE-REFACTOR-TASKS.md` §10.6; they do not activate
+custody, and no new migration was added in this session.
 
 ## Historical verification (session 3; not the current working tree)
 
@@ -56,12 +59,23 @@ Terminal states: **IMPLEMENTED AND VERIFIED**, **ALREADY SATISFIED AND VERIFIED*
 
 ## Remaining mandatory work (not complete)
 
-The partial packages in the current table remain mandatory: RM-00, RM-06,
-RM-07, RM-09 through RM-15, and RM-17 through RM-20. In particular, safe
-source custody and the guarded no-handoff purge regression remain unresolved;
-the 600K identity query samples do not establish complete bounded convergence;
-and the representative end-to-end matrix, upgrade rehearsals and final gates
-have not been completed on the integrated source.
+**Status of this section (corrected 2026-11-28):** the package table above is
+authoritative. Fourteen packages are IMPLEMENTED AND VERIFIED (RM-00–RM-05,
+RM-08, RM-13–RM-19) and seven remain PARTIAL: **RM-06, RM-07, RM-09, RM-10,
+RM-11, RM-12, RM-20**. The older paragraph that also listed RM-00, RM-13–RM-15,
+RM-17 and RM-18 as mandatory was stale and contradicted the table; it was
+removed during the 2026-11-28 scope resolution. The custody P0 workstream is a
+post-specification addition, is not one of the 21 packages, and is reported
+separately in `PERFORMANCE-REFACTOR-TASKS.md` section 10.6.
+
+The seven partial packages remain mandatory. Safe source custody and the
+guarded no-handoff purge regression are dormant workstreams, not blockers for
+the original performance outcomes; the deletion-ordering question that they
+would fix is pre-existing product behavior and needs the explicit decision
+recorded in section 10.6. The 600K identity query samples do not yet establish
+complete bounded convergence; and the representative end-to-end matrix,
+upgrade rehearsals and final gates have not been completed on the integrated
+source.
 
 ## Current execution checkpoint (based on `8a4cf6f`)
 

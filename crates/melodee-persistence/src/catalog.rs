@@ -2846,6 +2846,7 @@ async fn merge_release_in_transaction(
     let reason = merge.reason.as_str();
     let now = merge.occurred_at;
     let mut assets = ReleaseMovedAssets::default();
+    let mut phase_started = std::time::Instant::now();
     let statuses = sqlx::query_as::<_, (Uuid, String)>(
         "SELECT id, status FROM releases
              WHERE id=ANY($1) ORDER BY id FOR UPDATE",
@@ -2987,6 +2988,8 @@ async fn merge_release_in_transaction(
         .await?;
     }
     if !moved_observation_ids.is_empty() {
+        tracing::debug!(target: "melodee_persistence::merge_phase", phase = "move_tracks", elapsed_us = phase_started.elapsed().as_micros(), "merge phase");
+        phase_started = std::time::Instant::now();
         sqlx::query(
             "UPDATE observed_artists observed
                 SET release_id=$2, source_ordinal=shift.ordinal
@@ -3111,9 +3114,13 @@ async fn merge_release_in_transaction(
         .bind(now)
         .execute(&mut **tx)
         .await?;
+    tracing::debug!(target: "melodee_persistence::merge_phase", phase = "assets", elapsed_us = phase_started.elapsed().as_micros(), "merge phase");
+    phase_started = std::time::Instant::now();
     refresh_release_catalog_aggregate(tx, source_release_id, now).await?;
     refresh_release_catalog_aggregate(tx, target_release_id, now).await?;
     refresh_artist_catalog_aggregates(tx, &track_ids, now).await?;
+    tracing::debug!(target: "melodee_persistence::merge_phase", phase = "aggregates", elapsed_us = phase_started.elapsed().as_micros(), "merge phase");
+    phase_started = std::time::Instant::now();
     let event_id = Uuid::now_v7();
     let moved_payload = serde_json::to_value(&moved)?;
     let assets_payload = serde_json::to_value(&assets)?;
@@ -3133,9 +3140,12 @@ async fn merge_release_in_transaction(
     .bind(now)
     .execute(&mut **tx)
     .await?;
+    tracing::debug!(target: "melodee_persistence::merge_phase", phase = "evidence", elapsed_us = phase_started.elapsed().as_micros(), "merge phase");
+    phase_started = std::time::Instant::now();
     enqueue_release_revision(tx, source_release_id, now).await?;
     enqueue_release_revision(tx, target_release_id, now).await?;
     enqueue_track_revisions(tx, &track_ids, now).await?;
+    tracing::debug!(target: "melodee_persistence::merge_phase", phase = "outbox", elapsed_us = phase_started.elapsed().as_micros(), "merge phase");
     audit_release_event(
         tx,
         source_release_id,

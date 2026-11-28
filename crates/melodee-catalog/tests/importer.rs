@@ -14,6 +14,7 @@ use catalog_common::{
 use common::{TestDb, test_config};
 use melodee_catalog::{CatalogConfig, import_once, start_catalog_loop};
 use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkEngineConfig, WorkerId};
+use uuid::Uuid;
 
 #[tokio::test]
 async fn scheduler_drains_full_catalog_batches_before_the_next_idle_poll() {
@@ -742,6 +743,72 @@ async fn late_committing_lower_id_seed_is_not_deleted_by_a_coalesced_drain() {
     assert!(
         melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
         "the next drain examines the late seed"
+    );
+    assert_eq!(seed_count(&db.pool).await, 0);
+    db.drop().await;
+}
+
+/// PERF-004 / RM-09: two imports committing concurrently each persist their
+/// own affected-identity seeds in their authoritative transaction; coalescing
+/// must not lose either Release's obligation, and one drain clears both.
+#[tokio::test]
+async fn concurrent_imports_persist_independent_identity_seeds() {
+    let db = TestDb::create("catalog_identity_concurrent_imports").await;
+    for (ordinal, release_title, artist) in [
+        (211_u32, "Concurrent Seed One", "Concurrent Seed Artist One"),
+        (212_u32, "Concurrent Seed Two", "Concurrent Seed Artist Two"),
+    ] {
+        seed_published_release(
+            &db,
+            ordinal,
+            CatalogFixturePresentation {
+                release_title,
+                release_artist: artist,
+                track_title: "Concurrent Seed Track",
+                track_artist: artist,
+                release_date: "2026-02-02",
+            },
+        )
+        .await;
+    }
+    let config = CatalogConfig {
+        concurrency: 2,
+        ..CatalogConfig::default()
+    };
+    let work = WorkEngineConfig::default();
+    let now = time::OffsetDateTime::now_utc();
+    let (first, second) = tokio::join!(
+        import_once(&config, &CatalogStore, &db.pool, &work, now),
+        import_once(&config, &CatalogStore, &db.pool, &work, now),
+    );
+    first.expect("first concurrent import");
+    second.expect("second concurrent import");
+
+    let cataloged: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM releases
+          WHERE title IN ('Concurrent Seed One', 'Concurrent Seed Two')",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("count concurrent imports");
+    assert_eq!(cataloged, 2, "both concurrent imports must commit");
+
+    let seeded_releases: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT release_id FROM catalog_identity_reconciliation_seed
+          WHERE release_id IS NOT NULL",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read per-Release durable seeds");
+    assert_eq!(
+        seeded_releases.len(),
+        2,
+        "each concurrent import keeps its own durable Release obligation"
+    );
+
+    assert!(
+        melodee_catalog::reconcile_affected_identities_once(&CatalogStore, &db.pool).await,
+        "one coalesced drain consumes both concurrent obligations"
     );
     assert_eq!(seed_count(&db.pool).await, 0);
     db.drop().await;

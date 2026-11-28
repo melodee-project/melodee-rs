@@ -122,6 +122,12 @@ pub async fn claim_download(
     per_user_concurrency: i64,
     quota_bytes_per_user: i64,
 ) -> Result<Option<DownloadClaim>, sqlx::Error> {
+    let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+        pool,
+        crate::metrics::Metric::PodcastDownloadAcquire,
+        crate::metrics::Metric::PodcastDownloadHold,
+    )
+    .await?;
     sqlx::query_as::<_, DownloadClaim>(
         "WITH claimed AS (SELECT episode.id FROM native_podcast_episodes episode
          JOIN native_podcast_channels channel ON channel.id=episode.channel_id
@@ -148,7 +154,7 @@ pub async fn claim_download(
     .bind(lease_seconds as f64)
     .bind(per_user_concurrency)
     .bind(quota_bytes_per_user)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *connection)
     .await
 }
 

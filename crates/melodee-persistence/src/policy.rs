@@ -9,7 +9,7 @@ use melodee_domain::{
     PolicyActor, PolicyRuleSet, ReleaseClassification, ReleaseId, ReleasePolicyDecision,
     ReleaseWorkItem, RetryPolicy, TrackNovelty, TransitionKind, WorkErrorCode, WorkEventType,
 };
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Acquire as _, PgPool, Postgres, Transaction};
 use thiserror::Error;
 use time::OffsetDateTime;
 use tracing::instrument;
@@ -656,7 +656,13 @@ impl PolicyStore {
         config: &WorkEngineConfig,
         now: OffsetDateTime,
     ) -> Result<Vec<PolicyClaim>, PolicyStoreError> {
-        let mut tx = pool.begin().await?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::PolicyClaimAcquire,
+            crate::metrics::Metric::PolicyClaimHold,
+        )
+        .await?;
+        let mut tx = (&mut *connection).begin().await?;
         let selected =
             crate::processing::claim_candidates(&mut tx, "policy", config, now, false).await?;
         if selected.is_empty() {

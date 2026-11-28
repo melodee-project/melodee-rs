@@ -120,7 +120,15 @@ where
 async fn measure_large_release_merge_and_split() {
     let counter = Arc::new(AtomicU64::new(0));
     tracing::subscriber::set_global_default(
-        tracing_subscriber::registry().with(QueryCounter(counter.clone())),
+        tracing_subscriber::registry()
+            .with(QueryCounter(counter.clone()))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .with_filter(tracing_subscriber::EnvFilter::new(
+                        "error,melodee_persistence::merge_phase=debug",
+                    )),
+            ),
     )
     .expect("install SQLx counter");
     let url = std::env::var("MELODEE__DATABASE__URL").expect("fixture database URL");

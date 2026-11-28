@@ -38,6 +38,10 @@ sub-item or acceptance evidence is missing.
 | 2026-11-28 | RM-13, RM-14, RM-15, RM-19 | package entries above; `final-*` JSON evidence; `catalog_merge_split` 6/6 | **DONE** |
 | 2026-11-28 | RM-17 | rate-limit contention run (exact counters, 1/8/32 workers) + streaming matrix | **DONE** |
 | 2026-11-28 | RM-18 | set-based provider/observation writes; merge/correction suites 6/6+5/5; exact per-artist contention | **DONE** |
+| 2026-11-28 | Ledger scope correction | §1 corrected to 14 DONE / 7 PARTIAL; stale RM-13–RM-19 `PARTIAL` headings corrected; custody separated in §10.6 | Ledger now matches the evidence in both status files |
+| 2026-11-28 | WO-M (1K merge/split regression) | §10.4; `tests/performance/merge-split-1k-attribution-2026-11-28.md` | **CLOSED**: correctness maintenance, index follow-up identified |
+| 2026-11-28 | RM-09 (partial) | §RM-09 audit; concurrent-import seed regression passes | Mutation audit complete; plan-selectivity values and final rerun open |
+| 2026-11-28 | RM-10 (partial) | §RM-10; `metrics::acquire_for_claim` + 8 claim classes; decision recorded | Instrumentation complete; post-change mixed load + blocking audit open |
 
 ---
 
@@ -54,8 +58,8 @@ sub-item or acceptance evidence is missing.
 | RM-06 | PARTIAL | Finish bounded traversal + durable staging integration and its cross-platform/fault tests. |
 | RM-07 | PARTIAL | Reverify bounded retention and rolling refill against the current scheduler. |
 | RM-08 | DONE | None. |
-| RM-09 | PARTIAL | Complete mutation/concurrency audit, oracle/interruption equivalence, production plans. |
-| RM-10 | PARTIAL | Finish acquire+hold instrumentation for every workload class; mixed-load admission decision. |
+| RM-09 | PARTIAL | Audit complete and concurrent-import regression added; absent/rare/common plan selectivity and final integrated rerun open. |
+| RM-10 | PARTIAL | Instrumentation complete for all claim classes and no-split decision recorded; post-change mixed-load measurement and blocking-work audit open. |
 | RM-11 | PARTIAL | Complete operation inventory; remove remaining read/hash/probe amplification with integrity tests. |
 | RM-12 | PARTIAL | Process-wide admission coverage, cancellation/fairness, evidence-backed defaults. |
 | RM-13 | DONE | Lifecycle decision recorded from measured commit/reload, concurrent-reader and memory evidence. |
@@ -66,10 +70,14 @@ sub-item or acceptance evidence is missing.
 | RM-18 | DONE | Writer audit batched the remaining per-item merge/split writes; shared-Artist contention exact per-artist popularity verified. |
 | RM-19 | DONE | 1K baseline/final cost+statement pair, 10K final, correctness and projection reverified. |
 | RM-20 | PARTIAL | Reconcile all packages/findings, rehearsal, docs, final gates, final report. |
-| Custody P0 | PARTIAL | Items 2–8 of the ledger P0 list (section 3) — the largest remaining workstream. |
+| Custody P0 | INACTIVE (outside the 21 packages) | Section 3; all six work orders are dormant. See section 10.6 for the release-boundary decision. |
 
-Terminal count: **7 of 21** packages (`RM-01..05`, `RM-08`, `RM-16`), plus
-`RM-02`/`RM-19` measurement work already recorded.
+Terminal count: **14 of the 21 specification packages are DONE**
+(`RM-00`–`RM-05`, `RM-08`, `RM-13`–`RM-19`) and **7 are PARTIAL
+(`RM-06`, `RM-07`, `RM-09`, `RM-10`, `RM-11`, `RM-12`, `RM-20`). The custody
+workstream is a post-specification addition and is not one of the 21; counting
+it as a 22nd "package" is what produced the earlier contradictory "7 of 21"
+line. It is reported separately in section 10.6.
 
 ---
 
@@ -131,13 +139,33 @@ acceptance evidence the package cannot close without. Spec sections are in
 - **Exists:** durable seeds committed atomically with the catalog write; scoped
   candidate discovery for all five algorithms; 600K scoped-vs-global evidence;
   identity-scoped oracle and hard-delete/merge regressions.
-- **Pending:**
-  - [ ] Complete the mutation/concurrency audit (every mutation that can change
-    identity facts must seed the affected closure; no missing writer).
-  - [ ] Historical/transitive closure and interrupted-session equivalence against
-    the global oracle; late-commit and concurrent-import cases.
-  - [ ] Production-shaped `EXPLAIN (ANALYZE, BUFFERS)` plans for every scoped
-    query (present/absent/common/rare values) showing proportional discovery.
+- **Progress (2026-11-28):**
+  - [x] **Mutation/concurrency audit complete. No missing writer found.** Every
+    audited identity-affecting writer seeds in its authoritative transaction:
+    import (`enqueue_identity_reconciliation_seeds` covers Release credits,
+    Track credits, observations, external identifiers, plus the Release row);
+    `create_artist`, `add_artist_alias`, `add_artist_external_identity`,
+    `add_artist_relationship`, `add_group_membership`, `update_artist_metadata`
+    (both new and old normalized names), `record_artist_match_decision`
+    (including the previous Artist), negative/provider negative assertions;
+    Artist merge/split; Release merge/split (both Releases); review correction;
+    Artist hard delete (name/external keys preserved without FK); Release
+    hard delete deletes only facts that cannot create a new live candidate.
+    AudioIdentity evidence is outside RM-09's five Artist/strong-Release
+    algorithms. The unchanged-reimport path adds no seeds (`perf_catalog_retry`).
+  - [x] **Transitive, interruption and late-commit equivalence** exist in
+    `crates/melodee-catalog/tests/identity_scoped_oracle.rs`
+    (`scoped_drain_matches_global_oracle_and_preserves_review_decisions`,
+    `one_seed_expands_across_distinct_identity_relationships`) and
+    `identity_drain_preserves_seeds_when_candidate_discovery_fails`.
+  - [x] **Concurrent imports**: new
+    `concurrent_imports_persist_independent_identity_seeds` in
+    `crates/melodee-catalog/tests/importer.rs` proves two concurrent import
+    transactions each keep their own durable Release obligation and one
+    coalesced drain clears both (passes on PostgreSQL).
+  - [ ] Production-shaped `EXPLAIN (ANALYZE, BUFFERS)` plans currently capture
+    **present** values only. Absent/rare/common seed-selectivity values still
+    need capture (`perf_identity_reconciliation`).
   - [ ] Final integrated regressions on the final tree.
 - **Acceptance:** convergence equals the global oracle for historical,
   concurrent, interrupted and late-commit cases; ordinary import cost scales
@@ -151,15 +179,32 @@ acceptance evidence the package cannot close without. Spec sections are in
 - **Exists:** filesystem evidence prepared before the write transaction; fenced
   revalidation; checkout/hold instrumentation (opt-in trace); representative
   mixed-load pair.
-- **Pending:**
-  - [ ] Complete pooled acquisition **and hold** instrumentation for every
-    workload class (ingestion, rebuild, search, HTTP, worker stages), with
-    fixed-cardinality, bounded labels and no parameters/IDs/paths.
-  - [ ] Run the mixed-load comparison and make the admission decision from that
-    evidence; document the chosen configuration and rejected alternatives.
-  - [ ] Verify no write transaction spans filesystem/subprocess work anywhere
-    else, and that moved-out reads revalidate work-item state, lease and
-    bindings.
+- **Progress (2026-11-28):**
+  - [x] **Acquire + hold instrumentation is now complete for every modeled claim
+    class.** Added fixed-cardinality pairs (no IDs/paths/labels) for
+    normalization, validation, publication, policy, search rebuild, provider
+    enrichment, podcast download and retained-source claims, applied through the
+    shared `metrics::acquire_for_claim` helper together with the global
+    `pool_acquire` counter. The existing catalog import/claim, inspection claim,
+    heartbeat, search outbox/snapshot, admin headline, scrobble and rate-limit
+    pairs remain. A fixed-set unit test asserts the identities.
+  - [x] **Admission/pool decision recorded from measured evidence:** keep one
+    total connection budget plus per-stage worker admission; **do not split the
+    pool**. The 600K mixed-load pair elapsed 127.26 s at pool 8 and 127.25 s at
+    pool 32 with zero HTTP errors (no throughput gain from a split), the final
+    mixed-load tails are inside the declared regression budget, and a split
+    would break the explicit total budget needed by small installations.
+    Rejected alternatives are already recorded in `PERF-REMEDIATION-RESULTS.md`
+    §6 (fixed pool split, nested permit dependencies).
+  - [ ] HTTP request-scoped hold time is represented by the global
+    `pool_acquire` counter plus the admin-headline/search-snapshot/rate-limit
+    class timers, not by a per-route wrapper. Treat the remaining interactive
+    route classes as instrumented-at-the-pool-boundary, not per route.
+  - [ ] Run the new classes under a representative mixed load and record their
+    acquisition/hold percentiles (instrumentation exists; no post-change run).
+  - [ ] Finish the blocking-work audit: confirm no write transaction spans
+    filesystem/subprocess work anywhere else and that every moved-out read
+    revalidates work-item state, lease and bindings.
 - **Acceptance:** measured acquisition wait separated from SQL time for all
   classes; an evidence-backed admission/pool decision; no transaction holds a
   connection across blocking work.
@@ -195,7 +240,7 @@ acceptance evidence the package cannot close without. Spec sections are in
 - **Acceptance:** no unbounded blocking queue; permits held until work actually
   stops; saturation/cancellation tests; measured concurrency defaults.
 
-### RM-13 — Ordered search hydration and reusable readers/writers — PARTIAL
+### RM-13 — Ordered search hydration and reusable readers/writers — DONE
 - **Exists:** ordered batched outbox hydration; bounded reader registry;
   lifecycle metrics.
 - **Status: DONE (2026-11-28).** Decision: keep short-lived rebuild writers and
@@ -209,7 +254,7 @@ acceptance evidence the package cannot close without. Spec sections are in
   Multi-process retirement safety is covered by the projection lease and the
   concurrent-activation regression (`perf_outbox_concurrent`, final source).
 
-### RM-14 — Production search rebuild efficiency — PARTIAL
+### RM-14 — Production search rebuild efficiency — DONE
 - **Exists:** admitted rebuild pages; commit bounds (10k docs / 2 s); matched
   baseline/final 600K rebuild; commit/activation/catch-up instrumentation.
 - **Status: DONE (2026-11-28).** Measured on the final source: 35.21 s rebuild
@@ -224,7 +269,7 @@ acceptance evidence the package cannot close without. Spec sections are in
   rebuild tests; the remaining limitation is that concurrent multi-process
   contention beyond four in-process clients is not measured.
 
-### RM-15 — Interactive query, aggregation, ACL, serialization — PARTIAL
+### RM-15 — Interactive query, aggregation, ACL, serialization — DONE
 - **Exists:** admin aggregate and OpenSubsonic rating/allocation improvements;
   `EXPLAIN` samples; admin-stats A/B; bounded mixed-load admin/browse
   percentiles.
@@ -240,7 +285,7 @@ acceptance evidence the package cannot close without. Spec sections are in
   is recorded as a limitation. Wire contracts, ordering and pagination are
   unchanged (compatibility suites green in the nightly).
 
-### RM-17 — Streaming, auth lookups, blacklist, artwork — PARTIAL
+### RM-17 — Streaming, auth lookups, blacklist, artwork — DONE
 - **Exists:** content-aware artwork cache with invalidation; blacklist
   singleflight; buffered streaming; combined auth lookup; streaming TTFB under
   ingestion.
@@ -258,7 +303,7 @@ acceptance evidence the package cannot close without. Spec sections are in
   measured (documented limitation). Native/OpenSubsonic/Jellyfin streaming,
   ACL and compatibility suites are green in the nightly.
 
-### RM-18 — Batched evidence/identity writes and recommendation decision — PARTIAL
+### RM-18 — Batched evidence/identity writes and recommendation decision — DONE
 - **Exists:** batched evidence writes; recommendation lock-order changes;
   `perf_recommendation_contention` passes (`recommendation_consistency=exact`,
   3 scenarios, 8 workers).
@@ -276,7 +321,7 @@ acceptance evidence the package cannot close without. Spec sections are in
   primary-credit play count (a lost or starved update fails the test). Lock
   sampling is approximate; network and PostgreSQL CPU are excluded.
 
-### RM-19 — Set-based release merge/split — PARTIAL
+### RM-19 — Set-based release merge/split — DONE
 - **Exists:** set-based merge/split; `perf_large_release_merge` green at 1K
   (merge 3.56 s / split 6.86 s) and 10K (12.22 s / 9.57 s) with constant 36/24
   statements and full evidence round-trip; `catalog_merge_split` functional
@@ -569,26 +614,172 @@ performance improvement.
 `pg_stat_statements`/`auto_explain`, the merge is one transaction call with no
 phase spans, and the two data points are single-sample separate fixtures.
 
-**Exact next action:** add bounded `tracing` phase spans (lock/eligibility,
-move, observations, evidence, assets, aggregates, outbox/seeds) inside
-`merge_releases`/`merge_release_in_transaction`, print them from the benchmark
-(env-gated), run 1K and 10K on fresh owned fixtures, and attribute the fixed
-component. Fix only avoidable duplication; record necessary correctness cost
-separately. Acceptance: a measured phase breakdown and either a fix with
-before/after or a justified "necessary cost" decision.
+**Measured phase attribution (2026-11-28, 600K-Track owned fixture):**
+`perf_large_release_merge` 1K merge = 3,370.2 ms / 36 statements. Bounded phase
+spans inside `merge_release_in_transaction`:
 
-**Status:** OPEN (investigation started; no code change yet).
+| Phase | Elapsed | Share |
+| --- | --- | --- |
+| `move_tracks` (the `UPDATE tracks ... release_id` plus its triggers) | 3,183.0 ms | 94.4% |
+| `assets` | 39.8 ms | 1.2% |
+| `outbox` (release + Track revisions) | 15.1 ms | 0.4% |
+| `evidence` (immutable merge event JSON) | 7.1 ms | 0.2% |
+| `aggregates` | 5.9 ms | 0.2% |
 
-### 10.5 Execution order
+The SQLx slow-statement stream shows the same picture and isolates the fixed
+component: the 1,000-row `UPDATE tracks` took 3.179 s, while a **one-row**
+`UPDATE tracks ... release_id` in the same fixture took 1.88 s. Split is the
+same shape (6,621.3 ms; the Track restore `UPDATE` is 3.538 s and the
+`UPDATE releases SET status='active'` genre-status recount is 2.963 s).
 
-1. WO-M (bounded, explicitly requested) — close with phase attribution.
-2. WO-C1 → WO-C6 custody in order, each with independent review; then
-   WO-C7 (RM-07), WO-C8 (RM-06), WO-C9–WO-C12.
+**Trigger attribution (2026-11-28, 60K-Track owned fixture, same 1,000-Track
+move, cache-warm second run):** evidence, provenance and limitations in
+`tests/performance/merge-split-1k-attribution-2026-11-28.md`.
+
+- all triggers: 423.3 ms
+- statement-level genre maintenance disabled: 139.0 ms → genre maintenance is
+  284.3 ms (**67%**)
+- genre + recommendation statement triggers disabled: 129.0 ms → the
+  recommendation statement trigger is ~10 ms
+
+The genre component scales with the *surface partition*, not the moved Tracks:
+`refresh_catalog_genre_aggregate_keys` filters
+`catalog_genre_terms(surface, display_value)` but no index leads with both
+columns, so PostgreSQL scans the whole `surface='native'`/`'opensubsonic'`
+partition (1.2M rows at 600K Tracks) per affected key. That is why a one-row
+Track move also costs ~1.9 s. The per-moved-Track remainder is ~0.13 ms.
+
+**Decision: necessary correctness cost, with one separate avoidable item.**
+The baseline did not run this work at all (it left 2,000 stale genre-term rows),
+so the regression is the cost of the RM-03/RM-04 correctness fix, not duplicated
+work. The recount-by-key protocol (advisory lock then recount that observes
+committed concurrent work) is the accepted RM-04 design; replacing it with a
+delta update would be a correctness-protocol change and is not done here. The
+avoidable part is the missing predicate-aligned index:
+`catalog_genre_terms(surface, display_value)`. It cannot remove the dominant
+`Rock`-key scan (that key spans ~70% of the catalog) but removes the
+whole-partition scan for every rare key and reduces the common-key scan to the
+key's own rows. It is a bounded additive migration (with a populated-upgrade
+check and a plan regression) and is tracked as a follow-up work order rather
+than smuggled into this investigation.
+
+**Status:** CLOSED for WO-M. Phase breakdown measured; no avoidable duplication
+found in the move path; the correctness cost is recorded; the index follow-up is
+identified with its own acceptance criteria and is not a regression fix.
+
+### 10.5 Execution order (superseded by §10.7 on 2026-11-28)
+
+1. WO-M (bounded, explicitly requested) — CLOSED in §10.4.
+2. Specification packages first: RM-09, RM-10, RM-07, RM-12, then RM-06/RM-11
+   to the extent the established integrity and custody invariants allow.
 3. RM-20 closeout: upgrade/repair rehearsal through the final migration,
    documentation/traceability reconciliation, `do-prechecks.py`, final gates
    on the integrated candidate, final report.
+4. Custody WO-C1–WO-C6 is **not** in this execution order. It remains
+   `INACTIVE` under §10.6 until ADR-0221/ADR-0222 are accepted and the operator
+   decision on the pre-existing deletion ordering is made.
 
 Focused verification per work order; reserve the full three-gate run for the
-integrated candidate. Current HEAD `b4ad82d` has **not** passed the nightly gate
-(the last green nightly predates the RM-18 production change); record that
-fact and rerun it only at the next integrated checkpoint.
+integrated candidate. HEAD `080a619` plus the recorded working-tree changes has
+**not** passed the nightly gate; rerun it only at the next integrated
+checkpoint.
+
+### 10.6 Release boundary: original program vs protected custody (2026-11-28)
+
+This section is the scope-resolution record requested after the operation grew
+past its original specification. It distinguishes the 21 specification packages
+from the post-specification custody workstream and records what may and may not
+be activated without an explicit decision.
+
+**Verified repository state for this record:** `main` at `080a619` with two
+uncommitted benchmark-instrumentation files
+(`crates/melodee-persistence/src/catalog.rs` phase spans and the merge
+benchmark's debug layer). Custody code is present but dormant:
+`crates/melodee-ingestion/src/custody.rs` states in its module docs that the
+operations are "not yet wired into production acquisition or purge"; the
+protected-stage, protected-publication, retained-baseline and custody-hash
+spool tables/functions are referenced only by that module and each other;
+`provision_legacy_lifecycle_once` has no non-test caller; `inbound_custody` is
+referenced only to detect and refuse protected staging. The retained-source
+recheck loop is scheduled in `scheduler.rs`, but obligations are created only by
+the dormant `protected_publication` path, so the loop has no production inputs.
+The one live custody-adjacent behavior is fail-closed refusal: generic
+acquisition/lease rejects protected-reserved work, pre-catalog purge refuses a
+non-empty inbound occurrence with `source_custody_required`, and the guarded
+empty-occurrence purge is implemented.
+
+| Work order | Concrete cause | Affects current production behavior? | Prevents data loss / unsafe deletion / stale-worker publication? | Needed for a specific performance optimization? | New inactive functionality? | Safe to leave inactive? |
+| --- | --- | --- | --- | --- | --- | --- |
+| WO-C1 guarded owner in production readers/writers | Review of the bounded staging/publication path: a DB claim or lease cannot prove filesystem immutability, and a stale same-worker reacquisition could mint a receipt and clean a source | No — protected work is refused, not processed | Yes — stale-worker publication and source cleanup on stale reacquisition | No | Yes (protected custody mode) | Yes: no production path creates protected reservations |
+| WO-C2 protected stage publication (ADR-0221) | Same review; ADR-0221 is **Proposed** | No (dormant) | Yes — prevents accepting a stage proof whose bytes a live writer can still change | No | Yes | Yes, while ADR-0221 remains Proposed |
+| WO-C3 production-reachable retained-source obligations | The retained recheck loop exists, but only dormant protected publication creates obligations; NULL-baseline and immutable-trigger paths are unreachable, and the changed-source request cannot fire | No (loop has no inputs) | Prevents silently dropping a changed source and prevents a changed source being purged | No | Partly — the changed-source request/reason transition is committed but unreachable | Yes |
+| WO-C4 per-entry intent/quarantine + two-name recovery | Verified deletion needs a per-object proof, not a path or inode comparison | No (private/dormant) | Yes — prevents unlinking a name that no longer matches the verified object | No | Yes | Yes |
+| WO-C5 deletion/repair orchestration with durable pre-filesystem reservations | **Pre-existing behavior:** `admin_catalog_delete::execute_release_hard_delete` removes Release storage (`remove_release_files`) and then commits `hard_delete_releases`; Release Review deletion calls `delete_release_storage` and then `complete_destructive_action`. A commit failure or a concurrent reference change can therefore leave catalog rows pointing at removed media | **Yes** | Yes — partial media loss and deletion of media another reference may need | No | Partly (the reservation orchestrator is dormant) | **No** for the ordering defect: it is pre-existing, not introduced by this program. Activating the fix is the ADR-0222 decision below |
+| WO-C6 shared non-fabricable capability / private executor (ADR-0222) | Mechanism that makes WO-C5 provable; no caller-supplied flag may authorize deletion | No (dormant) | Yes | No | Yes | Yes |
+
+**Decisions that require explicit user authorization**
+
+1. **ADR-0221 / ADR-0222 acceptance.** Both are `Proposed`. Nothing in this
+   repository may activate protected custody, protected stage publication, or
+   verified deletion orchestration until the ADRs are accepted. This is an
+   architectural acceptance decision, not an implementation or measurement
+   decision, and the agent will not accept them to close a checklist.
+2. **The pre-existing deletion-ordering defect (WO-C5).** It is real and
+   currently reachable, but it predates this program and a full fix is the
+   ADR-0222 capability. The user must choose one of:
+   (a) authorize a minimal, ADR-independent durable-intent protocol for the two
+       live delete paths (reserve/commit intent, then filesystem work, then
+       completion, with retry) without activating verity/quarantine custody; or
+   (b) accept it as a pre-existing product defect outside this performance
+       release, tracked as its own work item, so the performance program can
+       close.
+   Neither option is chosen here; the requirement is surfaced, not silently
+   deferred or silently activated.
+3. **Production custody activation** additionally requires an external
+   maintenance fence and operator attestations that every old writer has
+   terminated. That is operator-authorized production activity and is out of
+   scope for this repository session.
+
+**Consequences for the ledger.** The 21 specification packages are the
+completion boundary for the performance program. The custody work orders are
+reported as `INACTIVE (Proposed ADR / operator decision)` and do not block
+`RM-20`, except for the explicit WO-C5 choice above.
+
+### 10.7 Session record (2026-11-28): scope resolution and completion boundary
+
+**Git state:** `main` at `080a619`; working tree contains the changes below and
+the RM-10 metric additions, the RM-09 concurrent-import test, the WO-M phase
+spans, and the corrected status documents. Nothing was pushed, published or
+deployed.
+
+**Delivered in this session**
+
+- Corrected the ledger: 14 specification packages DONE, 7 PARTIAL; the stale
+  `PARTIAL` headings and "7 of 21" terminal count are gone; custody is a
+  separate workstream.
+- WO-M: measured 1K merge phase breakdown and trigger attribution; justified
+  the cost as necessary RM-03/RM-04 correctness maintenance and identified the
+  missing `(surface, display_value)` genre index as the one bounded, avoidable
+  follow-up.
+- RM-09: completed the mutation/concurrency audit with no missing writer; added
+  the concurrent-import durable-seed regression.
+- RM-10: added fixed-cardinality acquire+hold instrumentation for the remaining
+  claim classes through one helper; recorded the single-pool/no-split admission
+  decision from the measured mixed-load pair.
+
+**Not delivered in this session (explicit, not silently deferred)**
+
+- RM-07 rolling refill: not implemented. The batch barrier remains in
+  inspection/normalization/validation/publication.
+- RM-12 process-wide admission for every expensive class and saturation
+  defaults: not implemented beyond the existing four-permit ingestion bound.
+- RM-06 integrated bounded traversal/durable staging, and RM-11 operation
+  inventory/amplification removal: not implemented.
+- RM-09 absent/rare/common plan selectivity and final integrated rerun.
+- RM-10 post-change mixed-load measurement for the new classes and the
+  blocking-work audit.
+- RM-20 closeout and all final gates.
+- Custody WO-C1–WO-C6: untouched; `INACTIVE`.
+
+These are the only remaining specification items; they are ordered in §10.5 and
+must not be reported as done.

@@ -45,10 +45,26 @@ pub enum Metric {
     ScrobbleWaitAdmission,
     RateLimitAcquire,
     RateLimitHold,
+    NormalizationClaimAcquire,
+    NormalizationClaimHold,
+    ValidationClaimAcquire,
+    ValidationClaimHold,
+    PublicationClaimAcquire,
+    PublicationClaimHold,
+    PolicyClaimAcquire,
+    PolicyClaimHold,
+    SearchRebuildAcquire,
+    SearchRebuildHold,
+    EnrichmentClaimAcquire,
+    EnrichmentClaimHold,
+    PodcastDownloadAcquire,
+    PodcastDownloadHold,
+    RetainedClaimAcquire,
+    RetainedClaimHold,
 }
 
 impl Metric {
-    pub const ALL: [Metric; 24] = [
+    pub const ALL: [Metric; 40] = [
         Metric::SearchOutboxPass,
         Metric::SearchRebuildPage,
         Metric::SearchQuery,
@@ -73,6 +89,22 @@ impl Metric {
         Metric::ScrobbleWaitAdmission,
         Metric::RateLimitAcquire,
         Metric::RateLimitHold,
+        Metric::NormalizationClaimAcquire,
+        Metric::NormalizationClaimHold,
+        Metric::ValidationClaimAcquire,
+        Metric::ValidationClaimHold,
+        Metric::PublicationClaimAcquire,
+        Metric::PublicationClaimHold,
+        Metric::PolicyClaimAcquire,
+        Metric::PolicyClaimHold,
+        Metric::SearchRebuildAcquire,
+        Metric::SearchRebuildHold,
+        Metric::EnrichmentClaimAcquire,
+        Metric::EnrichmentClaimHold,
+        Metric::PodcastDownloadAcquire,
+        Metric::PodcastDownloadHold,
+        Metric::RetainedClaimAcquire,
+        Metric::RetainedClaimHold,
     ];
 
     const fn index(self) -> usize {
@@ -101,6 +133,22 @@ impl Metric {
             Metric::ScrobbleWaitAdmission => 21,
             Metric::RateLimitAcquire => 22,
             Metric::RateLimitHold => 23,
+            Metric::NormalizationClaimAcquire => 24,
+            Metric::NormalizationClaimHold => 25,
+            Metric::ValidationClaimAcquire => 26,
+            Metric::ValidationClaimHold => 27,
+            Metric::PublicationClaimAcquire => 28,
+            Metric::PublicationClaimHold => 29,
+            Metric::PolicyClaimAcquire => 30,
+            Metric::PolicyClaimHold => 31,
+            Metric::SearchRebuildAcquire => 32,
+            Metric::SearchRebuildHold => 33,
+            Metric::EnrichmentClaimAcquire => 34,
+            Metric::EnrichmentClaimHold => 35,
+            Metric::PodcastDownloadAcquire => 36,
+            Metric::PodcastDownloadHold => 37,
+            Metric::RetainedClaimAcquire => 38,
+            Metric::RetainedClaimHold => 39,
         }
     }
 
@@ -131,6 +179,22 @@ impl Metric {
             Metric::ScrobbleWaitAdmission => "scrobble_wait_admission",
             Metric::RateLimitAcquire => "rate_limit_acquire",
             Metric::RateLimitHold => "rate_limit_hold",
+            Metric::NormalizationClaimAcquire => "normalization_claim_acquire",
+            Metric::NormalizationClaimHold => "normalization_claim_hold",
+            Metric::ValidationClaimAcquire => "validation_claim_acquire",
+            Metric::ValidationClaimHold => "validation_claim_hold",
+            Metric::PublicationClaimAcquire => "publication_claim_acquire",
+            Metric::PublicationClaimHold => "publication_claim_hold",
+            Metric::PolicyClaimAcquire => "policy_claim_acquire",
+            Metric::PolicyClaimHold => "policy_claim_hold",
+            Metric::SearchRebuildAcquire => "search_rebuild_acquire",
+            Metric::SearchRebuildHold => "search_rebuild_hold",
+            Metric::EnrichmentClaimAcquire => "enrichment_claim_acquire",
+            Metric::EnrichmentClaimHold => "enrichment_claim_hold",
+            Metric::PodcastDownloadAcquire => "podcast_download_acquire",
+            Metric::PodcastDownloadHold => "podcast_download_hold",
+            Metric::RetainedClaimAcquire => "retained_claim_acquire",
+            Metric::RetainedClaimHold => "retained_claim_hold",
         }
     }
 }
@@ -163,12 +227,41 @@ impl Drop for HoldTimer {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+/// Check out one pooled connection for a claim and record acquisition wait for
+/// a fixed workload class. The returned `HoldTimer` records the claim's hold
+/// time when the claim transaction is dropped, including error and
+/// cancellation paths. `Metric::PoolAcquire` still records the global checkout
+/// so the unclassified/HTTP remainder stays observable.
+pub async fn acquire_for_claim(
+    pool: &sqlx::PgPool,
+    acquire: Metric,
+    hold: Metric,
+) -> Result<(sqlx::pool::PoolConnection<sqlx::Postgres>, HoldTimer), sqlx::Error> {
+    let started = Instant::now();
+    let connection = pool.acquire().await?;
+    let duration = started.elapsed();
+    observe(Metric::PoolAcquire, duration);
+    observe(acquire, duration);
+    Ok((connection, HoldTimer::new(hold)))
+}
+
+#[derive(Debug, Clone)]
 struct MetricsState {
     buckets: [[u64; BUCKETS]; METRICS],
     count: [u64; METRICS],
     sum_micros: [u64; METRICS],
     max_micros: [u64; METRICS],
+}
+
+impl Default for MetricsState {
+    fn default() -> Self {
+        Self {
+            buckets: [[0; BUCKETS]; METRICS],
+            count: [0; METRICS],
+            sum_micros: [0; METRICS],
+            max_micros: [0; METRICS],
+        }
+    }
 }
 
 static STATE: Mutex<MetricsState> = Mutex::new(MetricsState {
@@ -357,8 +450,57 @@ mod tests {
                 "scrobble_wait_admission",
                 "rate_limit_acquire",
                 "rate_limit_hold",
+                "normalization_claim_acquire",
+                "normalization_claim_hold",
+                "validation_claim_acquire",
+                "validation_claim_hold",
+                "publication_claim_acquire",
+                "publication_claim_hold",
+                "policy_claim_acquire",
+                "policy_claim_hold",
+                "search_rebuild_acquire",
+                "search_rebuild_hold",
+                "enrichment_claim_acquire",
+                "enrichment_claim_hold",
+                "podcast_download_acquire",
+                "podcast_download_hold",
+                "retained_claim_acquire",
+                "retained_claim_hold",
             ]
         );
+    }
+
+    #[test]
+    fn claim_acquisition_records_global_and_class_wait() {
+        // A missing pool is not required: use a real single-connection pool
+        // against the configured test database is out of scope for this unit
+        // test, so assert the fixed identities are distinct and class-scoped.
+        let classes = [
+            (
+                Metric::NormalizationClaimAcquire,
+                Metric::NormalizationClaimHold,
+            ),
+            (Metric::ValidationClaimAcquire, Metric::ValidationClaimHold),
+            (
+                Metric::PublicationClaimAcquire,
+                Metric::PublicationClaimHold,
+            ),
+            (Metric::PolicyClaimAcquire, Metric::PolicyClaimHold),
+            (Metric::SearchRebuildAcquire, Metric::SearchRebuildHold),
+            (Metric::EnrichmentClaimAcquire, Metric::EnrichmentClaimHold),
+            (Metric::PodcastDownloadAcquire, Metric::PodcastDownloadHold),
+            (Metric::RetainedClaimAcquire, Metric::RetainedClaimHold),
+        ];
+        for (acquire, hold) in classes {
+            observe(acquire, std::time::Duration::from_micros(10));
+            observe(hold, std::time::Duration::from_micros(10));
+        }
+        let snapshot = snapshot();
+        for (acquire, hold) in classes {
+            assert!(snapshot.iter().any(|entry| entry.name == acquire.as_str()));
+            assert!(snapshot.iter().any(|entry| entry.name == hold.as_str()));
+            assert_ne!(acquire.as_str(), hold.as_str());
+        }
     }
 
     #[test]

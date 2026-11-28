@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Acquire as _, PgPool, Postgres, Transaction};
 use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
@@ -386,7 +386,13 @@ impl ProviderEnrichmentStore {
             return Err(ProviderEnrichmentStoreError::InvalidRequest);
         }
         let lease_seconds = lease_seconds.clamp(5, 900);
-        let mut tx = pool.begin().await?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::EnrichmentClaimAcquire,
+            crate::metrics::Metric::EnrichmentClaimHold,
+        )
+        .await?;
+        let mut tx = (&mut *connection).begin().await?;
         let lease_expires_at = now + Duration::seconds(lease_seconds);
         // ADR-0212: the claim statement re-checks current eligibility, so work
         // enqueued before a disablement is never dispatched, and it only scans

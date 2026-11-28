@@ -1925,7 +1925,13 @@ impl WorkItemStore {
         protected_allowed: bool,
     ) -> Result<Vec<ProtectedClaim>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
-        let mut tx = pool.begin().await?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::NormalizationClaimAcquire,
+            crate::metrics::Metric::NormalizationClaimHold,
+        )
+        .await?;
+        let mut tx = (&mut *connection).begin().await?;
         // Select candidates with row locks (skipped when locked by rivals).
         // Only normalizing items with expired/no leases are eligible.
         let candidates = crate::processing::claim_candidates(
@@ -2013,7 +2019,13 @@ impl WorkItemStore {
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
-        let mut tx = pool.begin().await?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::ValidationClaimAcquire,
+            crate::metrics::Metric::ValidationClaimHold,
+        )
+        .await?;
+        let mut tx = (&mut *connection).begin().await?;
         let candidates =
             crate::processing::claim_candidates(&mut tx, "validation", config, now, false).await?;
 
@@ -2499,7 +2511,13 @@ impl WorkItemStore {
         now: OffsetDateTime,
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let lease_expiry = now + config.lease_duration;
-        let mut tx = pool.begin().await?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::PublicationClaimAcquire,
+            crate::metrics::Metric::PublicationClaimHold,
+        )
+        .await?;
+        let mut tx = (&mut *connection).begin().await?;
         let candidates =
             crate::processing::claim_candidates(&mut tx, "publication", config, now, false).await?;
 

@@ -427,7 +427,13 @@ impl SearchProjectionStore {
             ));
         }
         let expires_at = checked_expiry(now, lease_duration)?;
-        let mut tx = pool.begin().await?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::SearchRebuildAcquire,
+            crate::metrics::Metric::SearchRebuildHold,
+        )
+        .await?;
+        let mut tx = (&mut *connection).begin().await?;
         let row = sqlx::query(
             "SELECT job_id, status, generation_id
              FROM search_rebuild_jobs

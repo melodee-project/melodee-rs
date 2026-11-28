@@ -359,10 +359,17 @@ impl WorkItemStore {
             ));
         }
         let millis = duration_millis(lease_duration, MAX_LEASE_MILLIS)?;
+        let (mut connection, _hold) = crate::metrics::acquire_for_claim(
+            pool,
+            crate::metrics::Metric::RetainedClaimAcquire,
+            crate::metrics::Metric::RetainedClaimHold,
+        )
+        .await
+        .map_err(WorkStoreError::from)?;
         let rows: Vec<ClaimedRow> = sqlx::query_as(
             "WITH candidate AS (SELECT work_item_id,next_reobserve_at AS original_due FROM inbound_retained_sources WHERE status='active' AND (source_path_format=1 OR strpos(source_path,chr(65533))=0) AND next_reobserve_at<=statement_timestamp() AND (lease_token IS NULL OR lease_expires_at<=statement_timestamp()) ORDER BY next_reobserve_at,work_item_id LIMIT $2 FOR UPDATE SKIP LOCKED) UPDATE inbound_retained_sources r SET lease_owner=$1,lease_token=gen_random_uuid(),lease_expires_at=statement_timestamp()+($3::bigint*interval '1 millisecond'),next_reobserve_at=statement_timestamp()+($3::bigint*interval '1 millisecond'),updated_at=clock_timestamp() FROM candidate c WHERE r.work_item_id=c.work_item_id RETURNING r.work_item_id,r.source_library_id,r.baseline_id,CASE WHEN r.baseline_id IS NULL THEN r.baseline_directory_turn WHEN r.baseline_file_due_at<=statement_timestamp() AND COALESCE(r.baseline_directory_blocked_until<=statement_timestamp(),true) AND EXISTS(SELECT 1 FROM inbound_retained_baseline_directories d WHERE d.baseline_id=r.baseline_id AND d.next_scan_at<=statement_timestamp()) THEN r.baseline_directory_turn WHEN COALESCE(r.baseline_directory_blocked_until<=statement_timestamp(),true) AND EXISTS(SELECT 1 FROM inbound_retained_baseline_directories d WHERE d.baseline_id=r.baseline_id AND d.next_scan_at<=statement_timestamp()) THEN true ELSE false END AS baseline_directory_turn,r.source_path,r.source_path_format,r.source_generation,r.content_digest,r.lease_token,r.lease_expires_at,c.original_due AS next_reobserve_at",
         ).bind(worker.as_str()).bind(i64::try_from(limit).map_err(|_| WorkStoreError::InvalidRequest("invalid retained-source claim limit"))?).bind(millis)
-         .fetch_all(pool).await?;
+         .fetch_all(&mut *connection).await?;
         let mut leases: Vec<_> = rows
             .into_iter()
             .map(|row| RetainedSourceLease {
