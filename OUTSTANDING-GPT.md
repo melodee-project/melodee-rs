@@ -418,3 +418,41 @@ packages/17 findings, public docs/`PERFORMANCE.md`/ADRs, upgrade+repair
 rehearsal through the final migration, final gates, final report). Four RM-00
 rows cannot have baseline pairs with current harnesses; keep them final-only
 rather than inventing a comparison.
+
+## Recovery checkpoint 3 (final for this session)
+
+**Git state:** `main` at the commit containing this checkpoint; clean tree. The
+thirteen RM-00 workloads are measured (see
+`tests/performance/final-matrix-2026-11-27.md`), and the final integrated tree
+passes `make check-nightly` (exit 0, `5e4fae1`, log
+`.local-dev/check-nightly-green-20261127-174450.log`: 2,475 tests/0 failures,
+6/6 historical migration tests, `cargo deny` all-ok). `make check` and
+`make check-fast` passed earlier on the same line of work.
+
+**Fixed in this session beyond the workload harness work:** an intermittent
+podcast publication race (P1 class). `reconcile_owned_files` could delete a
+`.media` file in the window between another worker's rename and the row's
+`local_path` commit. A live download lease now protects the final name during
+that window; the stored error keeps its source and names the failed operation
+and owned file. Evidence: the previously ~1-in-3-failing concurrency test passed
+18/18 consecutive fresh-database runs; podcast suites 3/3, 5/5 (twice), 1/1,
+11/11; strict clippy clean. No API/schema/retention semantics changed.
+
+**Remaining program work (unchanged in scope):** custody P0 items 2–8
+(guarded owner against production stage readers/writers, protected stage
+publication under Proposed ADR-0221, production-reachable retained-source
+obligations, per-entry intent/quarantine fault cases and two-name recovery,
+deletion/repair orchestration with pre-filesystem reservations, shared
+capability under Proposed ADR-0222); the partial packages in the ledger table
+(RM-06, RM-07, RM-09–RM-15, RM-17, RM-18; RM-19 is now measured and RM-00 is
+measured); and RM-20 closeout (reconcile 21 packages/17 findings, public docs/
+`PERFORMANCE.md`/ADRs, upgrade+repair rehearsal through the final migration,
+`python3 scripts/do-prechecks.py`, final report). Four RM-00 rows are final-only
+because the baseline harness cannot drive them; do not describe them as
+before/after.
+
+**Operational notes for the next agent:** regenerate the CLI proof after every
+commit or `apps/crates` edit (it binds `commit == HEAD` plus the source
+fingerprint). Ingestion-driven workloads require `--without-acl-placeholders`.
+The baseline worktree at `../melodee-rs-perf-baseline-a0979cd` carries only
+benchmark harness/test additions; launch baseline fixtures from that worktree.

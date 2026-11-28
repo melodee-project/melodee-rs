@@ -2082,3 +2082,17 @@ Additional current execution state:
   workspace `cargo clippy --all-targets --all-features -D warnings` is clean.
   No API, schema, retention or lease semantics changed; the regression is the
   existing concurrency test that reproduced the defect before the fix.
+- Handoff restart (cont.): **`make check-nightly` completed green on the final
+  integrated tree after all workload and podcast-race changes** — exit 0 at
+  `5e4fae19e804dcf7eb56aa7c64f16d10d9192679`, clean worktree, no competing
+  Cargo process. Log:
+  `.local-dev/check-nightly-green-20261127-174450.log`. Evidence inside: 619
+  Python tests, Admin UI gate, `cargo fmt --check`, strict workspace
+  `clippy -D warnings`, script-worker build, workspace lib/bin tests, the
+  database-free integration crates, all PostgreSQL-backed suites (`cargo test
+  --workspace --all-features` under `scripts/test_database.py`: 208
+  `tests/*.rs` binaries, 252 `test result: ok` lines, **2,475 tests passed, 0
+  failed**), the six ignored historical-schema migration tests (6/6 in
+  23.2 s), and `cargo deny check` (`advisories ok, bans ok, licenses ok,
+  sources ok`). No suite was skipped, weakened or filtered to obtain this
+  result.
