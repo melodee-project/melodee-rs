@@ -6658,8 +6658,19 @@ mod tests {
             topology[1].pins.last().expect("same root ancestor")
         ));
         let fd_count = || {
+            // The test binary runs its cases concurrently in one process, so a raw
+            // `/proc/self/fd` count includes unrelated cases' descriptors and races with
+            // them. Count only descriptors resolving inside this case's fixture, which is
+            // what "no second full topology" is about.
+            let fixture_root = fixture.path();
             fs::read_dir("/proc/self/fd")
                 .expect("proc fd directory")
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    fs::read_link(entry.path())
+                        .map(|target| target.starts_with(fixture_root))
+                        .unwrap_or(false)
+                })
                 .count()
         };
         let baseline = fd_count();

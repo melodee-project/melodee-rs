@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -20,9 +21,23 @@ UNIT_TEST_COMMAND = (
     "--bins",
 )
 
+# Suites assert on process-global state (tool admission budget, descriptor
+# counts, cumulative metric counters), so parallel libtest threads in the same
+# process perturb each other's baselines.
+RUST_TEST_ENVIRONMENT = {"RUST_TEST_THREADS": "1"}
+
 
 def run(command: list[str] | tuple[str, ...]) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
+
+
+def run_rust_tests(command: list[str] | tuple[str, ...]) -> None:
+    subprocess.run(
+        command,
+        cwd=ROOT,
+        check=True,
+        env={**os.environ, **RUST_TEST_ENVIRONMENT},
+    )
 
 
 def command_version(command: str) -> str:
@@ -72,8 +87,8 @@ def bootstrap() -> None:
     run(["cargo", "fmt", "--all", "--check"])
     print("Running database-free Rust unit tests (PostgreSQL integration tests excluded).")
     run(["cargo", "build", "--locked", "-p", "melodee-application", "--bin", "melodee-script-worker"])
-    run(UNIT_TEST_COMMAND)
-    run(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
+    run_rust_tests(UNIT_TEST_COMMAND)
+    run_rust_tests(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
     if shutil.which("node") and (shutil.which("pnpm") or shutil.which("npx")):
         for project in ("admin-ui", "docs"):
             run([sys.executable, "scripts/node_toolchain.py", "--project", project])

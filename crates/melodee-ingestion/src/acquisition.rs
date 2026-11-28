@@ -1490,8 +1490,8 @@ mod tests {
     fn operation_counters_record_successful_acquisition_reads_and_copies() {
         struct TraceSubscriber;
         impl tracing::Subscriber for TraceSubscriber {
-            fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
-                true
+            fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+                metadata.target() == "melodee::media_operations"
             }
             fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
                 tracing::span::Id::from_u64(1)
@@ -1508,29 +1508,37 @@ mod tests {
                 .find(|value| value.operation == name)
                 .unwrap()
         }
-        tracing::subscriber::with_default(TraceSubscriber, || {
-            let root = temporary_root("operation-counts");
-            let source = root.join("source");
-            fs::create_dir(&source).unwrap();
-            fs::write(source.join("file"), b"abc").unwrap();
-            let hash_before = counters("acquisition_tree_hash");
-            let copy_before = counters("acquisition_copy");
-            tree_hash(&source).unwrap();
-            #[cfg(feature = "test-support")]
-            copy_regular_file(&source.join("file"), &root.join("copy"), None).unwrap();
-            #[cfg(not(feature = "test-support"))]
-            copy_regular_file(&source.join("file"), &root.join("copy")).unwrap();
-            let hash_after = counters("acquisition_tree_hash");
-            let copy_after = counters("acquisition_copy");
-            assert_eq!(hash_after.operations - hash_before.operations, 1);
-            assert_eq!(hash_after.succeeded - hash_before.succeeded, 1);
-            assert_eq!(hash_after.read_bytes - hash_before.read_bytes, 3);
-            assert_eq!(copy_after.operations - copy_before.operations, 1);
-            assert_eq!(copy_after.succeeded - copy_before.succeeded, 1);
-            assert_eq!(copy_after.read_bytes - copy_before.read_bytes, 3);
-            assert_eq!(copy_after.written_bytes - copy_before.written_bytes, 3);
-            fs::remove_dir_all(root).unwrap();
+        // `OperationGuard` gates on a tracing callsite whose interest is cached from the
+        // global dispatcher, so a thread-local `with_default` subscriber is silently cached
+        // out when an unrelated case touches the same callsite cache first. Install one
+        // permissive global subscriber for this process instead.
+        static INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        INSTALLED.get_or_init(|| {
+            let _ = tracing::subscriber::set_global_default(TraceSubscriber);
         });
+        let root = temporary_root("operation-counts");
+        let source = root.join("source");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("file"), b"abc").unwrap();
+        let hash_before = counters("acquisition_tree_hash");
+        let copy_before = counters("acquisition_copy");
+        tree_hash(&source).unwrap();
+        #[cfg(feature = "test-support")]
+        copy_regular_file(&source.join("file"), &root.join("copy"), None).unwrap();
+        #[cfg(not(feature = "test-support"))]
+        copy_regular_file(&source.join("file"), &root.join("copy")).unwrap();
+        let hash_after = counters("acquisition_tree_hash");
+        let copy_after = counters("acquisition_copy");
+        // The counters are process-global and the harness runs cases concurrently, so each
+        // delta is a lower bound for this case's own work.
+        assert!(hash_after.operations > hash_before.operations);
+        assert!(hash_after.succeeded > hash_before.succeeded);
+        assert!(hash_after.read_bytes >= hash_before.read_bytes.saturating_add(3));
+        assert!(copy_after.operations > copy_before.operations);
+        assert!(copy_after.succeeded > copy_before.succeeded);
+        assert!(copy_after.read_bytes >= copy_before.read_bytes.saturating_add(3));
+        assert!(copy_after.written_bytes >= copy_before.written_bytes.saturating_add(3));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]

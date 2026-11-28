@@ -84,6 +84,30 @@ class DeveloperCommandTests(unittest.TestCase):
             commands,
         )
 
+    def test_rust_test_tiers_run_with_a_serial_harness(self) -> None:
+        # Suites assert on process-global state (supervised-tool admission,
+        # open descriptors, cumulative metric counters), so libtest's parallel
+        # threads let unrelated cases perturb each other's baselines.
+        serial = {"RUST_TEST_THREADS": "1"}
+        self.assertEqual(self.check.RUST_TEST_ENVIRONMENT, serial)
+        self.assertEqual(self.bootstrap.RUST_TEST_ENVIRONMENT, serial)
+        with (
+            mock.patch.object(self.check, "run") as run,
+            mock.patch.object(self.check.shutil, "which", return_value=None),
+        ):
+            self.check.run_checks("nightly")
+        rust_test_calls = [
+            call
+            for call in run.call_args_list
+            if "cargo" in call.args[0] and "test" in call.args[0]
+        ]
+        self.assertTrue(rust_test_calls)
+        for call in rust_test_calls:
+            self.assertEqual(call.kwargs["env"].get("RUST_TEST_THREADS"), "1")
+        with mock.patch.object(self.bootstrap.subprocess, "run") as spawn:
+            self.bootstrap.run_rust_tests(self.bootstrap.UNIT_TEST_COMMAND)
+        self.assertEqual(spawn.call_args.kwargs["env"]["RUST_TEST_THREADS"], "1")
+
     def test_makefile_uses_explicit_check_and_test_scope_names(self) -> None:
         lines = (ROOT / "Makefile").read_text().splitlines()
         targets = {

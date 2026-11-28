@@ -8,6 +8,7 @@ re-run the whole migration chain per test; `nightly` runs them too.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -18,17 +19,30 @@ ROOT = Path(__file__).resolve().parents[1]
 ADMIN_UI = ROOT / "admin-ui"
 DOCS = ROOT / "docs"
 
+# The Rust suites assert on process-global state — the supervised-tool
+# admission budget, open-descriptor counts and cumulative metric counters — so
+# cases that libtest runs in parallel threads perturb each other's baselines.
+# Serial execution keeps the tier deterministic; the whole workspace unit tier
+# costs a few tens of seconds more.
+RUST_TEST_ENVIRONMENT = {"RUST_TEST_THREADS": "1"}
+
 
 class CheckError(RuntimeError):
     """A requested validation mode cannot run in the current environment."""
 
 
-def run(command: list[str], *, cwd: Path = ROOT) -> None:
+def run(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
     if Path(command[0]).name in {"pnpm", "pnpm.cmd", "pnpm.exe"}:
         sys.path.insert(0, str(ROOT / "scripts"))
         import node_toolchain
+
         command = [*node_toolchain.command(cwd), *command[1:]]
-    subprocess.run(command, cwd=cwd, check=True)
+    subprocess.run(command, cwd=cwd, check=True, env=env)
+
+
+def run_rust_tests(command: list[str]) -> None:
+    """Run a Rust test tier with the deterministic serial harness."""
+    run(command, env={**os.environ, **RUST_TEST_ENVIRONMENT})
 
 
 def run_python_checks(*, include_tests: bool) -> None:
@@ -124,8 +138,8 @@ def run_checks(mode: str) -> None:
         raise ValueError(f"unsupported check mode: {mode}")
     if mode == "unit":
         run(["cargo", "build", "--locked", "-p", "melodee-application", "--bin", "melodee-script-worker"])
-        run(["cargo", "test", "--workspace", "--all-features", "--lib", "--bins"])
-        run(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
+        run_rust_tests(["cargo", "test", "--workspace", "--all-features", "--lib", "--bins"])
+        run_rust_tests(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
         return
     if mode == "audit-live":
         run_live_ui_audit()
@@ -169,7 +183,7 @@ def run_checks(mode: str) -> None:
         # PostgreSQL-backed workspace suites, and the historical-schema
         # migration compatibility tests. `fast` and `full` stay lint/compile/
         # repository gates so the development and pre-merge loops stay short.
-        run([
+        run_rust_tests([
             "cargo",
             "test",
             "--workspace",
@@ -177,7 +191,7 @@ def run_checks(mode: str) -> None:
             "--lib",
             "--bins",
         ])
-        run([
+        run_rust_tests([
             "cargo",
             "test",
             "--all-features",
@@ -194,8 +208,8 @@ def run_checks(mode: str) -> None:
             "--test",
             "*",
         ])
-        run([sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"])
-        run([
+        run_rust_tests([sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"])
+        run_rust_tests([
             sys.executable,
             "scripts/test_database.py",
             "--",
