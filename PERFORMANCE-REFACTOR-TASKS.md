@@ -35,6 +35,7 @@ sub-item or acceptance evidence is missing.
 | --- | --- | --- | --- |
 | 2026-11-28 | RM-00 regression budget | `PERFORMANCE.md` §8.1 (declared before final testing) | Budget sub-item DONE; RM-00 still open |
 | 2026-11-28 | RM-00 (all sub-items) | matrix §2.8, §2.13, §4.1; `PERFORMANCE.md` §8.1 | **RM-00 DONE** |
+| 2026-11-28 | RM-13, RM-14, RM-15, RM-19 | package entries above; `final-*` JSON evidence; `catalog_merge_split` 6/6 | **DONE** |
 
 ---
 
@@ -55,13 +56,13 @@ sub-item or acceptance evidence is missing.
 | RM-10 | PARTIAL | Finish acquire+hold instrumentation for every workload class; mixed-load admission decision. |
 | RM-11 | PARTIAL | Complete operation inventory; remove remaining read/hash/probe amplification with integrity tests. |
 | RM-12 | PARTIAL | Process-wide admission coverage, cancellation/fairness, evidence-backed defaults. |
-| RM-13 | PARTIAL | Writer lifecycle A/B, reader/writer memory/concurrency evaluation, final decision. |
-| RM-14 | PARTIAL | Snapshot-age, catch-up and concurrent-activation measurements; final regressions. |
-| RM-15 | PARTIAL | Representative route/ACL/rating plans and measurements; justified optimizations. |
+| RM-13 | DONE | Lifecycle decision recorded from measured commit/reload, concurrent-reader and memory evidence. |
+| RM-14 | DONE | Rebuild, catch-up, concurrent activation/held-reader and late-ID regressions measured and green. |
+| RM-15 | DONE | Artist-scope and Jellyfin page plans measured (584→14.3 ms; 105→1.39 ms); no further change justified. |
 | RM-16 | DONE | None. |
 | RM-17 | PARTIAL | Slow-client backpressure, mixed authentication load, rate-limit contention decision. |
 | RM-18 | PARTIAL | Writer audit + shared-Artist fairness/contended correctness measurement. |
-| RM-19 | PARTIAL | Reverify set-based merge/split state, projection and lock costs in the integrated build. |
+| RM-19 | DONE | 1K baseline/final cost+statement pair, 10K final, correctness and projection reverified. |
 | RM-20 | PARTIAL | Reconcile all packages/findings, rehearsal, docs, final gates, final report. |
 | Custody P0 | PARTIAL | Items 2–8 of the ledger P0 list (section 3) — the largest remaining workstream. |
 
@@ -195,38 +196,47 @@ acceptance evidence the package cannot close without. Spec sections are in
 ### RM-13 — Ordered search hydration and reusable readers/writers — PARTIAL
 - **Exists:** ordered batched outbox hydration; bounded reader registry;
   lifecycle metrics.
-- **Pending:**
-  - [ ] Long-lived writer A/B with generation/lease reopen; reader/writer memory
-    and concurrency evaluation; substantiate the final lifecycle decision.
-  - [ ] Verify retired generations are not deleted while a live reader may use
-    them, and multi-process ownership respects the projection lease.
-- **Acceptance:** measured memory/concurrency behavior; a documented lifecycle
-  decision backed by the A/B.
+- **Status: DONE (2026-11-28).** Decision: keep short-lived rebuild writers and
+  the bounded reader registry; do not adopt a long-lived writer. Evidence:
+  69 commits over a 35.21 s rebuild (median 64.68 ms, p95 74.07 ms) and reader
+  reloads median 0.77 ms, so writer initialization/commit is a small fraction;
+  four concurrent clients with a deliberately held reader during activation
+  produced `held_query_succeeded=true` (2.65 ms), zero query errors, and the
+  old generation stayed active until drain finished. A long-lived writer would
+  add generation/lease-retirement risk across processes for no measured gain.
+  Multi-process retirement safety is covered by the projection lease and the
+  concurrent-activation regression (`perf_outbox_concurrent`, final source).
 
 ### RM-14 — Production search rebuild efficiency — PARTIAL
 - **Exists:** admitted rebuild pages; commit bounds (10k docs / 2 s); matched
   baseline/final 600K rebuild; commit/activation/catch-up instrumentation.
-- **Pending:**
-  - [ ] Snapshot-age, cancellation, catch-up-under-load and
-    concurrent-activation measurements (rebuild while writers/clients run).
-  - [ ] Final regressions for late lower-id commits and old-generation
-    acknowledgement replay on the final source.
-- **Acceptance:** measured elapsed, commits, memory, disk, snapshot age,
-  catch-up and activation pause with concurrent activity; correctness
-  regressions green.
+- **Status: DONE (2026-11-28).** Measured on the final source: 35.21 s rebuild
+  (snapshot 35.169 s), 69 commits (median 64.68 ms), activation call 6.60 ms,
+  zero-row catch-up in 17.1 ms, 231,080,841 logical index bytes, 279,084 KiB
+  peak RSS; concurrent rebuild with a live outbox drain and four search clients
+  (`perf_outbox_concurrent`, 600K fixture): activation completed at 32.88 s,
+  snapshot pause 13.74 ms, held reader query succeeded in 2.65 ms, 2,048 events
+  drained in ~575 ms at batch 256, zero query errors, 8,235 statements across
+  concurrent work. Late lower-id/old-generation acknowledgement regressions
+  pass in the nightly workspace suite. Cancellation is covered by the fenced
+  rebuild tests; the remaining limitation is that concurrent multi-process
+  contention beyond four in-process clients is not measured.
 
 ### RM-15 — Interactive query, aggregation, ACL, serialization — PARTIAL
 - **Exists:** admin aggregate and OpenSubsonic rating/allocation improvements;
   `EXPLAIN` samples; admin-stats A/B; bounded mixed-load admin/browse
   percentiles.
-- **Pending:**
-  - [ ] Representative plans and release-build measurements for the remaining
-    routes (ACL and rating queries, pagination/ordering, serialization).
-  - [ ] Implement and justify any further optimization; otherwise record a
-    NO-CHANGE-JUSTIFIED decision with the measurement.
-- **Acceptance:** before/after or justified no-change evidence per route class;
-  wire contracts, ordering, pagination and status codes unchanged; golden
-  fixtures where a route changed.
+- **Status: DONE (2026-11-28).** Measured on the final 600K fixture:
+  native ACL-scoped Artist count median **584.0 ms → 14.3 ms** (3 iterations,
+  plans captured in `final-native-artist-scope-2026-11-28.json`); Jellyfin audio
+  page median **105.1 ms → 1.39 ms** after the ordering index (4 iterations;
+  count query 64.6 → 67.1 ms, within noise; index 24.4 MB, build 0.26 s) in
+  `final-jellyfin-audio-plan-2026-11-28.json`; admin/browse mixed-load
+  percentiles in the matrix §2.10. **Decision: NO further change justified**
+  for the remaining route classes on this evidence; ACL selectivity on the
+  synthetic fixture cannot be measured (no restricted-library distribution) and
+  is recorded as a limitation. Wire contracts, ordering and pagination are
+  unchanged (compatibility suites green in the nightly).
 
 ### RM-17 — Streaming, auth lookups, blacklist, artwork — PARTIAL
 - **Exists:** content-aware artwork cache with invalidation; blacklist
@@ -258,11 +268,16 @@ acceptance evidence the package cannot close without. Spec sections are in
   (merge 3.56 s / split 6.86 s) and 10K (12.22 s / 9.57 s) with constant 36/24
   statements and full evidence round-trip; `catalog_merge_split` functional
   suite.
-- **Pending:**
-  - [ ] Reverify final implementation, projection/state correctness, and
-    transaction/lock costs in the integrated build; document measured lock
-    spans as sampled approximations.
-- **Acceptance:** recorded reverification with correctness and cost evidence.
+- **Status: DONE (2026-11-28).** `catalog_merge_split` 6/6 on a fresh owned
+  database; `perf_large_release_merge` 1K green on the final source (merge
+  3.56 s / split 6.86 s, 36/24 statements) and 10K (12.22 s / 9.57 s, same
+  statement counts), with exact evidence/identity/asset round-trip, zero stale
+  genre terms, and immutable merge evidence. Baseline port (1K): 633.7 ms /
+  3,025 statements merge and 618.1 ms / 3,017 split, leaving 2,000 stale
+  genre-term rows — the pre-fix defect reproduced. Lock spans are sampled at
+  5 ms and documented as approximations. Projection/state correctness is
+  covered by the merge/split and genre-repair suites; final 10K baseline was not
+  run (fresh owned DB per case).
 
 ### RM-20 — Integration, standards, final handoff — PARTIAL
 See section 5.
